@@ -1,0 +1,3105 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Expedientes Médicos</title>
+<style>
+:root{
+  --navy: #0B2942;
+  --navy-dark: #071C30;
+  --navy-light: #14395A;
+  --blue: #0078D4;
+  --blue-dark: #005A9E;
+  --blue-light: #DEECF9;
+
+  --gray-bg: #F3F2F1;
+  --gray-border: #E1DFDD;
+  --gray-mid: #C8C6C4;
+
+  --teal: #005E54;
+  --teal-bg: #DCF4F1;
+
+  --green: #107C10;
+  --green-bg: #DFF6DD;
+  --amber: #CA5010;
+  --amber-bg: #FDE7D9;
+  --red: #D13438;
+  --red-bg: #FDE7E9;
+  --purple: #5C2D91;
+  --purple-bg: #EDE7F6;
+
+  --white: #FFFFFF;
+  --text-secondary: #605E5C;
+  --radius: 6px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.10);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.16);
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+  background:var(--gray-bg);
+  color:#201F1E;
+}
+.hidden{display:none !important;}
+.hidden-perfil{display:none !important;}
+
+/* ---------- LOGIN ---------- */
+#view-login{
+  min-height:100vh;
+  display:flex;align-items:center;justify-content:center;
+  background:linear-gradient(160deg, var(--navy) 0%, var(--navy-dark) 100%);
+}
+.login-card{
+  width:360px;background:var(--white);border-radius:var(--radius);
+  box-shadow:var(--shadow-lg);padding:32px 28px;
+}
+.login-card h1{font-size:20px;margin:0 0 4px;color:var(--navy);}
+.login-card p.subtitle{margin:0 0 24px;color:var(--text-secondary);font-size:13px;}
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--navy);margin-bottom:4px;}
+.field input, .field select, .field textarea{
+  width:100%;height:34px;border:1px solid var(--gray-mid);border-radius:4px;
+  padding:0 10px;font-family:inherit;font-size:13px;background:var(--white);
+}
+.field textarea{height:auto;padding:8px 10px;resize:vertical;}
+.field input:focus, .field select:focus, .field textarea:focus{
+  outline:none;border-color:var(--blue);box-shadow:0 0 0 2px var(--blue-light);
+}
+.field input:disabled, .field select:disabled, .field textarea:disabled{background:var(--gray-bg);color:var(--text-secondary);cursor:not-allowed;}
+.password-wrap{position:relative;}
+.password-wrap input{padding-right:36px;}
+.password-toggle{
+  position:absolute;right:5px;top:50%;transform:translateY(-50%);
+  background:none;border:none;cursor:pointer;color:var(--text-secondary);
+  display:flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:4px;
+}
+.password-toggle:hover{background:var(--gray-bg);color:var(--navy);}
+.password-toggle svg{width:16px;height:16px;}
+.btn{
+  height:34px;padding:0 16px;border:none;border-radius:4px;font-size:13px;font-weight:600;
+  cursor:pointer;font-family:inherit;
+}
+.btn-primary{background:var(--blue);color:#fff;}
+.btn-primary:hover{background:var(--blue-dark);}
+.btn-primary:disabled{background:var(--gray-mid);cursor:not-allowed;}
+.btn-secondary{background:var(--white);color:var(--navy);border:1px solid var(--gray-mid);}
+.btn-secondary:hover{background:var(--gray-bg);}
+.btn-danger{background:var(--white);color:var(--red);border:1px solid var(--red);}
+.btn-danger:hover{background:var(--red-bg);}
+.btn-block{width:100%;}
+.login-error{
+  color:var(--red);font-size:12px;margin:-8px 0 16px;min-height:14px;
+}
+.conn-toggle{font-size:12px;color:var(--blue);cursor:pointer;text-decoration:none;display:inline-block;margin-top:4px;}
+.conn-panel{margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-border);}
+.conn-status{font-size:12px;margin-top:6px;}
+.conn-status.ok{color:var(--green);}
+.conn-status.fail{color:var(--red);}
+
+/* ---------- APP SHELL ---------- */
+#view-app{display:flex;height:100vh;overflow:hidden;}
+.sidebar{
+  width:220px;flex-shrink:0;height:100vh;overflow-y:auto;
+  background:linear-gradient(180deg,var(--navy) 0%, var(--navy-dark) 100%);
+  color:#fff;display:flex;flex-direction:column;
+}
+.sidebar-brand{padding:18px 16px;font-weight:700;font-size:15px;border-bottom:1px solid rgba(255,255,255,.12);flex-shrink:0;}
+.sidebar-brand small{display:block;font-weight:400;font-size:11px;opacity:.7;margin-top:2px;}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:13px;
+  color:rgba(255,255,255,.85);cursor:pointer;border-left:3px solid transparent;
+}
+.nav-item svg{width:16px;height:16px;flex-shrink:0;opacity:.9;}
+.nav-item:hover{background:rgba(255,255,255,.06);}
+.nav-item.active{background:rgba(255,255,255,.10);border-left:3px solid var(--blue);color:#fff;font-weight:600;}
+.nav-spacer{flex:1;}
+.nav-user{padding:10px 16px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.12);flex-shrink:0;}
+
+.main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--gray-bg);height:100vh;overflow:hidden;}
+.topbar{
+  height:56px;background:var(--white);border-bottom:1px solid var(--gray-border);
+  display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;
+}
+.topbar h1{font-size:16px;font-weight:600;margin:0;color:var(--navy);}
+.crumbs{font-size:12px;color:var(--text-secondary);}
+.crumbs b{color:var(--navy);}
+.content{padding:20px;overflow-y:auto;flex:1;min-height:0;}
+.screen{display:none;}
+.screen.active{display:block;}
+
+@media (max-width:720px){
+  #view-app{flex-direction:column;height:auto;min-height:100vh;overflow:visible;}
+  .sidebar{width:100%;height:auto;flex-direction:row;align-items:center;overflow-x:auto;overflow-y:visible;}
+  .sidebar-brand{flex-shrink:0;border-bottom:none;border-right:1px solid rgba(255,255,255,.12);white-space:nowrap;}
+  .nav-item{flex-shrink:0;border-left:none;border-bottom:3px solid transparent;}
+  .nav-item.active{border-left:none;border-bottom:3px solid var(--blue);}
+  .nav-spacer{display:none;}
+  .nav-user{display:none;}
+  .main{height:auto;overflow:visible;}
+  .content{overflow-y:visible;}
+}
+
+/* ---------- CARDS / KPIs ---------- */
+.card{
+  background:var(--white);border:1px solid var(--gray-border);border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);margin-bottom:16px;
+}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--gray-border);display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.card-header h2{font-size:14px;margin:0;font-weight:600;color:var(--navy);}
+.card-body{padding:16px 18px;}
+
+.notif-banner{
+  display:flex;align-items:center;gap:10px;background:var(--amber-bg);color:var(--amber);
+  border:1px solid var(--amber);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px;
+}
+.notif-banner svg{width:18px;height:18px;flex-shrink:0;}
+.notif-banner.notif-success{background:var(--green-bg);color:var(--green);border-color:var(--green);font-weight:600;}
+.notif-close{
+  margin-left:auto;background:none;border:none;color:var(--amber);cursor:pointer;font-size:14px;font-weight:700;
+}
+
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin-bottom:20px;}
+.kpi-card{
+  background:var(--white);border:1px solid var(--gray-border);border-radius:10px;
+  padding:16px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:14px;
+  transition:box-shadow .15s ease, transform .15s ease;
+}
+.kpi-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px);}
+.kpi-icon{
+  width:44px;height:44px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.kpi-icon svg{width:22px;height:22px;}
+.kpi-total .kpi-icon{background:var(--blue-light);color:var(--blue-dark);}
+.kpi-proceso .kpi-icon{background:var(--amber-bg);color:var(--amber);}
+.kpi-seguimiento .kpi-icon{background:var(--purple-bg);color:var(--purple);}
+.kpi-info{min-width:0;}
+.kpi-value{font-size:24px;font-weight:700;color:var(--navy);line-height:1.15;}
+.kpi-label{font-size:11.5px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+@media (max-width:480px){ .kpi-row{grid-template-columns:1fr;} }
+
+/* ---------- FILTERS ---------- */
+.filters-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:12px;align-items:end;}
+.filters-actions{display:flex;gap:8px;margin-top:12px;}
+.field-wide{grid-column:span 2;min-width:320px;}
+@media (max-width:480px){ .field-wide{min-width:0;grid-column:1 / -1;} }
+
+/* ---------- DROPDOWN MULTISELECT (Cuenta) ---------- */
+.ms-dropdown{position:relative;}
+.ms-toggle{
+  width:100%;height:34px;border:1px solid var(--gray-mid);border-radius:4px;
+  background:var(--white);padding:0 10px;font-family:inherit;font-size:13px;color:#201F1E;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;text-align:left;
+}
+.ms-toggle:hover{border-color:var(--gray-border);}
+.ms-toggle.open{border-color:var(--blue);box-shadow:0 0 0 2px var(--blue-light);}
+.ms-toggle span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ms-chevron{width:12px;height:12px;flex-shrink:0;color:var(--text-secondary);transition:transform .15s ease;}
+.ms-toggle.open .ms-chevron{transform:rotate(180deg);}
+.ms-panel{
+  position:absolute;top:38px;left:0;right:0;background:var(--white);
+  border:1px solid var(--gray-mid);border-radius:4px;box-shadow:var(--shadow-md);
+  z-index:20;overflow:hidden;
+}
+.ms-search{padding:8px;border-bottom:1px solid var(--gray-border);}
+.ms-search input{
+  width:100%;height:30px;border:1px solid var(--gray-mid);border-radius:4px;
+  padding:0 8px;font-family:inherit;font-size:12.5px;
+}
+.ms-actions{display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--gray-border);}
+.ms-link{background:none;border:none;color:var(--blue);font-size:11.5px;font-weight:600;cursor:pointer;padding:2px;}
+.ms-link:hover{text-decoration:underline;}
+.ms-options{max-height:180px;overflow-y:auto;}
+.ms-option{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:12.5px;cursor:pointer;
+}
+.ms-option:hover{background:var(--blue-light);}
+.ms-option input[type="checkbox"]{
+  width:14px;height:14px;min-height:14px;padding:0;margin:0;flex-shrink:0;
+  border:1px solid var(--gray-mid);border-radius:3px;accent-color:var(--blue);
+}
+.ms-option span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ms-empty{padding:14px;text-align:center;color:var(--text-secondary);font-size:12.5px;}
+
+/* ---------- TABLE ---------- */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+thead th{
+  text-align:left;padding:10px 12px;background:var(--gray-bg);color:var(--navy);
+  font-weight:600;border-bottom:1px solid var(--gray-border);white-space:nowrap;
+}
+tbody td{padding:9px 12px;border-bottom:1px solid var(--gray-border);white-space:nowrap;}
+tbody tr:hover{background:#FAFAFA;}
+.link-expediente{color:var(--blue);text-decoration:none;font-weight:600;}
+.link-expediente:hover{text-decoration:underline;}
+.muted{color:var(--text-secondary);}
+.empty{text-align:center;color:var(--text-secondary);padding:24px !important;}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+
+/* Columnas fijas al hacer scroll horizontal (Fecha Apertura, Expediente, Cuenta, Servicio, Subservicio) */
+#tabla-expedientes th.col-frozen,
+#tabla-expedientes td.col-frozen,
+#pa-tabla th.col-frozen,
+#pa-tabla td.col-frozen{position:sticky;z-index:1;background:var(--white);}
+#tabla-expedientes thead th.col-frozen,
+#pa-tabla thead th.col-frozen{background:var(--gray-bg);z-index:2;}
+#tabla-expedientes tbody tr:hover td.col-frozen,
+#pa-tabla tbody tr:hover td.col-frozen{background:#FAFAFA;}
+#tabla-expedientes .col-frozen-last,
+#pa-tabla .col-frozen-last{border-right:2px solid var(--gray-border);}
+
+/* Paginador */
+.pager{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:12px;flex-wrap:wrap;}
+.pager-info{font-size:12px;color:var(--text-secondary);}
+.pager-controls{display:flex;align-items:center;gap:10px;}
+.pager-controls .pager-page{font-size:12.5px;color:var(--navy);font-weight:600;}
+.pager-controls button:disabled{opacity:.5;cursor:not-allowed;}
+
+.badge{
+  display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;
+}
+.badge.pendiente{background:var(--amber-bg);color:var(--amber);}
+.badge.espera{background:var(--teal-bg);color:var(--teal);}
+.badge.seguimiento{background:var(--blue-light);color:var(--blue-dark);}
+.badge.programado{background:var(--purple-bg);color:var(--purple);}
+.badge.perfil-1{background:var(--purple-bg);color:var(--purple);}
+.badge.perfil-2{background:var(--blue-light);color:var(--blue-dark);}
+.badge.perfil-3{background:var(--teal-bg);color:var(--teal);}
+.badge.activo{background:var(--green-bg);color:var(--green);}
+.badge.inactivo{background:var(--red-bg);color:var(--red);}
+
+/* ---------- SEGUIMIENTO ---------- */
+.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.info-item label{display:block;font-size:11px;color:var(--text-secondary);margin-bottom:3px;}
+.info-item .value{font-size:13px;font-weight:600;color:var(--navy);}
+.char-counter{font-size:11px;color:var(--text-secondary);text-align:right;margin-top:4px;}
+.char-counter.limit{color:var(--red);font-weight:600;}
+.actions-row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+.actions-row.between{justify-content:space-between;}
+.estatus-row{display:flex;align-items:end;gap:10px;}
+.estatus-row .field{flex:1;margin-bottom:0;}
+.hint{font-size:11px;color:var(--text-secondary);margin-top:6px;}
+
+/* ---------- CONFIGURACION CUENTAS ---------- */
+.autocomplete{position:relative;}
+.suggestions{
+  position:absolute;top:38px;left:0;right:0;background:var(--white);
+  border:1px solid var(--gray-mid);border-radius:4px;box-shadow:var(--shadow-md);
+  max-height:180px;overflow-y:auto;z-index:20;
+}
+.suggestions div{padding:8px 10px;font-size:12.5px;cursor:pointer;}
+.suggestions div:hover{background:var(--blue-light);}
+.suggestions .empty-suggestion{color:var(--text-secondary);cursor:default;}
+.suggestions .empty-suggestion:hover{background:none;}
+
+.mini-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.mini-table thead th{text-align:left;padding:8px 10px;background:var(--gray-bg);color:var(--navy);border-bottom:1px solid var(--gray-border);}
+.mini-table tbody td{padding:8px 10px;border-bottom:1px solid var(--gray-border);}
+.mini-table tbody tr:hover{background:#FAFAFA;}
+.mini-empty{padding:20px;text-align:center;color:var(--text-secondary);}
+
+.comentario-item{
+  border:1px solid var(--gray-border);border-radius:6px;padding:12px 14px;margin-bottom:10px;background:var(--gray-bg);
+}
+.comentario-item:last-child{margin-bottom:0;}
+.comentario-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-bottom:6px;font-weight:600;}
+.comentario-texto{font-size:13px;color:#201F1E;white-space:pre-wrap;}
+.cuenta-chip{
+  display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;
+  border-radius:11px;background:var(--blue-light);color:var(--blue-dark);font-size:11px;font-weight:700;
+  margin-right:8px;flex-shrink:0;
+}
+.icon-btn{
+  background:none;border:none;cursor:pointer;color:var(--red);
+  display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:4px;
+}
+.icon-btn svg{width:15px;height:15px;}
+.icon-btn:hover{background:var(--red-bg);}
+
+.row-action-btn{
+  background:none;border:1px solid var(--gray-mid);cursor:pointer;border-radius:4px;
+  display:inline-flex;align-items:center;gap:5px;padding:5px 9px;font-size:12px;font-family:inherit;font-weight:600;
+  color:var(--navy);white-space:nowrap;
+}
+.row-action-btn svg{width:13px;height:13px;flex-shrink:0;}
+.row-action-btn.accion-reset{color:var(--blue-dark);border-color:var(--blue-light);}
+.row-action-btn.accion-reset:hover{background:var(--blue-light);}
+.row-action-btn.accion-eliminar{color:var(--red);border-color:var(--red-bg);}
+.row-action-btn.accion-eliminar:hover{background:var(--red-bg);}
+
+@media (max-width:640px){
+  .mini-table thead{display:none;}
+  .mini-table, .mini-table tbody, .mini-table tr, .mini-table td{display:block;width:100%;}
+  .mini-table tr{border:1px solid var(--gray-border);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--white);}
+  .mini-table td:not(.mini-empty){border-bottom:none;padding:4px 0;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .mini-table td[data-label]::before{content:attr(data-label);font-size:11px;font-weight:600;color:var(--text-secondary);}
+  .mini-table td[data-label="#"]{display:none;}
+  .mini-table tr:has(.mini-empty){border:none;padding:0;}
+}
+
+/* ---------- TOAST ---------- */
+#toast-container{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:1000;}
+.toast{
+  background:var(--navy);color:#fff;padding:10px 16px;border-radius:4px;font-size:13px;
+  box-shadow:var(--shadow-md);min-width:220px;
+}
+.toast.error{background:var(--red);}
+.toast.success{background:var(--green);}
+
+.spinner-row{padding:24px;text-align:center;color:var(--text-secondary);font-size:13px;}
+
+/* ---------- MODAL CORTE ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(11,41,66,.55);
+  display:flex;align-items:center;justify-content:center;z-index:200;
+}
+.modal-card{
+  background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow-lg);
+  width:640px;max-width:92vw;max-height:86vh;display:flex;flex-direction:column;
+}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--gray-border);flex-shrink:0;}
+.modal-header h3{margin:0;font-size:16px;color:var(--navy);}
+.modal-close{background:none;border:none;font-size:22px;line-height:1;cursor:pointer;color:var(--text-secondary);padding:0 4px;}
+.modal-close:hover{color:var(--navy);}
+.modal-body{padding:16px 20px;overflow-y:auto;}
+.modal-body p{margin:0 0 12px;font-size:13px;color:var(--text-secondary);}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--gray-border);flex-shrink:0;}
+.mini-table-corte{width:100%;border-collapse:collapse;font-size:12px;}
+.mini-table-corte th{background:var(--gray-bg);text-align:left;padding:6px 8px;position:sticky;top:0;}
+.mini-table-corte td{padding:6px 8px;border-bottom:1px solid var(--gray-border);}
+</style>
+</head>
+<body>
+
+<!-- ======================= LOGIN ======================= -->
+<div id="view-login">
+  <div class="login-card">
+    <h1>Expedientes Médicos</h1>
+    <p class="subtitle">Inicia sesión para continuar</p>
+    <form id="login-form">
+      <div class="field">
+        <label for="login-rfc">RFC</label>
+        <input type="text" id="login-rfc" maxlength="20" autocomplete="username" required>
+        <a class="conn-toggle hidden" id="login-cambiar-rfc" style="margin-top:6px;">Cambiar RFC</a>
+      </div>
+
+      <div class="field hidden" id="login-password-field">
+        <label for="login-password">Contraseña</label>
+        <div class="password-wrap">
+          <input type="password" id="login-password" maxlength="40" autocomplete="current-password">
+          <button type="button" class="password-toggle" id="login-password-toggle" title="Mostrar contraseña">
+            <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <svg class="icon-eye-off hidden" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a20.4 20.4 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a20.32 20.32 0 0 1-2.16 3.19M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="field hidden" id="login-password-confirm-field">
+        <label for="login-password-confirm">Confirma tu contraseña</label>
+        <input type="password" id="login-password-confirm" maxlength="40" autocomplete="new-password">
+      </div>
+
+      <div class="hint hidden" id="login-nuevo-hint" style="margin:-8px 0 16px;">Es tu primera vez: crea una contraseña de al menos 8 caracteres, con mayúscula, minúscula, número y carácter especial (ej. !@#$%&*).</div>
+
+      <div class="login-error" id="login-error"></div>
+      <button type="submit" class="btn btn-primary btn-block" id="login-btn">Continuar</button>
+    </form>
+
+    <a class="conn-toggle" id="conn-toggle">Configuración de conexión</a>
+    <div class="conn-panel hidden" id="conn-panel">
+      <div class="field">
+        <label for="api-base-input">URL de la API</label>
+        <input type="text" id="api-base-input" placeholder="http://localhost:8000">
+      </div>
+      <button type="button" class="btn btn-secondary" id="conn-test-btn">Probar conexión</button>
+      <div class="conn-status" id="conn-status"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= APP ======================= -->
+<div id="view-app" class="hidden">
+  <div class="sidebar">
+    <div class="sidebar-brand">Expedientes Médicos<small>Panel de gestión</small></div>
+    <div class="nav-item" id="nav-expedientes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/><path d="M9 3v6h6"/><path d="M9 3l11 11"/></svg>
+      Expedientes
+    </div>
+    <div class="nav-item" id="nav-pago-anticipado">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+      Expedientes PA
+    </div>
+    <div class="nav-item" id="nav-seguimiento">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      Seguimiento de expedientes
+    </div>
+    <div class="nav-item" id="nav-configuracion">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06A2 2 0 1 1 7.04 4.29l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Configuración Cuentas
+    </div>
+    <div class="nav-item" id="nav-accesos">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Usuarios y Accesos
+    </div>
+    <div class="nav-spacer"></div>
+    <div class="nav-user" id="nav-user"></div>
+    <div class="nav-item" id="nav-salir">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>
+      Salir
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="topbar">
+      <h1 id="topbar-title">Expedientes</h1>
+      <div class="crumbs" id="topbar-crumbs">Inicio &nbsp;›&nbsp; <b>Expedientes</b></div>
+    </div>
+
+    <div class="content">
+
+      <!-- ---------- SCREEN: EXPEDIENTES ---------- -->
+      <div class="screen active" id="screen-expedientes">
+        <div class="notif-banner hidden" id="notif-atendidos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span id="notif-atendidos-texto"></span>
+          <button class="notif-close" id="notif-atendidos-cerrar" title="Cerrar">✕</button>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi-card kpi-total">
+            <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/><path d="M9 3v6h6"/><path d="M9 3l11 11"/></svg></div>
+            <div class="kpi-info">
+              <div class="kpi-value" id="kpi-total">0</div>
+              <div class="kpi-label" id="kpi-total-label">Total Expedientes</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-proceso">
+            <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="kpi-info">
+              <div class="kpi-value" id="kpi-proceso">0</div>
+              <div class="kpi-label" id="kpi-proceso-label">En Proceso</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-seguimiento hidden-perfil" id="kpi-seguimiento-card">
+            <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+            <div class="kpi-info">
+              <div class="kpi-value" id="kpi-seguimiento">0</div>
+              <div class="kpi-label">Seguimiento Proveedor</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h2>Filtros</h2></div>
+          <div class="card-body">
+            <div class="filters-grid">
+              <div class="field">
+                <label for="f-expediente">Expediente</label>
+                <input type="number" id="f-expediente" placeholder="Núm. expediente">
+              </div>
+              <div class="field">
+                <label for="f-fechaInicio">Fecha Inicio</label>
+                <input type="date" id="f-fechaInicio">
+              </div>
+              <div class="field">
+                <label for="f-fechaFin">Fecha Fin</label>
+                <input type="date" id="f-fechaFin">
+              </div>
+              <div class="field">
+                <label for="f-servicio">Servicio</label>
+                <select id="f-servicio"></select>
+              </div>
+              <div class="field">
+                <label for="f-subservicio">Subservicio</label>
+                <select id="f-subservicio">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+              <div class="field" id="f-entidad-field">
+                <label for="f-entidad">Entidad</label>
+                <select id="f-entidad">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+              <div class="field field-wide">
+                <label>Cuenta (una o varias)</label>
+                <div class="ms-dropdown" id="f-cuentas-dropdown">
+                  <button type="button" class="ms-toggle" id="f-cuentas-toggle">
+                    <span id="f-cuentas-toggle-text">Todas las cuentas</span>
+                    <svg class="ms-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <div class="ms-panel hidden" id="f-cuentas-panel">
+                    <div class="ms-search"><input type="text" id="f-cuentas-search" placeholder="Buscar cuenta..." autocomplete="off"></div>
+                    <div class="ms-actions">
+                      <button type="button" class="ms-link" id="f-cuentas-selectall">Seleccionar todo</button>
+                      <button type="button" class="ms-link" id="f-cuentas-clear">Limpiar</button>
+                    </div>
+                    <div class="ms-options" id="f-cuentas-options"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="field" id="f-estatus-field">
+                <label for="f-estatus">Estado</label>
+                <select id="f-estatus">
+                  <option value="">Todos</option>
+                  <option value="Abierto">Abierto</option>
+                  <option value="En Espera de Respuesta">En Espera de Respuesta</option>
+                  <option value="Seguimiento Proveedor">Seguimiento Proveedor</option>
+                  <option value="Finalizado">Finalizado</option>
+                </select>
+              </div>
+            </div>
+            <div class="filters-actions">
+              <button class="btn btn-primary" id="btn-buscar-expedientes">Buscar</button>
+              <button class="btn btn-secondary" id="btn-limpiar-expedientes">Limpiar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Resultados</h2>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-secondary" id="btn-generar-corte">Generar corte</button>
+              <button class="btn btn-primary" id="btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="tabla-expedientes">
+              <thead>
+                <tr>
+                  <th class="col-frozen" style="width:40px;left:0;">#</th>
+                  <th class="col-frozen" style="width:32px;left:40px;"><input type="checkbox" id="chk-todos"></th>
+                  <th class="col-frozen" style="width:100px;left:72px;">Fecha Apertura</th>
+                  <th class="col-frozen" style="width:100px;left:172px;">Expediente</th>
+                  <th class="col-frozen" style="width:190px;left:272px;">Cuenta</th>
+                  <th class="col-frozen" style="width:130px;left:462px;">Servicio</th>
+                  <th class="col-frozen col-frozen-last" style="width:150px;left:592px;">Subservicio</th>
+                  <th>Titular</th><th>Paciente</th><th>Especialidad</th>
+                  <th>Entidad</th><th>Municipio</th><th>Fecha Asignación Proveedor</th>
+                  <th>Fecha Cita</th><th>Teléfono</th><th>Correo</th><th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="tabla-expedientes-body">
+                <tr><td colspan="17" class="empty">Inicia sesión y presiona Buscar para cargar expedientes.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pager" id="expedientes-pager"></div>
+        </div>
+      </div>
+
+      <!-- ---------- SCREEN: PAGO ANTICIPADO ---------- -->
+      <!-- TEMPORAL: por ahora jala los mismos datos que "Expedientes" (mismo
+           dbo.ObtenerExpedientesSinProveedorMedico) -- todavía no existe en
+           SISE un campo/consulta que distinga cuáles son de pago anticipado. -->
+      <div class="screen" id="screen-pago-anticipado">
+        <div class="notif-banner hidden" id="pa-notif-atendidos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span id="pa-notif-atendidos-texto"></span>
+          <button class="notif-close" id="pa-notif-atendidos-cerrar" title="Cerrar">✕</button>
+        </div>
+
+        <div class="kpi-row">
+          <div class="kpi-card kpi-total">
+            <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></div>
+            <div class="kpi-info">
+              <div class="kpi-value" id="pa-kpi-total">0</div>
+              <div class="kpi-label" id="pa-kpi-total-label">Total</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-proceso">
+            <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+            <div class="kpi-info">
+              <div class="kpi-value" id="pa-kpi-proceso">0</div>
+              <div class="kpi-label" id="pa-kpi-proceso-label">En Proceso</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-seguimiento hidden-perfil" id="pa-kpi-seguimiento-card">
+            <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
+            <div class="kpi-info">
+              <div class="kpi-value" id="pa-kpi-seguimiento">0</div>
+              <div class="kpi-label">Seguimiento Proveedor</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header"><h2>Filtros</h2></div>
+          <div class="card-body">
+            <div class="filters-grid">
+              <div class="field">
+                <label for="pa-f-expediente">Expediente</label>
+                <input type="number" id="pa-f-expediente" placeholder="Núm. expediente">
+              </div>
+              <div class="field">
+                <label for="pa-f-fechaInicio">Fecha Inicio</label>
+                <input type="date" id="pa-f-fechaInicio">
+              </div>
+              <div class="field">
+                <label for="pa-f-fechaFin">Fecha Fin</label>
+                <input type="date" id="pa-f-fechaFin">
+              </div>
+              <div class="field">
+                <label for="pa-f-servicio">Servicio</label>
+                <select id="pa-f-servicio"></select>
+              </div>
+              <div class="field">
+                <label for="pa-f-subservicio">Subservicio</label>
+                <select id="pa-f-subservicio">
+                  <option value="">Todos</option>
+                </select>
+              </div>
+              <div class="field" id="pa-f-entidad-field">
+                <label for="pa-f-entidad">Entidad</label>
+                <select id="pa-f-entidad">
+                  <option value="">Todas</option>
+                </select>
+              </div>
+              <div class="field field-wide">
+                <label>Cuenta (una o varias)</label>
+                <div class="ms-dropdown" id="pa-f-cuentas-dropdown">
+                  <button type="button" class="ms-toggle" id="pa-f-cuentas-toggle">
+                    <span id="pa-f-cuentas-toggle-text">Todas las cuentas</span>
+                    <svg class="ms-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                  </button>
+                  <div class="ms-panel hidden" id="pa-f-cuentas-panel">
+                    <div class="ms-search"><input type="text" id="pa-f-cuentas-search" placeholder="Buscar cuenta..." autocomplete="off"></div>
+                    <div class="ms-actions">
+                      <button type="button" class="ms-link" id="pa-f-cuentas-selectall">Seleccionar todo</button>
+                      <button type="button" class="ms-link" id="pa-f-cuentas-clear">Limpiar</button>
+                    </div>
+                    <div class="ms-options" id="pa-f-cuentas-options"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="field" id="pa-f-estatus-field">
+                <label for="pa-f-estatus">Estado</label>
+                <select id="pa-f-estatus">
+                  <option value="">Todos</option>
+                  <option value="Abierto">Abierto</option>
+                  <option value="En Espera de Respuesta">En Espera de Respuesta</option>
+                  <option value="Seguimiento Proveedor">Seguimiento Proveedor</option>
+                  <option value="Finalizado">Finalizado</option>
+                </select>
+              </div>
+            </div>
+            <div class="filters-actions">
+              <button class="btn btn-primary" id="pa-btn-buscar">Buscar</button>
+              <button class="btn btn-secondary" id="pa-btn-limpiar">Limpiar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Resultados</h2>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-secondary" id="pa-btn-generar-corte">Generar corte</button>
+              <button class="btn btn-primary" id="pa-btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table id="pa-tabla">
+              <thead>
+                <tr>
+                  <th class="col-frozen" style="width:40px;left:0;">#</th>
+                  <th class="col-frozen" style="width:32px;left:40px;"><input type="checkbox" id="pa-chk-todos"></th>
+                  <th class="col-frozen" style="width:100px;left:72px;">Fecha Apertura</th>
+                  <th class="col-frozen" style="width:100px;left:172px;">Expediente</th>
+                  <th class="col-frozen" style="width:190px;left:272px;">Cuenta</th>
+                  <th class="col-frozen" style="width:130px;left:462px;">Servicio</th>
+                  <th class="col-frozen col-frozen-last" style="width:150px;left:592px;">Subservicio</th>
+                  <th>Titular</th><th>Paciente</th><th>Especialidad</th>
+                  <th>Entidad</th><th>Municipio</th><th>Fecha Asignación Proveedor</th>
+                  <th>Fecha Cita</th><th>Teléfono</th><th>Correo</th><th>Estado</th>
+                </tr>
+              </thead>
+              <tbody id="pa-tabla-body">
+                <tr><td colspan="17" class="empty">Presiona Buscar para cargar expedientes.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="pager" id="pa-pager"></div>
+        </div>
+      </div>
+
+      <!-- ---------- SCREEN: SEGUIMIENTO ---------- -->
+      <div class="screen" id="screen-seguimiento">
+        <div class="card" id="sg-buscar-card">
+          <div class="card-header"><h2>Buscar expediente</h2></div>
+          <div class="card-body">
+            <div class="estatus-row">
+              <div class="field">
+                <label for="sg-buscar-expediente">Número de expediente</label>
+                <input type="number" id="sg-buscar-expediente">
+              </div>
+              <button class="btn btn-primary" id="sg-buscar-btn">Buscar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="sg-info-card">
+          <div class="card-header"><h2>Información General</h2></div>
+          <div class="card-body">
+            <div class="info-grid">
+              <div class="info-item"><label>Expediente</label><div class="value" id="ig-expediente">—</div></div>
+              <div class="info-item"><label>Fecha Apertura</label><div class="value" id="ig-fechaApertura">—</div></div>
+              <div class="info-item"><label>Nombre del Titular</label><div class="value" id="ig-titular">—</div></div>
+              <div class="info-item"><label>Nombre del Paciente</label><div class="value" id="ig-paciente">—</div></div>
+              <div class="info-item"><label>Entidad</label><div class="value" id="ig-entidad">—</div></div>
+              <div class="info-item"><label>Municipio</label><div class="value" id="ig-municipio">—</div></div>
+              <div class="info-item"><label>Teléfono</label><div class="value" id="ig-telefono">—</div></div>
+              <div class="info-item"><label>Correo</label><div class="value" id="ig-correo">—</div></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="sg-comentarios-proveedor-card">
+          <div class="card-header"><h2>Comentarios del Proveedor</h2></div>
+          <div class="card-body">
+            <div id="sg-comentarios-proveedor-lista"></div>
+            <div class="hidden" id="sg-comprobante-visor-wrap" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-border);">
+              <label style="display:block;font-size:11px;font-weight:600;color:var(--navy);margin-bottom:6px;">Comprobante de pago</label>
+              <div id="sg-comprobante-visor"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="sg-comentarios-coordinador-card">
+          <div class="card-header"><h2>Comentarios del Coordinador</h2></div>
+          <div class="card-body">
+            <div id="sg-comentarios-coordinador-lista"></div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="sg-estatus-card">
+          <div class="card-header"><h2>Estado del Caso</h2></div>
+          <div class="card-body">
+            <div class="estatus-row">
+              <div class="field">
+                <label for="sg-estatus">Estado</label>
+                <select id="sg-estatus">
+                  <option value="Abierto">Abierto</option>
+                  <option value="Finalizado">Finalizado</option>
+                  <option value="En Espera de Respuesta">Regresar a Proveedor (corregir respuesta)</option>
+                </select>
+              </div>
+              <button class="btn btn-secondary" id="sg-estatus-btn">Actualizar Estado</button>
+            </div>
+            <div class="field hidden" id="sg-motivo-regreso-field" style="margin-top:12px;">
+              <label for="sg-motivo-regreso">Motivo del regreso (obligatorio)</label>
+              <textarea id="sg-motivo-regreso" rows="4" maxlength="1500" placeholder="Explica qué le falta o qué está mal en la respuesta del proveedor..."></textarea>
+              <div class="hint">Se guarda en Core igual que el comentario del proveedor, y se le notifica por correo.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="sg-seguimiento-card">
+          <div class="card-header"><h2>Registrar seguimiento</h2></div>
+          <div class="card-body">
+            <div class="notif-banner notif-success hidden" id="sg-exito-banner">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+              <span>Comentario enviado correctamente a la bitácora de seguimiento.</span>
+            </div>
+            <div class="field">
+              <label for="sg-observaciones">Observaciones</label>
+              <textarea id="sg-observaciones" rows="7" maxlength="1500"></textarea>
+              <div class="char-counter" id="sg-counter">0 / 1500</div>
+              <div class="hint">Cada vez que presionas "Actualizar Core" se guarda un nuevo registro en la bitácora de seguimiento, no se sobrescribe el anterior.</div>
+            </div>
+            <div class="field hidden" id="sg-comprobante-field">
+              <label for="sg-comprobante-input">Comprobante de pago (obligatorio para Pago Anticipado)</label>
+              <input type="file" id="sg-comprobante-input" accept=".pdf,.jpg,.jpeg,.png">
+              <div class="hint">Formatos permitidos: PDF, JPG o PNG. Tamaño máximo 5 MB.</div>
+            </div>
+            <div class="actions-row">
+              <button class="btn btn-secondary" id="sg-cancelar-btn">Cancelar</button>
+              <button class="btn btn-primary" id="sg-actualizar-btn">Actualizar Core</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="sg-solo-lectura-card">
+          <div class="card-body">
+            <div class="notif-banner">
+              Ya enviaste tu seguimiento para este expediente y está en revisión por el coordinador.
+              Puedes ver tus comentarios y tu comprobante abajo, pero no puedes registrar nada más
+              hasta que el coordinador lo revise.
+            </div>
+          </div>
+        </div>
+
+        <div class="card hidden" id="sg-regresar-card">
+          <div class="card-body">
+            <button class="btn btn-secondary" id="sg-regresar-btn">Regresar</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- SCREEN: CONFIGURACION CUENTAS ---------- -->
+      <div class="screen" id="screen-configuracion">
+        <div class="card">
+          <div class="card-header"><h2>Agregar cuenta</h2></div>
+          <div class="card-body">
+            <div class="field autocomplete">
+              <label for="cfg-buscar-cuenta">Cuenta (escribe al menos 3 letras)</label>
+              <input type="text" id="cfg-buscar-cuenta" placeholder="Nombre de la cuenta" autocomplete="off">
+              <div class="suggestions hidden" id="cfg-suggestions"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Cuentas configuradas (<span id="cfgCount">0</span>)</h2>
+          </div>
+          <div class="table-wrap">
+            <table class="mini-table">
+              <thead><tr><th style="width:40px;">#</th><th>Cuenta</th><th style="width:80px;">Acciones</th></tr></thead>
+              <tbody id="cfg-tbody"></tbody>
+            </table>
+          </div>
+          <div class="card-body" style="border-top:1px solid var(--gray-border);">
+            <div class="actions-row between">
+              <button class="btn btn-secondary" id="cfg-cancelar-btn">Cancelar</button>
+              <button class="btn btn-primary" id="cfg-aceptar-btn">Aceptar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ---------- SCREEN: USUARIOS Y ACCESOS (solo Administrador) ---------- -->
+      <div class="screen" id="screen-accesos">
+        <div class="card">
+          <div class="card-header"><h2>Dar de alta un nuevo acceso</h2></div>
+          <div class="card-body">
+            <div class="filters-grid">
+              <div class="field">
+                <label for="acc-rfc">RFC</label>
+                <input type="text" id="acc-rfc" maxlength="20" placeholder="RFC" autocomplete="off">
+              </div>
+              <div class="field">
+                <label for="acc-nombre">Nombre</label>
+                <input type="text" id="acc-nombre" maxlength="120" placeholder="Nombre completo" autocomplete="off">
+              </div>
+              <div class="field">
+                <label for="acc-perfil">Perfil</label>
+                <select id="acc-perfil">
+                  <option value="2">Cabina</option>
+                  <option value="3">Proveedor</option>
+                  <option value="1">Administrador</option>
+                </select>
+              </div>
+              <div class="field hidden" id="acc-entidad-field">
+                <label for="acc-entidad">Entidad (obligatoria para Proveedor)</label>
+                <select id="acc-entidad">
+                  <option value="">Selecciona una entidad</option>
+                </select>
+              </div>
+              <div class="field hidden" id="acc-correo-field">
+                <label for="acc-correo">Correo (obligatorio para Proveedor)</label>
+                <input type="email" id="acc-correo" placeholder="proveedor@ejemplo.com" autocomplete="off">
+              </div>
+            </div>
+            <div class="filters-actions">
+              <button class="btn btn-primary" id="acc-dar-alta-btn">Dar de alta</button>
+            </div>
+            <div class="hint">La persona creará su propia contraseña la primera vez que entre con este RFC.</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>Accesos registrados (<span id="accCount">0</span>)</h2>
+          </div>
+          <div class="table-wrap">
+            <table class="mini-table">
+              <thead>
+                <tr>
+                  <th>RFC</th><th>Nombre</th><th style="width:120px;">Perfil</th>
+                  <th style="width:140px;">Entidad</th>
+                  <th style="width:180px;">Correo</th>
+                  <th style="width:90px;">Estado</th>
+                  <th style="width:100px;">Contraseña</th><th style="width:280px;">Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="acc-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ======================= MODAL: CORTE DE EXPEDIENTES ======================= -->
+<div class="modal-overlay hidden" id="corte-modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <h3 id="corte-modal-titulo">Corte de expedientes</h3>
+      <button class="modal-close" id="corte-modal-cerrar" title="Cerrar">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="corte-modal-resumen"></p>
+      <div class="table-wrap" style="max-height:320px;overflow:auto;">
+        <table class="mini-table-corte">
+          <thead><tr><th>Expediente</th><th>Cuenta</th><th>Paciente</th><th>Fecha Apertura</th></tr></thead>
+          <tbody id="corte-modal-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="corte-modal-descargar">Descargar Excel</button>
+      <button class="btn btn-primary" id="corte-modal-confirmar">Confirmar y enviar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ======================= MODAL: CAMBIAR ENTIDAD (Proveedor) ======================= -->
+<div class="modal-overlay hidden" id="cambiar-entidad-modal-overlay">
+  <div class="modal-card" style="width:420px;">
+    <div class="modal-header">
+      <h3>Cambiar entidad</h3>
+      <button class="modal-close" id="cambiar-entidad-modal-cerrar" title="Cerrar">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p id="cambiar-entidad-modal-rfc"></p>
+      <div class="field">
+        <label for="cambiar-entidad-select">Nueva entidad</label>
+        <select id="cambiar-entidad-select">
+          <option value="">Selecciona una entidad</option>
+        </select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" id="cambiar-entidad-modal-cancelar">Cancelar</button>
+      <button class="btn btn-primary" id="cambiar-entidad-modal-guardar">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<script>
+"use strict";
+
+/* =========================================================
+   CONFIG / SESIÓN
+   ========================================================= */
+const DEFAULT_API_BASE = "http://localhost:8000";
+
+function getApiBase() {
+  return sessionStorage.getItem("apiBase") || DEFAULT_API_BASE;
+}
+function setApiBase(v) {
+  sessionStorage.setItem("apiBase", v);
+}
+function getToken() { return sessionStorage.getItem("token"); }
+
+/* =========================================================
+   HELPERS
+   ========================================================= */
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+function formatDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso + "T00:00:00");
+  if (isNaN(d)) return iso;
+  return d.toLocaleDateString("es-MX", { year: "numeric", month: "short", day: "2-digit" });
+}
+function formatDateTime(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleString("es-MX", { year: "numeric", month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+function celdaExpediente(numeroExpediente, claseLink) {
+  // Administrador solo busca/selecciona para el corte -- no entra al detalle
+  // de Seguimiento (esa pantalla es trabajo operativo de Cabina/Proveedor).
+  if (esPerfilAdministrador()) return escapeHtml(String(numeroExpediente));
+  return `<a href="#" class="${claseLink}" data-exp="${numeroExpediente}">${numeroExpediente}</a>`;
+}
+function toast(message, type) {
+  const container = document.getElementById("toast-container");
+  const el = document.createElement("div");
+  el.className = "toast" + (type ? " " + type : "");
+  el.textContent = message;
+  container.appendChild(el);
+  setTimeout(() => el.remove(), 4000);
+}
+
+/* =========================================================
+   CLIENTE API
+   ========================================================= */
+async function api(path, opts = {}) {
+  const { method = "GET", params, body, formData, auth = true } = opts;
+  let url = getApiBase() + path;
+
+  if (params) {
+    const usp = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v === undefined || v === null || v === "") return;
+      if (Array.isArray(v)) v.forEach((item) => usp.append(k, item));
+      else usp.append(k, v);
+    });
+    const qs = usp.toString();
+    if (qs) url += "?" + qs;
+  }
+
+  const headers = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  // formData: NO se pone Content-Type a mano -- el navegador arma el boundary
+  // del multipart solo, si tú lo defines a mano queda mal formado.
+  if (auth) {
+    const token = getToken();
+    if (token) headers["Authorization"] = "Bearer " + token;
+  }
+
+  let res;
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      body: formData !== undefined ? formData : (body !== undefined ? JSON.stringify(body) : undefined),
+    });
+  } catch (networkErr) {
+    throw new Error(
+      "No se pudo conectar con la API en " + getApiBase() +
+      ". Verifica que el servidor esté corriendo y la URL configurada (ver 'Configuración de conexión')."
+    );
+  }
+
+  let data = null;
+  try { data = await res.json(); } catch (e) { /* respuesta sin body */ }
+
+  if (!res.ok) {
+    if (res.status === 401 && auth) {
+      logout(true);
+      toast("Tu sesión expiró, inicia sesión de nuevo.", "error");
+    }
+    const detail = data && data.detail;
+    let msg = "Error " + res.status;
+    if (typeof detail === "string") msg = detail;
+    else if (Array.isArray(detail) && detail.length) msg = detail.map(d => d.msg || JSON.stringify(d)).join(" | ");
+    throw new Error(msg);
+  }
+  return data;
+}
+
+/* =========================================================
+   LOGIN / LOGOUT
+   ========================================================= */
+document.getElementById("login-password-toggle").addEventListener("click", () => {
+  const input = document.getElementById("login-password");
+  const btn = document.getElementById("login-password-toggle");
+  const mostrar = input.type === "password";
+  input.type = mostrar ? "text" : "password";
+  btn.querySelector(".icon-eye").classList.toggle("hidden", mostrar);
+  btn.querySelector(".icon-eye-off").classList.toggle("hidden", !mostrar);
+  btn.title = mostrar ? "Ocultar contraseña" : "Mostrar contraseña";
+});
+
+document.getElementById("conn-toggle").addEventListener("click", () => {
+  const panel = document.getElementById("conn-panel");
+  panel.classList.toggle("hidden");
+  if (!panel.classList.contains("hidden")) {
+    document.getElementById("api-base-input").value = getApiBase();
+  }
+});
+
+document.getElementById("conn-test-btn").addEventListener("click", async () => {
+  const input = document.getElementById("api-base-input").value.trim().replace(/\/$/, "");
+  if (input) setApiBase(input);
+  const statusEl = document.getElementById("conn-status");
+  statusEl.textContent = "Probando…";
+  statusEl.className = "conn-status";
+  try {
+    await api("/health", { auth: false });
+    statusEl.textContent = "✔ Conexión exitosa con " + getApiBase();
+    statusEl.className = "conn-status ok";
+  } catch (err) {
+    statusEl.textContent = "✖ " + err.message;
+    statusEl.className = "conn-status fail";
+  }
+});
+
+/* Login por RFC, en pasos: 1) RFC -> 2) crear contraseña (primera vez) o capturarla (ya existente). */
+let loginPaso = "rfc"; // "rfc" | "password" | "crear-password"
+
+function cumpleReglaPassword(password) {
+  return password.length >= 8 && /[a-z]/.test(password) && /[A-Z]/.test(password) && /\d/.test(password)
+    && /[^A-Za-z0-9]/.test(password);
+}
+
+function loginMostrarPasoRfc() {
+  loginPaso = "rfc";
+  document.getElementById("login-password-field").classList.add("hidden");
+  document.getElementById("login-password-confirm-field").classList.add("hidden");
+  document.getElementById("login-nuevo-hint").classList.add("hidden");
+  document.getElementById("login-cambiar-rfc").classList.add("hidden");
+  document.getElementById("login-rfc").disabled = false;
+  document.getElementById("login-password").value = "";
+  document.getElementById("login-password-confirm").value = "";
+  document.getElementById("login-btn").textContent = "Continuar";
+
+  // Siempre regresa la contraseña a oculta (por si se dejó visible con el ícono de mostrar).
+  const passwordInput = document.getElementById("login-password");
+  const toggleBtn = document.getElementById("login-password-toggle");
+  passwordInput.type = "password";
+  toggleBtn.querySelector(".icon-eye").classList.remove("hidden");
+  toggleBtn.querySelector(".icon-eye-off").classList.add("hidden");
+  toggleBtn.title = "Mostrar contraseña";
+
+  document.getElementById("login-rfc").focus();
+}
+
+document.getElementById("login-cambiar-rfc").addEventListener("click", loginMostrarPasoRfc);
+
+document.getElementById("login-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const rfc = document.getElementById("login-rfc").value.trim().toUpperCase();
+  const errorEl = document.getElementById("login-error");
+  errorEl.textContent = "";
+  if (!rfc) return;
+  if (loginPaso === "rfc" && rfc.length > 10) {
+    errorEl.textContent = "El RFC no puede exceder 10 caracteres.";
+    return;
+  }
+
+  const btn = document.getElementById("login-btn");
+  btn.disabled = true;
+
+  try {
+    if (loginPaso === "rfc") {
+      btn.textContent = "Verificando…";
+      const estado = await api("/auth/rfc/estado", { method: "POST", body: { rfc }, auth: false });
+      if (!estado.autorizado) {
+        errorEl.textContent = "Este RFC no está autorizado para usar el sistema.";
+        return;
+      }
+      document.getElementById("login-rfc").disabled = true;
+      document.getElementById("login-cambiar-rfc").classList.remove("hidden");
+      document.getElementById("login-password-field").classList.remove("hidden");
+      if (estado.tiene_password) {
+        loginPaso = "password";
+        btn.textContent = "Iniciar sesión";
+      } else {
+        loginPaso = "crear-password";
+        document.getElementById("login-password-confirm-field").classList.remove("hidden");
+        document.getElementById("login-nuevo-hint").classList.remove("hidden");
+        btn.textContent = "Crear contraseña y entrar";
+      }
+      document.getElementById("login-password").focus();
+      return;
+    }
+
+    if (loginPaso === "password") {
+      const password = document.getElementById("login-password").value;
+      const data = await api("/auth/rfc/login", { method: "POST", body: { rfc, password }, auth: false });
+      guardarSesionRfc(data, rfc);
+      showApp();
+      return;
+    }
+
+    if (loginPaso === "crear-password") {
+      const password = document.getElementById("login-password").value;
+      const confirmacion = document.getElementById("login-password-confirm").value;
+      if (!cumpleReglaPassword(password)) {
+        errorEl.textContent = "La contraseña debe tener al menos 8 caracteres, con al menos una mayúscula, una minúscula, un número y un carácter especial (ej. !@#$%&*).";
+        return;
+      }
+      if (password !== confirmacion) {
+        errorEl.textContent = "Las contraseñas no coinciden.";
+        return;
+      }
+      const data = await api("/auth/rfc/crear-password", { method: "POST", body: { rfc, password }, auth: false });
+      guardarSesionRfc(data, rfc);
+      showApp();
+      return;
+    }
+  } catch (err) {
+    errorEl.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+    if (loginPaso === "rfc") btn.textContent = "Continuar";
+    else if (loginPaso === "password") btn.textContent = "Iniciar sesión";
+    else if (loginPaso === "crear-password") btn.textContent = "Crear contraseña y entrar";
+  }
+});
+
+function guardarSesionRfc(data, rfc) {
+  sessionStorage.setItem("token", data.access_token);
+  sessionStorage.setItem("rfc", data.rfc);
+  sessionStorage.setItem("nombre", data.nombre);
+  sessionStorage.setItem("perfil", data.perfil);
+  localStorage.setItem("ultimoRfc", rfc);
+  document.getElementById("login-password").value = "";
+  document.getElementById("login-password-confirm").value = "";
+}
+
+document.getElementById("nav-salir").addEventListener("click", () => logout(false));
+
+const PERFIL_ADMINISTRADOR = 1;
+const PERFIL_CABINA = 2;
+const PERFIL_PROVEEDOR = 3;
+const NOMBRES_PERFIL = { "1": "Administrador", "2": "Cabina", "3": "Proveedor" };
+
+function perfilActual() {
+  return parseInt(sessionStorage.getItem("perfil"), 10) || null;
+}
+function esPerfilCabina() { return perfilActual() === PERFIL_CABINA; }
+function esPerfilProveedor() { return perfilActual() === PERFIL_PROVEEDOR; }
+function esPerfilAdministrador() { return perfilActual() === PERFIL_ADMINISTRADOR; }
+
+function estatusDefaultParaPerfil() {
+  // Cabina arranca en "Abierto" (su bandeja de trabajo). Proveedor y
+  // Administrador arrancan en "En Espera de Respuesta" -- para Proveedor es
+  // lo único que le corresponde ver; para Administrador es lo más útil para
+  // generar el corte (evidencia de qué se mandó a proveedor).
+  if (esPerfilCabina()) return "Abierto";
+  return "En Espera de Respuesta";
+}
+
+// Proveedor solo puede ver expedientes en estos dos estatus: "En Espera de
+// Respuesta" (los que le corresponde atender) y "Seguimiento Proveedor"
+// (los que ya mandó, en modo solo lectura mientras Cabina los revisa).
+// Cualquier otro estatus (Abierto, Finalizado) no le corresponde verlo.
+const ESTATUS_VISIBLES_PROVEEDOR = ["En Espera de Respuesta", "Seguimiento Proveedor"];
+function proveedorPuedeVer(estatus) {
+  return !esPerfilProveedor() || ESTATUS_VISIBLES_PROVEEDOR.includes(estatus);
+}
+
+function aplicarPermisosPerfil() {
+  const cabina = esPerfilCabina();
+  const proveedor = esPerfilProveedor();
+  const admin = perfilActual() === PERFIL_ADMINISTRADOR;
+
+  // Cabina no tiene acceso a "Registrar seguimiento" (eso es exclusivo de Proveedor).
+  document.getElementById("sg-seguimiento-card").classList.toggle("hidden-perfil", cabina);
+
+  // Proveedor no puede cambiar el estado a mano ("Estado del Caso"): en su
+  // caso el estatus solo cambia automático al usar "Actualizar Core".
+  document.getElementById("sg-estatus-card").classList.toggle("hidden-perfil", proveedor);
+
+  // Proveedor no filtra por Estado: su vista queda fija en "En Espera de Respuesta".
+  document.getElementById("f-estatus-field").classList.toggle("hidden-perfil", proveedor);
+
+  // Enviar correo a proveedores es una acción operativa de Cabina --
+  // Administrador ya no la usa (ver nota de "Generar corte" abajo).
+  document.getElementById("btn-enviar-correo-proveedores").classList.toggle("hidden-perfil", proveedor || admin);
+  document.getElementById("pa-btn-enviar-correo-proveedores").classList.toggle("hidden-perfil", proveedor || admin);
+  // Generar corte quedó exclusivo del perfil Administrador (decisión del
+  // jefe): Cabina y Proveedor ya no lo ven.
+  document.getElementById("btn-generar-corte").classList.toggle("hidden-perfil", proveedor || cabina);
+  document.getElementById("pa-btn-generar-corte").classList.toggle("hidden-perfil", proveedor || cabina);
+
+  // Filtro por Entidad: solo para Proveedor.
+  document.getElementById("f-entidad-field").classList.toggle("hidden-perfil", !proveedor);
+
+  // KPI adicional "Seguimiento Proveedor", solo para Cabina.
+  document.getElementById("kpi-seguimiento-card").classList.toggle("hidden-perfil", !cabina);
+  document.getElementById("pa-kpi-seguimiento-card").classList.toggle("hidden-perfil", !cabina);
+
+  // Administrador ahora también puede ver Expedientes/Expedientes PA (para
+  // buscar/seleccionar y "Generar corte"), pero sin las acciones operativas
+  // de Cabina -- por eso "Seguimiento de expedientes" (dar seguimiento al
+  // caso) sigue sin corresponderle.
+  document.getElementById("nav-expedientes").classList.toggle("hidden-perfil", false);
+  document.getElementById("nav-seguimiento").classList.toggle("hidden-perfil", admin);
+  document.getElementById("nav-pago-anticipado").classList.toggle("hidden-perfil", false);
+  // Configuración Cuentas y Usuarios y Accesos son exclusivos de Administrador.
+  document.getElementById("nav-configuracion").classList.toggle("hidden-perfil", !admin);
+  document.getElementById("nav-accesos").classList.toggle("hidden-perfil", !admin);
+
+  // Mismas reglas de Estado/Entidad que en Expedientes, replicadas en Pago Anticipado.
+  document.getElementById("pa-f-estatus-field").classList.toggle("hidden-perfil", proveedor);
+  document.getElementById("pa-f-entidad-field").classList.toggle("hidden-perfil", !proveedor);
+
+  aplicarEtiquetasKPI();
+  aplicarEtiquetasKPIPA();
+}
+
+function logout(silent) {
+  sessionStorage.removeItem("token");
+  sessionStorage.removeItem("rfc");
+  sessionStorage.removeItem("nombre");
+  sessionStorage.removeItem("perfil");
+  resetEstadoExpedientes();
+  document.getElementById("view-app").classList.add("hidden");
+  document.getElementById("view-login").classList.remove("hidden");
+  loginMostrarPasoRfc();
+  if (!silent) toast("Sesión cerrada");
+}
+
+async function showApp() {
+  document.getElementById("view-login").classList.add("hidden");
+  document.getElementById("view-app").classList.remove("hidden");
+  const perfilNombre = NOMBRES_PERFIL[sessionStorage.getItem("perfil")] || "";
+  document.getElementById("nav-user").textContent =
+    "Sesión: " + sessionStorage.getItem("nombre") + (perfilNombre ? " (" + perfilNombre + ")" : "");
+  aplicarPermisosPerfil();
+
+  if (perfilActual() === PERFIL_ADMINISTRADOR) {
+    // Administrador entra directo a Usuarios y Accesos (su responsabilidad
+    // principal); Expedientes/Expedientes PA quedan en el menú para cuando
+    // necesite generar un corte.
+    goTo("accesos");
+    return;
+  }
+
+  goTo("expedientes");
+}
+
+/* =========================================================
+   NAVEGACIÓN
+   ========================================================= */
+const SCREEN_INFO = {
+  expedientes: { nav: "nav-expedientes", title: "Expedientes", crumb: "Expedientes" },
+  seguimiento: { nav: "nav-seguimiento", title: "Seguimiento de expedientes", crumb: "Seguimiento de expedientes" },
+  "pago-anticipado": { nav: "nav-pago-anticipado", title: "Expedientes PA", crumb: "Expedientes PA" },
+  configuracion: { nav: "nav-configuracion", title: "Configuración Cuentas", crumb: "Configuración Cuentas" },
+  accesos: { nav: "nav-accesos", title: "Usuarios y Accesos", crumb: "Usuarios y Accesos" },
+};
+
+function goTo(screen) {
+  Object.keys(SCREEN_INFO).forEach((key) => {
+    document.getElementById("screen-" + key).classList.toggle("active", key === screen);
+    document.getElementById(SCREEN_INFO[key].nav).classList.toggle("active", key === screen);
+  });
+  document.getElementById("topbar-title").textContent = SCREEN_INFO[screen].title;
+  document.getElementById("topbar-crumbs").innerHTML = "Inicio &nbsp;›&nbsp; <b>" + SCREEN_INFO[screen].crumb + "</b>";
+
+  if (screen === "configuracion") {
+    cargarGridCuentas();
+    document.getElementById("cfg-buscar-cuenta").focus();
+  }
+  if (screen === "expedientes") {
+    document.getElementById("f-expediente").focus();
+    // Refresca la tabla con lo que ya tengamos en memoria (por si algo cambió,
+    // como un estatus, mientras estabas en otra pantalla) sin pedirle nada al servidor.
+    if (expedientesActuales.length > 0) {
+      const filtrados = aplicarFiltrosLocales(expedientesActuales);
+      renderTablaExpedientes(filtrados);
+      renderKPIs();
+      actualizarNotificacionAtendidos();
+    } else {
+      // Primera vez que se entra en esta sesión: arranca con los defaults.
+      document.getElementById("f-estatus").value = estatusDefaultParaPerfil();
+      document.getElementById("f-fechaInicio").value = pisoFechaInicioISO();
+      document.getElementById("f-fechaFin").value = hoyISO();
+      cargarCatalogoServiciosFiltro();
+      cargarCatalogoCuentasFiltro();
+      loadExpedientes();
+    }
+  }
+  if (screen === "accesos") {
+    cargarGridAccesos();
+    document.getElementById("acc-rfc").focus();
+  }
+  if (screen === "pago-anticipado") {
+    document.getElementById("pa-f-expediente").focus();
+    if (expedientesActualesPA.length > 0) {
+      // Ya se había buscado antes: solo refresca la vista con lo que ya
+      // tenemos en memoria, igual que hace "expedientes" -- no resetea
+      // filtros ni vuelve a preguntarle al servidor.
+      const filtrados = aplicarFiltrosLocalesPA(expedientesActualesPA);
+      renderTablaPA(filtrados);
+      renderKPIsPA();
+      actualizarNotificacionAtendidosPA();
+    } else {
+      // Primera vez que se entra en esta sesión: arranca con los defaults.
+      document.getElementById("pa-f-estatus").value = estatusDefaultParaPerfil();
+      document.getElementById("pa-f-fechaInicio").value = pisoFechaInicioISO();
+      document.getElementById("pa-f-fechaFin").value = hoyISO();
+      cargarCatalogoServiciosFiltroPA();
+      cargarCatalogoCuentasFiltroPA();
+      loadExpedientesPA();
+    }
+  }
+}
+
+document.getElementById("nav-expedientes").addEventListener("click", () => goTo("expedientes"));
+document.getElementById("nav-configuracion").addEventListener("click", () => goTo("configuracion"));
+document.getElementById("nav-accesos").addEventListener("click", () => goTo("accesos"));
+document.getElementById("nav-pago-anticipado").addEventListener("click", () => goTo("pago-anticipado"));
+document.getElementById("nav-seguimiento").addEventListener("click", () => openSeguimientoMenu());
+
+/* =========================================================
+   PANTALLA: EXPEDIENTES
+   ========================================================= */
+let expedientesActuales = [];
+let expedientesSeleccionados = new Set();
+let expedientesPaginaActual = 1;
+const EXPEDIENTES_POR_PAGINA = 25;
+
+/* ---------- Dropdown "Cuenta (una o varias)" ---------- */
+let cuentasCatalogo = [];
+let cuentasSeleccionadas = new Set();
+
+async function cargarCatalogoCuentasFiltro() {
+  try {
+    cuentasCatalogo = await api("/catalogos/cuentas");
+    renderCuentasOptions(cuentasCatalogo);
+    actualizarCuentasToggleTexto();
+  } catch (err) {
+    toast("No se pudo cargar el catálogo de cuentas: " + err.message, "error");
+  }
+}
+
+function renderCuentasOptions(lista) {
+  const cont = document.getElementById("f-cuentas-options");
+  if (!lista.length) {
+    cont.innerHTML = `<div class="ms-empty">Sin resultados.</div>`;
+    return;
+  }
+  cont.innerHTML = lista.map(c => `
+    <label class="ms-option">
+      <input type="checkbox" value="${escapeHtml(String(c.clave))}" ${cuentasSeleccionadas.has(String(c.clave)) ? "checked" : ""}>
+      <span>${escapeHtml(c.descripcion)}</span>
+    </label>
+  `).join("");
+  cont.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+    chk.addEventListener("change", (e) => {
+      if (e.target.checked) cuentasSeleccionadas.add(e.target.value);
+      else cuentasSeleccionadas.delete(e.target.value);
+      actualizarCuentasToggleTexto();
+    });
+  });
+}
+
+function actualizarCuentasToggleTexto() {
+  const el = document.getElementById("f-cuentas-toggle-text");
+  const n = cuentasSeleccionadas.size;
+  if (n === 0) {
+    el.textContent = "Todas las cuentas";
+  } else if (n === 1) {
+    const clave = Array.from(cuentasSeleccionadas)[0];
+    const c = cuentasCatalogo.find(x => String(x.clave) === clave);
+    el.textContent = c ? c.descripcion : "1 cuenta seleccionada";
+  } else {
+    el.textContent = `${n} cuentas seleccionadas`;
+  }
+}
+
+const msToggleBtn = document.getElementById("f-cuentas-toggle");
+const msPanel = document.getElementById("f-cuentas-panel");
+msToggleBtn.addEventListener("click", () => {
+  msPanel.classList.toggle("hidden");
+  msToggleBtn.classList.toggle("open", !msPanel.classList.contains("hidden"));
+});
+document.getElementById("f-cuentas-search").addEventListener("input", (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  renderCuentasOptions(cuentasCatalogo.filter(c => c.descripcion.toLowerCase().includes(q)));
+});
+document.getElementById("f-cuentas-selectall").addEventListener("click", () => {
+  cuentasCatalogo.forEach(c => cuentasSeleccionadas.add(String(c.clave)));
+  renderCuentasOptions(cuentasCatalogo);
+  actualizarCuentasToggleTexto();
+});
+document.getElementById("f-cuentas-clear").addEventListener("click", () => {
+  cuentasSeleccionadas.clear();
+  renderCuentasOptions(cuentasCatalogo);
+  actualizarCuentasToggleTexto();
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#f-cuentas-dropdown")) {
+    msPanel.classList.add("hidden");
+    msToggleBtn.classList.remove("open");
+  }
+});
+
+async function cargarCatalogoServiciosFiltro() {
+  const select = document.getElementById("f-servicio");
+  try {
+    const servicios = await api("/catalogos/servicios");
+    select.innerHTML = servicios.map(s => `<option value="${s.clave}">${escapeHtml(s.descripcion)}</option>`).join("");
+    if (servicios.length) await cargarCatalogoSubserviciosFiltro(servicios[0].clave);
+  } catch (err) {
+    toast("No se pudo cargar el catálogo de servicios: " + err.message, "error");
+  }
+}
+
+let subserviciosPermitidos = null; // null = catálogo aún no cargado (no filtrar todavía)
+
+async function cargarCatalogoSubserviciosFiltro(clServicio) {
+  const select = document.getElementById("f-subservicio");
+  select.innerHTML = `<option value="">Todos</option>`;
+  if (!clServicio) return;
+  try {
+    const subservicios = await api("/catalogos/subservicios", { params: { cl_servicio: clServicio || undefined } });
+    select.innerHTML += subservicios.map(s => `<option value="${s.clave}">${escapeHtml(s.descripcion)}</option>`).join("");
+    // Filtro temporal: solo se trabaja con los subservicios de este catálogo (acordado con el equipo).
+    subserviciosPermitidos = subservicios.map(s => s.descripcion.trim().toLowerCase());
+  } catch (err) {
+    toast("No se pudo cargar el catálogo de subservicios: " + err.message, "error");
+  }
+}
+
+document.getElementById("f-servicio").addEventListener("change", (e) => {
+  cargarCatalogoSubserviciosFiltro(e.target.value);
+});
+
+function badgeEstatus(estatus) {
+  const map = {
+    "Abierto": "pendiente",
+    "En Espera de Respuesta": "espera",
+    "Seguimiento Proveedor": "seguimiento",
+    "Finalizado": "activo",
+  };
+  const cls = map[estatus] || "pendiente";
+  return `<span class="badge ${cls}">${escapeHtml(estatus)}</span>`;
+}
+
+function aplicarFiltroEstatusLocal(rows) {
+  const val = document.getElementById("f-estatus").value;
+  if (!val) return rows;
+  return rows.filter(r => r.estatus === val);
+}
+
+function aplicarFiltroSubservicioLocal(rows) {
+  // TEMPORAL: solo se trabaja con los subservicios del catálogo (a validar con el equipo).
+  if (!subserviciosPermitidos) return rows;
+  return rows.filter(r => subserviciosPermitidos.includes((r.tipo_subservicio || "").trim().toLowerCase()));
+}
+
+function aplicarFiltroEntidadLocal(rows) {
+  const val = document.getElementById("f-entidad").value;
+  if (!val) return rows;
+  return rows.filter(r => (r.entidad || "") === val);
+}
+
+function aplicarFiltrosLocales(rows) {
+  return aplicarFiltroEntidadLocal(aplicarFiltroSubservicioLocal(aplicarFiltroEstatusLocal(rows)));
+}
+
+async function actualizarOpcionesEntidad() {
+  await cargarCatalogoEntidades();
+  poblarSelectEntidades("f-entidad", "Todas");
+}
+
+function datosResumenPerfil() {
+  // Para KPIs y avisos: todo lo que trajo la búsqueda actual (respeta el
+  // filtro temporal de subservicios), SIN aplicar el filtro de "Estado" de
+  // la tabla — así el resumen no cambia solo porque estés viendo otro Estado.
+  return aplicarFiltroSubservicioLocal(expedientesActuales);
+}
+
+function renderKPIs() {
+  const rows = datosResumenPerfil();
+  if (esPerfilProveedor()) {
+    // Su bandeja real es "En Espera de Respuesta"; el segundo KPI marca
+    // urgencia: cuántos de esos llevan más de un día esperando.
+    const enEspera = rows.filter(r => r.estatus === "En Espera de Respuesta");
+    const hoy = new Date().toISOString().slice(0, 10);
+    document.getElementById("kpi-total").textContent = enEspera.length;
+    document.getElementById("kpi-proceso").textContent = enEspera.filter(r => r.fecha_apertura_servicio < hoy).length;
+    return;
+  }
+  if (esPerfilCabina()) {
+    document.getElementById("kpi-total").textContent = rows.filter(r => r.estatus === "Abierto").length;
+    document.getElementById("kpi-proceso").textContent = rows.filter(r => r.estatus === "En Espera de Respuesta").length;
+    document.getElementById("kpi-seguimiento").textContent = rows.filter(r => r.estatus === "Seguimiento Proveedor").length;
+    return;
+  }
+  // Perfil sin reglas propias todavía (ej. Administrador): comportamiento genérico.
+  document.getElementById("kpi-total").textContent = rows.length;
+  document.getElementById("kpi-proceso").textContent =
+    rows.filter(r => ["En Espera de Respuesta", "Seguimiento Proveedor"].includes(r.estatus)).length;
+}
+
+function aplicarEtiquetasKPI() {
+  if (esPerfilProveedor()) {
+    document.getElementById("kpi-total-label").textContent = "Esperando tu respuesta";
+    document.getElementById("kpi-proceso-label").textContent = "Con más de 1 día esperando";
+  } else if (esPerfilCabina()) {
+    document.getElementById("kpi-total-label").textContent = "Expedientes sin asignar";
+    document.getElementById("kpi-proceso-label").textContent = "En espera de respuesta";
+  } else {
+    document.getElementById("kpi-total-label").textContent = "Total Expedientes";
+    document.getElementById("kpi-proceso-label").textContent = "En Proceso";
+  }
+}
+
+function actualizarNotificacionAtendidos() {
+  const banner = document.getElementById("notif-atendidos");
+  if (!esPerfilCabina()) {
+    // Este aviso es para que Cabina revise lo que ya respondió el proveedor;
+    // a Proveedor no le corresponde (su bandeja ya está limitada a "En Espera de Respuesta").
+    banner.classList.add("hidden");
+    return;
+  }
+  const rows = datosResumenPerfil();
+  const enSeguimiento = rows.filter(r => r.estatus === "Seguimiento Proveedor").length;
+  if (enSeguimiento > 0) {
+    document.getElementById("notif-atendidos-texto").textContent =
+      `Hay ${enSeguimiento} expediente${enSeguimiento === 1 ? "" : "s"} en seguimiento con el proveedor que debe${enSeguimiento === 1 ? "" : "n"} revisarse.`;
+    banner.classList.remove("hidden");
+  } else {
+    banner.classList.add("hidden");
+  }
+}
+document.getElementById("notif-atendidos-cerrar").addEventListener("click", () => {
+  document.getElementById("notif-atendidos").classList.add("hidden");
+});
+
+function renderTablaExpedientes(rows) {
+  const tbody = document.getElementById("tabla-expedientes-body");
+
+  const totalPaginas = Math.max(1, Math.ceil(rows.length / EXPEDIENTES_POR_PAGINA));
+  if (expedientesPaginaActual > totalPaginas) expedientesPaginaActual = totalPaginas;
+  if (expedientesPaginaActual < 1) expedientesPaginaActual = 1;
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="17" class="empty">No se encontraron expedientes con estos filtros.</td></tr>`;
+    renderPagerExpedientes(rows, totalPaginas);
+    return;
+  }
+
+  const inicio = (expedientesPaginaActual - 1) * EXPEDIENTES_POR_PAGINA;
+  const pageRows = rows.slice(inicio, inicio + EXPEDIENTES_POR_PAGINA);
+
+  tbody.innerHTML = pageRows.map((r, i) => `
+    <tr>
+      <td class="col-frozen" style="left:0;">${inicio + i + 1}</td>
+      <td class="col-frozen" style="left:40px;"><input type="checkbox" class="chk-expediente" data-exp="${r.expediente}" ${expedientesSeleccionados.has(r.expediente) ? "checked" : ""}></td>
+      <td class="col-frozen" style="left:72px;">${formatDate(r.fecha_apertura_servicio)}</td>
+      <td class="col-frozen" style="left:172px;">${celdaExpediente(r.expediente, "link-expediente")}</td>
+      <td class="col-frozen" style="left:272px;">${escapeHtml(r.cuenta)}</td>
+      <td class="col-frozen" style="left:462px;">${escapeHtml(r.tipo_servicio || "")}</td>
+      <td class="col-frozen col-frozen-last" style="left:592px;">${escapeHtml(r.tipo_subservicio || "")}</td>
+      <td>${escapeHtml(r.nombre_titular || "")}</td>
+      <td>${escapeHtml(r.nombre_paciente)}</td>
+      <td>${escapeHtml(r.especialidad || "")}</td>
+      <td>${escapeHtml(r.entidad || "")}</td>
+      <td>${escapeHtml(r.municipio || "")}</td>
+      <td>${r.fecha_asignacion_proveedor ? formatDate(r.fecha_asignacion_proveedor) : '<span class="muted">Sin asignar</span>'}</td>
+      <td>${r.fecha_cita ? formatDate(r.fecha_cita) : '<span class="muted">Sin cita</span>'}</td>
+      <td>${escapeHtml(r.telefono || "")}</td>
+      <td>${escapeHtml(r.email || "")}</td>
+      <td>${badgeEstatus(r.estatus)}</td>
+    </tr>
+  `).join("");
+
+  tbody.querySelectorAll(".link-expediente").forEach(a => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      const exp = parseInt(a.dataset.exp, 10);
+      const rec = expedientesActuales.find(x => x.expediente === exp);
+      if (rec) abrirSeguimiento(rec, "link");
+    });
+  });
+
+  tbody.querySelectorAll(".chk-expediente").forEach(chk => {
+    chk.addEventListener("change", (e) => {
+      const exp = parseInt(e.target.dataset.exp, 10);
+      if (e.target.checked) expedientesSeleccionados.add(exp);
+      else expedientesSeleccionados.delete(exp);
+      document.getElementById("chk-todos").checked =
+        rows.length > 0 && rows.every(r => expedientesSeleccionados.has(r.expediente));
+    });
+  });
+
+  renderPagerExpedientes(rows, totalPaginas);
+}
+
+function renderPagerExpedientes(rows, totalPaginas) {
+  const pager = document.getElementById("expedientes-pager");
+  if (!rows.length) {
+    pager.innerHTML = "";
+    return;
+  }
+  const inicio = (expedientesPaginaActual - 1) * EXPEDIENTES_POR_PAGINA + 1;
+  const fin = Math.min(expedientesPaginaActual * EXPEDIENTES_POR_PAGINA, rows.length);
+  pager.innerHTML = `
+    <span class="pager-info">Mostrando ${inicio}–${fin} de ${rows.length} expediente${rows.length === 1 ? "" : "s"}</span>
+    <div class="pager-controls">
+      <button class="btn btn-secondary" id="pager-prev" ${expedientesPaginaActual <= 1 ? "disabled" : ""}>&larr; Anterior</button>
+      <span class="pager-page">Página ${expedientesPaginaActual} de ${totalPaginas}</span>
+      <button class="btn btn-secondary" id="pager-next" ${expedientesPaginaActual >= totalPaginas ? "disabled" : ""}>Siguiente &rarr;</button>
+    </div>
+  `;
+  document.getElementById("pager-prev").addEventListener("click", () => {
+    expedientesPaginaActual -= 1;
+    renderTablaExpedientes(aplicarFiltrosLocales(expedientesActuales));
+  });
+  document.getElementById("pager-next").addEventListener("click", () => {
+    expedientesPaginaActual += 1;
+    renderTablaExpedientes(aplicarFiltrosLocales(expedientesActuales));
+  });
+}
+
+document.getElementById("chk-todos").addEventListener("change", (e) => {
+  const filas = aplicarFiltrosLocales(expedientesActuales);
+  filas.forEach(r => {
+    if (e.target.checked) expedientesSeleccionados.add(r.expediente);
+    else expedientesSeleccionados.delete(r.expediente);
+  });
+  renderTablaExpedientes(filas);
+});
+
+const MESES_MAXIMOS_RANGO = 3;
+
+function pisoFechaInicio() {
+  const piso = new Date();
+  piso.setMonth(piso.getMonth() - MESES_MAXIMOS_RANGO);
+  return piso;
+}
+function pisoFechaInicioISO() {
+  return pisoFechaInicio().toISOString().slice(0, 10);
+}
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function validarRangoFechas(fechaInicioStr, fechaFinStr) {
+  // Ojo: esto NO prohíbe buscar fechas viejas (ej. dentro de 2025) -- solo
+  // limita qué tan ancho puede ser el rango entre inicio y fin. Pero si se
+  // manda una de las dos fechas, se deben mandar AMBAS -- si no, la regla
+  // de los 3 meses se podría brincar por completo (ej. solo fecha inicio
+  // desde 2022, sin tope superior).
+  if (fechaInicioStr && !fechaFinStr) return "Debes indicar también la fecha fin para poder buscar.";
+  if (fechaFinStr && !fechaInicioStr) return "Debes indicar también la fecha inicio para poder buscar.";
+  if (!fechaInicioStr || !fechaFinStr) return null;
+  const inicio = new Date(fechaInicioStr + "T00:00:00");
+  const fin = new Date(fechaFinStr + "T00:00:00");
+  if (fin < inicio) return "La fecha fin no puede ser anterior a la fecha inicio.";
+  const limite = new Date(inicio);
+  limite.setMonth(limite.getMonth() + MESES_MAXIMOS_RANGO);
+  if (fin > limite) {
+    return `El rango de fechas no puede ser mayor a ${MESES_MAXIMOS_RANGO} meses.`;
+  }
+  return null;
+}
+
+async function loadExpedientes() {
+  const clExpediente = document.getElementById("f-expediente").value;
+  const fechaInicio = document.getElementById("f-fechaInicio").value;
+  const fechaFin = document.getElementById("f-fechaFin").value;
+  // Búsqueda puntual por número de expediente: no debe importar la regla
+  // de fechas, es una clave exacta -- se manda sin acotar por fecha.
+  if (!clExpediente) {
+    const errorRango = validarRangoFechas(fechaInicio, fechaFin);
+    if (errorRango) {
+      toast(errorRango, "error");
+      return;
+    }
+  }
+
+  const cuentasSel = Array.from(cuentasSeleccionadas);
+  const params = {
+    cl_expediente: clExpediente || undefined,
+    // Búsqueda puntual por número de expediente: es una clave exacta, no
+    // debe importar ningún otro criterio (fecha, servicio/subservicio, cuenta).
+    fecha_inicio: clExpediente ? undefined : (fechaInicio || undefined),
+    fecha_fin: clExpediente ? undefined : (fechaFin || undefined),
+    cl_servicio: clExpediente ? undefined : (document.getElementById("f-servicio").value || undefined),
+    cl_subservicio: clExpediente ? undefined : (document.getElementById("f-subservicio").value || undefined),
+    cuentas: clExpediente ? undefined : (cuentasSel.length ? cuentasSel : undefined),
+  };
+
+  const tbody = document.getElementById("tabla-expedientes-body");
+  tbody.innerHTML = `<tr><td colspan="17" class="spinner-row">Cargando…</td></tr>`;
+
+  try {
+    const data = await api("/expedientes", { params });
+    data.sort((a, b) => a.fecha_apertura_servicio.localeCompare(b.fecha_apertura_servicio));
+    expedientesActuales = data;
+    expedientesPaginaActual = 1;
+    actualizarOpcionesEntidad();
+    // Igual que con las fechas: al buscar por clave, tampoco se aplican los
+    // filtros locales (Estado/Subservicio/Entidad) -- se muestra tal cual.
+    // Excepción: Proveedor solo puede ver "En Espera de Respuesta" o
+    // "Seguimiento Proveedor" (los suyos), sin importar la clave buscada.
+    const filtrados = clExpediente ? data.filter(r => proveedorPuedeVer(r.estatus)) : aplicarFiltrosLocales(data);
+    renderTablaExpedientes(filtrados);
+    renderKPIs();
+    actualizarNotificacionAtendidos();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="17" class="empty">${escapeHtml(err.message)}</td></tr>`;
+    toast(err.message, "error");
+  }
+}
+
+document.getElementById("btn-buscar-expedientes").addEventListener("click", loadExpedientes);
+document.querySelector(".filters-grid").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.tagName !== "TEXTAREA" && !e.target.closest(".ms-panel")) {
+    e.preventDefault();
+    loadExpedientes();
+  }
+});
+document.getElementById("btn-limpiar-expedientes").addEventListener("click", () => {
+  document.getElementById("f-expediente").value = "";
+  document.getElementById("f-fechaInicio").value = "";
+  document.getElementById("f-fechaFin").value = "";
+  document.getElementById("f-estatus").value = esPerfilProveedor() ? "En Espera de Respuesta" : "";
+  document.getElementById("f-subservicio").value = "";
+  document.getElementById("f-entidad").value = "";
+  cuentasSeleccionadas.clear();
+  renderCuentasOptions(cuentasCatalogo);
+  actualizarCuentasToggleTexto();
+  expedientesSeleccionados.clear();
+  loadExpedientes();
+});
+
+document.getElementById("btn-enviar-correo-proveedores").addEventListener("click", async () => {
+  if (expedientesSeleccionados.size === 0) {
+    toast("Selecciona al menos un expediente antes de enviar el correo.", "error");
+    return;
+  }
+  const btn = document.getElementById("btn-enviar-correo-proveedores");
+  btn.disabled = true;
+  try {
+    const data = await api("/expedientes/enviar-correo-proveedores", {
+      method: "POST",
+      body: { expedientes: Array.from(expedientesSeleccionados) },
+    });
+    toast(`Correo enviado para ${data.enviados} expediente(s).`, "success");
+    // El envío marca automáticamente esos expedientes como "En Espera de Respuesta".
+    data.expedientes.forEach(exp => {
+      const rec = expedientesActuales.find(r => r.expediente === exp);
+      if (rec) rec.estatus = "En Espera de Respuesta";
+    });
+    expedientesSeleccionados.clear();
+    const filtrados = aplicarFiltrosLocales(expedientesActuales);
+    renderTablaExpedientes(filtrados);
+    renderKPIs();
+    actualizarNotificacionAtendidos();
+    document.getElementById("chk-todos").checked = false;
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* =========================================================
+   PANTALLA: PAGO ANTICIPADO
+   TEMPORAL: jala los mismos datos que "Expedientes" -- todavía no existe
+   en SISE un campo/consulta que distinga cuáles son de pago anticipado.
+   ========================================================= */
+let expedientesActualesPA = [];
+let expedientesSeleccionadosPA = new Set();
+let cuentasSeleccionadasPA = new Set();
+let paPaginaActual = 1;
+const PA_POR_PAGINA = 25;
+
+function resetEstadoExpedientes() {
+  // Se llama al cerrar sesión: sin esto, los datos/filtros de la sesión
+  // anterior (ej. Cabina viendo "Abierto") quedaban en memoria y se
+  // alcanzaban a ver un instante al iniciar sesión con OTRO perfil
+  // (ej. Proveedor), hasta que loadExpedientes() traía los datos correctos.
+  document.getElementById("corte-modal-overlay").classList.add("hidden");
+  corteActual = null;
+  document.getElementById("cambiar-entidad-modal-overlay").classList.add("hidden");
+  cambiarEntidadRfc = null;
+  expedientesActuales = [];
+  expedientesSeleccionados.clear();
+  expedientesPaginaActual = 1;
+  cuentasSeleccionadas.clear();
+  document.getElementById("f-expediente").value = "";
+  document.getElementById("f-fechaInicio").value = "";
+  document.getElementById("f-fechaFin").value = "";
+  document.getElementById("f-estatus").value = "";
+  document.getElementById("f-subservicio").value = "";
+  document.getElementById("f-entidad").value = "";
+  document.getElementById("tabla-expedientes-body").innerHTML = "";
+  renderCuentasOptions(cuentasCatalogo);
+  actualizarCuentasToggleTexto();
+
+  expedientesActualesPA = [];
+  expedientesSeleccionadosPA.clear();
+  paPaginaActual = 1;
+  cuentasSeleccionadasPA.clear();
+  document.getElementById("pa-f-expediente").value = "";
+  document.getElementById("pa-f-fechaInicio").value = "";
+  document.getElementById("pa-f-fechaFin").value = "";
+  document.getElementById("pa-f-estatus").value = "";
+  document.getElementById("pa-f-subservicio").value = "";
+  document.getElementById("pa-f-entidad").value = "";
+  document.getElementById("pa-tabla-body").innerHTML = "";
+  renderCuentasOptionsPA(cuentasCatalogo);
+  actualizarCuentasToggleTextoPA();
+}
+
+async function cargarCatalogoServiciosFiltroPA() {
+  const select = document.getElementById("pa-f-servicio");
+  if (select.options.length) return;
+  try {
+    const servicios = await api("/catalogos/servicios");
+    select.innerHTML = servicios.map(s => `<option value="${s.clave}">${escapeHtml(s.descripcion)}</option>`).join("");
+    if (servicios.length) await cargarCatalogoSubserviciosFiltroPA(servicios[0].clave);
+  } catch (err) {
+    toast("No se pudo cargar el catálogo de servicios: " + err.message, "error");
+  }
+}
+
+async function cargarCatalogoSubserviciosFiltroPA(clServicio) {
+  const select = document.getElementById("pa-f-subservicio");
+  select.innerHTML = `<option value="">Todos</option>`;
+  if (!clServicio) return;
+  try {
+    const subservicios = await api("/catalogos/subservicios", { params: { cl_servicio: clServicio || undefined } });
+    select.innerHTML += subservicios.map(s => `<option value="${s.clave}">${escapeHtml(s.descripcion)}</option>`).join("");
+  } catch (err) {
+    toast("No se pudo cargar el catálogo de subservicios: " + err.message, "error");
+  }
+}
+document.getElementById("pa-f-servicio").addEventListener("change", (e) => {
+  cargarCatalogoSubserviciosFiltroPA(e.target.value);
+});
+
+async function cargarCatalogoCuentasFiltroPA() {
+  // Reutiliza el mismo catálogo que ya carga la pantalla "Expedientes"
+  // (cuentasCatalogo es una variable global compartida) -- si por algún
+  // motivo entraron directo aquí y todavía no se cargó, lo carga aquí.
+  if (!cuentasCatalogo.length) {
+    try {
+      cuentasCatalogo = await api("/catalogos/cuentas");
+    } catch (err) {
+      toast("No se pudo cargar el catálogo de cuentas: " + err.message, "error");
+      return;
+    }
+  }
+  renderCuentasOptionsPA(cuentasCatalogo);
+  actualizarCuentasToggleTextoPA();
+}
+
+function renderCuentasOptionsPA(lista) {
+  const cont = document.getElementById("pa-f-cuentas-options");
+  if (!lista.length) {
+    cont.innerHTML = `<div class="ms-empty">Sin resultados.</div>`;
+    return;
+  }
+  cont.innerHTML = lista.map(c => `
+    <label class="ms-option">
+      <input type="checkbox" value="${escapeHtml(String(c.clave))}" ${cuentasSeleccionadasPA.has(String(c.clave)) ? "checked" : ""}>
+      <span>${escapeHtml(c.descripcion)}</span>
+    </label>
+  `).join("");
+  cont.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+    chk.addEventListener("change", (e) => {
+      if (e.target.checked) cuentasSeleccionadasPA.add(e.target.value);
+      else cuentasSeleccionadasPA.delete(e.target.value);
+      actualizarCuentasToggleTextoPA();
+    });
+  });
+}
+
+function actualizarCuentasToggleTextoPA() {
+  const el = document.getElementById("pa-f-cuentas-toggle-text");
+  const n = cuentasSeleccionadasPA.size;
+  if (n === 0) {
+    el.textContent = "Todas las cuentas";
+  } else if (n === 1) {
+    const clave = Array.from(cuentasSeleccionadasPA)[0];
+    const c = cuentasCatalogo.find(x => String(x.clave) === clave);
+    el.textContent = c ? c.descripcion : "1 cuenta seleccionada";
+  } else {
+    el.textContent = `${n} cuentas seleccionadas`;
+  }
+}
+
+const msToggleBtnPA = document.getElementById("pa-f-cuentas-toggle");
+const msPanelPA = document.getElementById("pa-f-cuentas-panel");
+msToggleBtnPA.addEventListener("click", () => {
+  msPanelPA.classList.toggle("hidden");
+  msToggleBtnPA.classList.toggle("open", !msPanelPA.classList.contains("hidden"));
+});
+document.getElementById("pa-f-cuentas-search").addEventListener("input", (e) => {
+  const q = e.target.value.trim().toLowerCase();
+  renderCuentasOptionsPA(cuentasCatalogo.filter(c => c.descripcion.toLowerCase().includes(q)));
+});
+document.getElementById("pa-f-cuentas-selectall").addEventListener("click", () => {
+  cuentasCatalogo.forEach(c => cuentasSeleccionadasPA.add(String(c.clave)));
+  renderCuentasOptionsPA(cuentasCatalogo);
+  actualizarCuentasToggleTextoPA();
+});
+document.getElementById("pa-f-cuentas-clear").addEventListener("click", () => {
+  cuentasSeleccionadasPA.clear();
+  renderCuentasOptionsPA(cuentasCatalogo);
+  actualizarCuentasToggleTextoPA();
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#pa-f-cuentas-dropdown")) {
+    msPanelPA.classList.add("hidden");
+    msToggleBtnPA.classList.remove("open");
+  }
+});
+
+function aplicarFiltroEstatusLocalPA(rows) {
+  const val = document.getElementById("pa-f-estatus").value;
+  return val ? rows.filter(r => r.estatus === val) : rows;
+}
+function aplicarFiltroEntidadLocalPA(rows) {
+  const val = document.getElementById("pa-f-entidad").value;
+  return val ? rows.filter(r => (r.entidad || "") === val) : rows;
+}
+function aplicarFiltrosLocalesPA(rows) {
+  return aplicarFiltroEntidadLocalPA(aplicarFiltroSubservicioLocal(aplicarFiltroEstatusLocalPA(rows)));
+}
+
+async function actualizarOpcionesEntidadPA() {
+  await cargarCatalogoEntidades();
+  poblarSelectEntidades("pa-f-entidad", "Todas");
+}
+
+async function loadExpedientesPA() {
+  const clExpediente = document.getElementById("pa-f-expediente").value;
+  const fechaInicio = document.getElementById("pa-f-fechaInicio").value;
+  const fechaFin = document.getElementById("pa-f-fechaFin").value;
+  // Búsqueda puntual por número de expediente: no debe importar la regla
+  // de fechas, es una clave exacta -- se manda sin acotar por fecha.
+  if (!clExpediente) {
+    const errorRango = validarRangoFechas(fechaInicio, fechaFin);
+    if (errorRango) { toast(errorRango, "error"); return; }
+  }
+
+  const cuentasSel = Array.from(cuentasSeleccionadasPA);
+  const params = {
+    cl_expediente: clExpediente || undefined,
+    // Búsqueda puntual por número de expediente: es una clave exacta, no
+    // debe importar ningún otro criterio (fecha, servicio/subservicio, cuenta).
+    fecha_inicio: clExpediente ? undefined : (fechaInicio || undefined),
+    fecha_fin: clExpediente ? undefined : (fechaFin || undefined),
+    cl_servicio: clExpediente ? undefined : (document.getElementById("pa-f-servicio").value || undefined),
+    cl_subservicio: clExpediente ? undefined : (document.getElementById("pa-f-subservicio").value || undefined),
+    cuentas: clExpediente ? undefined : (cuentasSel.length ? cuentasSel : undefined),
+  };
+
+  const tbody = document.getElementById("pa-tabla-body");
+  tbody.innerHTML = `<tr><td colspan="17" class="spinner-row">Cargando…</td></tr>`;
+
+  try {
+    const data = await api("/expedientes", { params });
+    data.sort((a, b) => a.fecha_apertura_servicio.localeCompare(b.fecha_apertura_servicio));
+    expedientesActualesPA = data;
+    paPaginaActual = 1;
+    actualizarOpcionesEntidadPA();
+    // Igual que con las fechas: al buscar por clave, tampoco se aplican los
+    // filtros locales (Estado/Subservicio/Entidad) -- se muestra tal cual.
+    // Excepción: Proveedor solo puede ver "En Espera de Respuesta" o
+    // "Seguimiento Proveedor" (los suyos), sin importar la clave buscada.
+    const filtradosPA = clExpediente ? data.filter(r => proveedorPuedeVer(r.estatus)) : aplicarFiltrosLocalesPA(data);
+    renderTablaPA(filtradosPA);
+    renderKPIsPA();
+    actualizarNotificacionAtendidosPA();
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="17" class="empty">${escapeHtml(err.message)}</td></tr>`;
+    toast(err.message, "error");
+  }
+}
+
+function renderTablaPA(rows) {
+  const tbody = document.getElementById("pa-tabla-body");
+  const totalPaginas = Math.max(1, Math.ceil(rows.length / PA_POR_PAGINA));
+  if (paPaginaActual > totalPaginas) paPaginaActual = totalPaginas;
+  if (paPaginaActual < 1) paPaginaActual = 1;
+
+  if (!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="17" class="empty">No se encontraron expedientes con estos filtros.</td></tr>`;
+    renderPagerPA(rows, totalPaginas);
+    return;
+  }
+
+  const inicio = (paPaginaActual - 1) * PA_POR_PAGINA;
+  const pageRows = rows.slice(inicio, inicio + PA_POR_PAGINA);
+
+  tbody.innerHTML = pageRows.map((r, i) => `
+    <tr>
+      <td class="col-frozen" style="left:0;">${inicio + i + 1}</td>
+      <td class="col-frozen" style="left:40px;"><input type="checkbox" class="chk-expediente-pa" data-exp="${r.expediente}" ${expedientesSeleccionadosPA.has(r.expediente) ? "checked" : ""}></td>
+      <td class="col-frozen" style="left:72px;">${formatDate(r.fecha_apertura_servicio)}</td>
+      <td class="col-frozen" style="left:172px;">${celdaExpediente(r.expediente, "link-expediente-pa")}</td>
+      <td class="col-frozen" style="left:272px;">${escapeHtml(r.cuenta)}</td>
+      <td class="col-frozen" style="left:462px;">${escapeHtml(r.tipo_servicio || "")}</td>
+      <td class="col-frozen col-frozen-last" style="left:592px;">${escapeHtml(r.tipo_subservicio || "")}</td>
+      <td>${escapeHtml(r.nombre_titular || "")}</td>
+      <td>${escapeHtml(r.nombre_paciente)}</td>
+      <td>${escapeHtml(r.especialidad || "")}</td>
+      <td>${escapeHtml(r.entidad || "")}</td>
+      <td>${escapeHtml(r.municipio || "")}</td>
+      <td>${r.fecha_asignacion_proveedor ? formatDate(r.fecha_asignacion_proveedor) : '<span class="muted">Sin asignar</span>'}</td>
+      <td>${r.fecha_cita ? formatDate(r.fecha_cita) : '<span class="muted">Sin cita</span>'}</td>
+      <td>${escapeHtml(r.telefono || "")}</td>
+      <td>${escapeHtml(r.email || "")}</td>
+      <td>${badgeEstatus(r.estatus)}</td>
+    </tr>
+  `).join("");
+
+  tbody.querySelectorAll(".link-expediente-pa").forEach(a => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      const exp = parseInt(a.dataset.exp, 10);
+      const rec = expedientesActualesPA.find(x => x.expediente === exp);
+      if (rec) abrirSeguimiento(rec, "link", "anticipado");
+    });
+  });
+
+  tbody.querySelectorAll(".chk-expediente-pa").forEach(chk => {
+    chk.addEventListener("change", (e) => {
+      const exp = parseInt(e.target.dataset.exp, 10);
+      if (e.target.checked) expedientesSeleccionadosPA.add(exp);
+      else expedientesSeleccionadosPA.delete(exp);
+      document.getElementById("pa-chk-todos").checked =
+        rows.length > 0 && rows.every(r => expedientesSeleccionadosPA.has(r.expediente));
+    });
+  });
+
+  renderPagerPA(rows, totalPaginas);
+}
+
+function renderPagerPA(rows, totalPaginas) {
+  const pager = document.getElementById("pa-pager");
+  if (!rows.length) { pager.innerHTML = ""; return; }
+  const inicio = (paPaginaActual - 1) * PA_POR_PAGINA + 1;
+  const fin = Math.min(paPaginaActual * PA_POR_PAGINA, rows.length);
+  pager.innerHTML = `
+    <span class="pager-info">Mostrando ${inicio}–${fin} de ${rows.length} expediente${rows.length === 1 ? "" : "s"}</span>
+    <div class="pager-controls">
+      <button class="btn btn-secondary" id="pa-pager-prev" ${paPaginaActual <= 1 ? "disabled" : ""}>&larr; Anterior</button>
+      <span class="pager-page">Página ${paPaginaActual} de ${totalPaginas}</span>
+      <button class="btn btn-secondary" id="pa-pager-next" ${paPaginaActual >= totalPaginas ? "disabled" : ""}>Siguiente &rarr;</button>
+    </div>
+  `;
+  document.getElementById("pa-pager-prev").addEventListener("click", () => {
+    paPaginaActual -= 1;
+    renderTablaPA(aplicarFiltrosLocalesPA(expedientesActualesPA));
+  });
+  document.getElementById("pa-pager-next").addEventListener("click", () => {
+    paPaginaActual += 1;
+    renderTablaPA(aplicarFiltrosLocalesPA(expedientesActualesPA));
+  });
+}
+
+function aplicarEtiquetasKPIPA() {
+  if (esPerfilProveedor()) {
+    document.getElementById("pa-kpi-total-label").textContent = "Esperando tu respuesta";
+    document.getElementById("pa-kpi-proceso-label").textContent = "Con más de 1 día esperando";
+  } else if (esPerfilCabina()) {
+    document.getElementById("pa-kpi-total-label").textContent = "Expedientes sin asignar";
+    document.getElementById("pa-kpi-proceso-label").textContent = "En espera de respuesta";
+  } else {
+    document.getElementById("pa-kpi-total-label").textContent = "Total";
+    document.getElementById("pa-kpi-proceso-label").textContent = "En Proceso";
+  }
+}
+
+function datosResumenPerfilPA() {
+  return aplicarFiltroSubservicioLocal(expedientesActualesPA);
+}
+
+function renderKPIsPA() {
+  const rows = datosResumenPerfilPA();
+  if (esPerfilProveedor()) {
+    const enEspera = rows.filter(r => r.estatus === "En Espera de Respuesta");
+    const hoy = new Date().toISOString().slice(0, 10);
+    document.getElementById("pa-kpi-total").textContent = enEspera.length;
+    document.getElementById("pa-kpi-proceso").textContent = enEspera.filter(r => r.fecha_apertura_servicio < hoy).length;
+    return;
+  }
+  if (esPerfilCabina()) {
+    document.getElementById("pa-kpi-total").textContent = rows.filter(r => r.estatus === "Abierto").length;
+    document.getElementById("pa-kpi-proceso").textContent = rows.filter(r => r.estatus === "En Espera de Respuesta").length;
+    document.getElementById("pa-kpi-seguimiento").textContent = rows.filter(r => r.estatus === "Seguimiento Proveedor").length;
+    return;
+  }
+  document.getElementById("pa-kpi-total").textContent = rows.length;
+  document.getElementById("pa-kpi-proceso").textContent =
+    rows.filter(r => ["En Espera de Respuesta", "Seguimiento Proveedor"].includes(r.estatus)).length;
+}
+
+function actualizarNotificacionAtendidosPA() {
+  const banner = document.getElementById("pa-notif-atendidos");
+  if (!esPerfilCabina()) {
+    banner.classList.add("hidden");
+    return;
+  }
+  const rows = datosResumenPerfilPA();
+  const enSeguimiento = rows.filter(r => r.estatus === "Seguimiento Proveedor").length;
+  if (enSeguimiento > 0) {
+    document.getElementById("pa-notif-atendidos-texto").textContent =
+      `Hay ${enSeguimiento} expediente${enSeguimiento === 1 ? "" : "s"} en seguimiento con el proveedor que debe${enSeguimiento === 1 ? "" : "n"} revisarse.`;
+    banner.classList.remove("hidden");
+  } else {
+    banner.classList.add("hidden");
+  }
+}
+document.getElementById("pa-notif-atendidos-cerrar").addEventListener("click", () => {
+  document.getElementById("pa-notif-atendidos").classList.add("hidden");
+});
+
+document.getElementById("pa-btn-buscar").addEventListener("click", loadExpedientesPA);
+document.querySelector("#screen-pago-anticipado .filters-grid").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") { e.preventDefault(); loadExpedientesPA(); }
+});
+document.getElementById("pa-btn-limpiar").addEventListener("click", () => {
+  document.getElementById("pa-f-expediente").value = "";
+  document.getElementById("pa-f-fechaInicio").value = "";
+  document.getElementById("pa-f-fechaFin").value = "";
+  document.getElementById("pa-f-estatus").value = esPerfilProveedor() ? "En Espera de Respuesta" : "";
+  document.getElementById("pa-f-subservicio").value = "";
+  document.getElementById("pa-f-entidad").value = "";
+  cuentasSeleccionadasPA.clear();
+  renderCuentasOptionsPA(cuentasCatalogo);
+  actualizarCuentasToggleTextoPA();
+  expedientesSeleccionadosPA.clear();
+  loadExpedientesPA();
+});
+
+document.getElementById("pa-chk-todos").addEventListener("change", (e) => {
+  const filas = aplicarFiltrosLocalesPA(expedientesActualesPA);
+  filas.forEach(r => {
+    if (e.target.checked) expedientesSeleccionadosPA.add(r.expediente);
+    else expedientesSeleccionadosPA.delete(r.expediente);
+  });
+  renderTablaPA(filas);
+});
+
+document.getElementById("pa-btn-enviar-correo-proveedores").addEventListener("click", async () => {
+  if (expedientesSeleccionadosPA.size === 0) {
+    toast("Selecciona al menos un expediente antes de enviar el correo.", "error");
+    return;
+  }
+  const btn = document.getElementById("pa-btn-enviar-correo-proveedores");
+  btn.disabled = true;
+  try {
+    const data = await api("/expedientes/enviar-correo-proveedores", {
+      method: "POST",
+      body: { expedientes: Array.from(expedientesSeleccionadosPA) },
+    });
+    toast(`Correo enviado para ${data.enviados} expediente(s).`, "success");
+    // El envío marca automáticamente esos expedientes como "En Espera de Respuesta"
+    // -- se refleja aquí y también en Expedientes normal (mismo dato de fondo).
+    data.expedientes.forEach(exp => {
+      const recPA = expedientesActualesPA.find(r => r.expediente === exp);
+      if (recPA) recPA.estatus = "En Espera de Respuesta";
+      const rec = expedientesActuales.find(r => r.expediente === exp);
+      if (rec) rec.estatus = "En Espera de Respuesta";
+    });
+    expedientesSeleccionadosPA.clear();
+    renderTablaPA(aplicarFiltrosLocalesPA(expedientesActualesPA));
+    renderKPIsPA();
+    actualizarNotificacionAtendidosPA();
+    document.getElementById("pa-chk-todos").checked = false;
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* =========================================================
+   MODAL: CORTE DE EXPEDIENTES (Excel)
+   Botón "Generar corte" -- exclusivo del perfil Administrador, independiente
+   de "Enviar correo a proveedores": este no avisa al proveedor ni cambia
+   estatus, es la evidencia/corte que Admin puede descargar/previsualizar
+   antes de decidir enviarlo. Todos los seleccionados deben compartir el
+   mismo estatus (el backend también lo valida, ver routers/expedientes.py).
+   ========================================================= */
+let corteActual = null; // {corte_id, origen: "normal" | "pa"}
+
+async function abrirModalCorte(tipoExpediente, origen) {
+  const seleccionados = origen === "pa" ? expedientesSeleccionadosPA : expedientesSeleccionados;
+  if (seleccionados.size === 0) {
+    toast("Selecciona al menos un expediente para generar el corte.", "error");
+    return;
+  }
+  const fuenteValidacion = origen === "pa" ? expedientesActualesPA : expedientesActuales;
+  const estatusSeleccionados = new Set(
+    Array.from(seleccionados)
+      .map(exp => fuenteValidacion.find(r => r.expediente === exp))
+      .filter(Boolean)
+      .map(r => r.estatus)
+  );
+  if (estatusSeleccionados.size > 1) {
+    toast(
+      "Todos los expedientes seleccionados deben tener el mismo estatus para generar el corte (seleccionaste: " +
+        Array.from(estatusSeleccionados).join(", ") + ").",
+      "error"
+    );
+    return;
+  }
+  const btn = document.getElementById(origen === "pa" ? "pa-btn-generar-corte" : "btn-generar-corte");
+  btn.disabled = true;
+  try {
+    const data = await api("/expedientes/corte", {
+      method: "POST",
+      body: { expedientes: Array.from(seleccionados), tipo_expediente: tipoExpediente },
+    });
+    corteActual = { corte_id: data.corte_id, origen };
+
+    const fuente = origen === "pa" ? expedientesActualesPA : expedientesActuales;
+    const filas = data.expedientes.map(exp => fuente.find(r => r.expediente === exp)).filter(Boolean);
+
+    const estatusLote = estatusSeleccionados.size ? Array.from(estatusSeleccionados)[0] : "";
+    document.getElementById("corte-modal-titulo").textContent =
+      tipoExpediente === "anticipado" ? "Corte de Expedientes — Pago Anticipado" : "Corte de Expedientes";
+    document.getElementById("corte-modal-resumen").textContent =
+      `${data.total} expediente(s) en "${estatusLote}" — archivo: ${data.archivo_nombre}. Descárgalo o previsualízalo antes de confirmar el envío.`;
+    document.getElementById("corte-modal-tbody").innerHTML = filas.map(r => `
+      <tr>
+        <td>${r.expediente}</td>
+        <td>${escapeHtml(r.cuenta)}</td>
+        <td>${escapeHtml(r.nombre_paciente)}</td>
+        <td>${formatDate(r.fecha_apertura_servicio)}</td>
+      </tr>`).join("");
+    document.getElementById("corte-modal-overlay").classList.remove("hidden");
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function cerrarModalCorte() {
+  document.getElementById("corte-modal-overlay").classList.add("hidden");
+  corteActual = null;
+}
+
+document.getElementById("btn-generar-corte").addEventListener("click", () => abrirModalCorte("normal", "normal"));
+document.getElementById("pa-btn-generar-corte").addEventListener("click", () => abrirModalCorte("anticipado", "pa"));
+document.getElementById("corte-modal-cerrar").addEventListener("click", cerrarModalCorte);
+document.getElementById("corte-modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "corte-modal-overlay") cerrarModalCorte();
+});
+
+document.getElementById("corte-modal-descargar").addEventListener("click", async () => {
+  if (!corteActual) return;
+  const btn = document.getElementById("corte-modal-descargar");
+  btn.disabled = true;
+  try {
+    const res = await fetch(getApiBase() + "/expedientes/corte/" + corteActual.corte_id + "/descargar", {
+      headers: { Authorization: "Bearer " + getToken() },
+    });
+    if (!res.ok) throw new Error("No se pudo descargar el corte.");
+    const blob = await res.blob();
+    const disposicion = res.headers.get("Content-Disposition") || "";
+    const match = disposicion.match(/filename="?([^"]+)"?/);
+    const nombreArchivo = match ? match[1] : "corte.xlsx";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("corte-modal-confirmar").addEventListener("click", async () => {
+  if (!corteActual) return;
+  const btn = document.getElementById("corte-modal-confirmar");
+  btn.disabled = true;
+  try {
+    const data = await api("/expedientes/corte/" + corteActual.corte_id + "/enviar", { method: "POST" });
+    toast(
+      data.simulado
+        ? `Corte simulado para ${data.destinatario} (${data.enviados} expediente(s)) -- falta configurar SMTP real.`
+        : `Corte enviado a ${data.destinatario} (${data.enviados} expediente(s)).`,
+      "success"
+    );
+    if (corteActual.origen === "pa") {
+      expedientesSeleccionadosPA.clear();
+      document.getElementById("pa-chk-todos").checked = false;
+      renderTablaPA(aplicarFiltrosLocalesPA(expedientesActualesPA));
+    } else {
+      expedientesSeleccionados.clear();
+      document.getElementById("chk-todos").checked = false;
+      renderTablaExpedientes(aplicarFiltrosLocales(expedientesActuales));
+    }
+    cerrarModalCorte();
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* =========================================================
+   PANTALLA: SEGUIMIENTO EXPEDIENTE
+   ========================================================= */
+let registroActual = null;
+let accessSource = "menu"; // "menu" | "link"
+let tipoExpedienteActual = "normal"; // "normal" | "anticipado"
+
+function openSeguimientoMenu() {
+  goTo("seguimiento");
+  accessSource = "menu";
+  document.getElementById("sg-buscar-card").classList.remove("hidden");
+  document.getElementById("sg-buscar-expediente").disabled = false;
+  document.getElementById("sg-buscar-expediente").value = "";
+  ocultarPanelesSeguimiento();
+  document.getElementById("sg-buscar-expediente").focus();
+}
+
+function ocultarPanelesSeguimiento() {
+  document.getElementById("sg-info-card").classList.add("hidden");
+  document.getElementById("sg-estatus-card").classList.add("hidden");
+  document.getElementById("sg-seguimiento-card").classList.add("hidden");
+  document.getElementById("sg-solo-lectura-card").classList.add("hidden");
+  document.getElementById("sg-comentarios-proveedor-card").classList.add("hidden");
+  document.getElementById("sg-comentarios-coordinador-card").classList.add("hidden");
+  document.getElementById("sg-regresar-card").classList.add("hidden");
+  registroActual = null;
+}
+
+async function abrirSeguimiento(record, source, tipo) {
+  goTo("seguimiento");
+  accessSource = source;
+  registroActual = record;
+  tipoExpedienteActual = tipo || "normal";
+
+  const buscarCard = document.getElementById("sg-buscar-card");
+  if (source === "link") {
+    buscarCard.classList.add("hidden");
+  } else {
+    buscarCard.classList.remove("hidden");
+    document.getElementById("sg-buscar-expediente").value = record.expediente;
+    document.getElementById("sg-buscar-expediente").disabled = true;
+  }
+
+  document.getElementById("ig-expediente").textContent = record.expediente;
+  document.getElementById("ig-fechaApertura").textContent = formatDate(record.fecha_apertura_servicio);
+  document.getElementById("ig-titular").textContent = record.nombre_titular || "—";
+  document.getElementById("ig-paciente").textContent = record.nombre_paciente || "—";
+  document.getElementById("ig-entidad").textContent = record.entidad || "—";
+  document.getElementById("ig-municipio").textContent = record.municipio || "—";
+  document.getElementById("ig-telefono").textContent = record.telefono || "—";
+  document.getElementById("ig-correo").textContent = record.email || "—";
+
+  document.getElementById("sg-estatus").value = record.estatus;
+  document.getElementById("sg-motivo-regreso").value = "";
+  document.getElementById("sg-motivo-regreso-field").classList.toggle("hidden", record.estatus !== "En Espera de Respuesta");
+  document.getElementById("sg-observaciones").value = "";
+  document.getElementById("sg-observaciones").disabled = false;
+  document.getElementById("sg-cancelar-btn").disabled = false;
+  document.getElementById("sg-actualizar-btn").disabled = false;
+  document.getElementById("sg-exito-banner").classList.add("hidden");
+  document.getElementById("sg-comprobante-input").value = "";
+  document.getElementById("sg-comprobante-input").disabled = false;
+  updateSeguimientoCounter();
+
+  document.getElementById("sg-info-card").classList.remove("hidden");
+  document.getElementById("sg-estatus-card").classList.remove("hidden");
+  document.getElementById("sg-regresar-card").classList.remove("hidden");
+
+  // Proveedor solo puede registrar seguimiento mientras el expediente está
+  // "En Espera de Respuesta" -- si ya lo mandó (quedó "Seguimiento
+  // Proveedor"), lo puede seguir viendo pero en modo solo lectura, hasta
+  // que el coordinador lo revise (lo regrese o lo finalice).
+  const proveedorSoloLectura = esPerfilProveedor() && record.estatus !== "En Espera de Respuesta";
+  document.getElementById("sg-seguimiento-card").classList.toggle("hidden", proveedorSoloLectura);
+  document.getElementById("sg-solo-lectura-card").classList.toggle("hidden", !proveedorSoloLectura);
+
+  // El comprobante de pago solo aplica a expedientes de Pago Anticipado.
+  const esAnticipado = tipoExpedienteActual === "anticipado";
+  document.getElementById("sg-comprobante-field").classList.toggle("hidden", !(esAnticipado && esPerfilProveedor()));
+
+  // Comentarios (del Proveedor y del Coordinador): visibles para ambos
+  // perfiles, sin importar por dónde se entró a este expediente.
+  document.getElementById("sg-comentarios-proveedor-card").classList.remove("hidden");
+  document.getElementById("sg-comentarios-coordinador-card").classList.remove("hidden");
+  cargarComentariosSeguimiento(record.expediente);
+
+  // Comprobante de pago (solo Pago Anticipado): Cabina lo revisa y ahora
+  // también Proveedor puede volver a verlo/descargarlo (antes solo podía
+  // subir uno nuevo, sin forma de confirmar qué había quedado subido).
+  document.getElementById("sg-comprobante-visor-wrap").classList.toggle("hidden", !esAnticipado);
+  if (esAnticipado) cargarComprobanteVisor(record.expediente);
+}
+
+async function cargarComprobanteVisor(clExpediente) {
+  const cont = document.getElementById("sg-comprobante-visor");
+  cont.innerHTML = `<div class="mini-empty">Cargando…</div>`;
+  try {
+    const meta = await api("/seguimiento/comprobante/" + clExpediente);
+    cont.innerHTML = `
+      <div class="comentario-item">
+        <div class="comentario-meta"><span>${escapeHtml(meta.rfc)}</span><span>${formatDateTime(meta.fecha)}</span></div>
+        <div class="comentario-texto">${escapeHtml(meta.nombre_archivo)}</div>
+        <button class="btn btn-secondary" style="margin-top:8px;" id="sg-comprobante-ver-btn">Ver / Descargar</button>
+      </div>`;
+    document.getElementById("sg-comprobante-ver-btn").addEventListener("click", () => verComprobante(clExpediente));
+  } catch (err) {
+    cont.innerHTML = `<div class="mini-empty">El proveedor todavía no ha subido el comprobante de pago.</div>`;
+  }
+}
+
+async function verComprobante(clExpediente) {
+  try {
+    const token = getToken();
+    const res = await fetch(getApiBase() + "/seguimiento/comprobante/" + clExpediente + "/archivo", {
+      headers: { Authorization: "Bearer " + token },
+    });
+    if (!res.ok) throw new Error("No se pudo abrir el comprobante.");
+    const blob = await res.blob();
+    window.open(URL.createObjectURL(blob), "_blank");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+function renderListaComentarios(contId, comentarios, mensajeVacio) {
+  const cont = document.getElementById(contId);
+  if (!comentarios.length) {
+    cont.innerHTML = `<div class="mini-empty">${mensajeVacio}</div>`;
+    return;
+  }
+  cont.innerHTML = comentarios.map(c => `
+    <div class="comentario-item">
+      <div class="comentario-meta"><span>${escapeHtml(c.rfc)}</span><span>${formatDateTime(c.fecha)}</span></div>
+      <div class="comentario-texto">${escapeHtml(c.comentario)}</div>
+    </div>
+  `).join("");
+}
+
+async function cargarComentariosSeguimiento(clExpediente) {
+  document.getElementById("sg-comentarios-proveedor-lista").innerHTML = `<div class="mini-empty">Cargando…</div>`;
+  document.getElementById("sg-comentarios-coordinador-lista").innerHTML = `<div class="mini-empty">Cargando…</div>`;
+  try {
+    const comentarios = await api("/seguimiento/comentarios/" + clExpediente);
+    renderListaComentarios(
+      "sg-comentarios-proveedor-lista",
+      comentarios.filter(c => c.origen !== "cabina"),
+      "El proveedor todavía no ha registrado ningún comentario para este expediente."
+    );
+    renderListaComentarios(
+      "sg-comentarios-coordinador-lista",
+      comentarios.filter(c => c.origen === "cabina"),
+      "El coordinador no ha regresado este expediente."
+    );
+  } catch (err) {
+    document.getElementById("sg-comentarios-proveedor-lista").innerHTML = `<div class="mini-empty">${escapeHtml(err.message)}</div>`;
+    document.getElementById("sg-comentarios-coordinador-lista").innerHTML = `<div class="mini-empty">${escapeHtml(err.message)}</div>`;
+  }
+}
+
+async function buscarExpedienteSeguimiento() {
+  const val = document.getElementById("sg-buscar-expediente").value;
+  if (!val) { toast("Ingresa un número de expediente.", "error"); return; }
+  try {
+    const data = await api("/expedientes", { params: { cl_expediente: val } });
+    if (!data.length || !proveedorPuedeVer(data[0].estatus)) {
+      toast("No se encontró el expediente " + val + ".", "error");
+      ocultarPanelesSeguimiento();
+      return;
+    }
+    abrirSeguimiento(data[0], "menu");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+document.getElementById("sg-buscar-btn").addEventListener("click", buscarExpedienteSeguimiento);
+document.getElementById("sg-buscar-expediente").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); buscarExpedienteSeguimiento(); }
+});
+
+document.getElementById("sg-estatus").addEventListener("change", (e) => {
+  document.getElementById("sg-motivo-regreso-field").classList.toggle("hidden", e.target.value !== "En Espera de Respuesta");
+});
+
+document.getElementById("sg-estatus-btn").addEventListener("click", async () => {
+  if (!registroActual) return;
+  const nuevoEstatus = document.getElementById("sg-estatus").value;
+  const esRegreso = nuevoEstatus === "En Espera de Respuesta";
+  const motivoRegreso = document.getElementById("sg-motivo-regreso").value.trim();
+  if (esRegreso && !motivoRegreso) {
+    toast("Indica el motivo por el que regresas el expediente al proveedor.", "error");
+    return;
+  }
+  try {
+    await api("/seguimiento/estatus", {
+      method: "POST",
+      body: {
+        cl_expediente: registroActual.expediente,
+        estatus: nuevoEstatus,
+        comentario: esRegreso ? motivoRegreso : undefined,
+      },
+    });
+    registroActual.estatus = nuevoEstatus;
+    const idx = expedientesActuales.findIndex(r => r.expediente === registroActual.expediente);
+    if (idx >= 0) expedientesActuales[idx].estatus = registroActual.estatus;
+    const idxPA = expedientesActualesPA.findIndex(r => r.expediente === registroActual.expediente);
+    if (idxPA >= 0) expedientesActualesPA[idxPA].estatus = registroActual.estatus;
+    const filtrados = aplicarFiltrosLocales(expedientesActuales);
+    renderTablaExpedientes(filtrados);
+    renderKPIs();
+    actualizarNotificacionAtendidos();
+    if (esRegreso) {
+      document.getElementById("sg-motivo-regreso").value = "";
+      document.getElementById("sg-motivo-regreso-field").classList.add("hidden");
+      // Para que el motivo que se acaba de mandar se vea de inmediato en
+      // "Comentarios del Coordinador", sin tener que refrescar la página.
+      cargarComentariosSeguimiento(registroActual.expediente);
+      toast("Expediente regresado a Proveedor. Se le notificó por correo.", "success");
+    } else {
+      toast("Estado actualizado.", "success");
+    }
+  } catch (err) {
+    toast(err.message, "error");
+  }
+});
+
+function updateSeguimientoCounter() {
+  const len = document.getElementById("sg-observaciones").value.trim().length;
+  const counter = document.getElementById("sg-counter");
+  counter.textContent = len < 50
+    ? `${len} / 1500 (mínimo 50 caracteres)`
+    : `${len} / 1500`;
+  counter.classList.toggle("limit", len < 50 || len >= 1500);
+}
+document.getElementById("sg-observaciones").addEventListener("input", updateSeguimientoCounter);
+
+const COMPROBANTE_TAMANO_MAXIMO = 5 * 1024 * 1024; // 5 MB
+const COMPROBANTE_TIPOS_PERMITIDOS = ["application/pdf", "image/jpeg", "image/png"];
+
+const COMENTARIO_PROVEEDOR_MINIMO = 50;
+
+document.getElementById("sg-actualizar-btn").addEventListener("click", async () => {
+  if (!registroActual) return;
+  const comentario = document.getElementById("sg-observaciones").value.trim();
+  if (!comentario) { toast("El seguimiento no puede estar vacío.", "error"); return; }
+  if (comentario.length < COMENTARIO_PROVEEDOR_MINIMO) {
+    toast(`Las observaciones deben tener al menos ${COMENTARIO_PROVEEDOR_MINIMO} caracteres (llevas ${comentario.length}).`, "error");
+    return;
+  }
+
+  const esAnticipado = tipoExpedienteActual === "anticipado";
+  const archivoComprobante = document.getElementById("sg-comprobante-input").files[0];
+  if (esAnticipado && esPerfilProveedor()) {
+    if (!archivoComprobante) {
+      toast("Debes subir el comprobante de pago antes de continuar.", "error");
+      return;
+    }
+    if (!COMPROBANTE_TIPOS_PERMITIDOS.includes(archivoComprobante.type)) {
+      toast("Formato no permitido. Solo se aceptan PDF, JPG o PNG.", "error");
+      return;
+    }
+    if (archivoComprobante.size > COMPROBANTE_TAMANO_MAXIMO) {
+      toast("El comprobante supera el máximo permitido de 5 MB.", "error");
+      return;
+    }
+  }
+
+  const btn = document.getElementById("sg-actualizar-btn");
+  btn.disabled = true;
+  let exito = false;
+  try {
+    if (esAnticipado && esPerfilProveedor()) {
+      const formData = new FormData();
+      formData.append("cl_expediente", registroActual.expediente);
+      formData.append("archivo", archivoComprobante);
+      await api("/seguimiento/comprobante", { method: "POST", formData });
+    }
+
+    await api("/seguimiento/actualizar", {
+      method: "POST",
+      body: { cl_expediente: registroActual.expediente, comentario, tipo_expediente: tipoExpedienteActual },
+    });
+    exito = true;
+    toast("Seguimiento registrado en Core.", "success");
+    // Confirmación visible y permanente en pantalla (no solo el toast, que desaparece):
+    // se deja el mensaje enviado a la vista, bloqueado, como comprobante.
+    document.getElementById("sg-exito-banner").classList.remove("hidden");
+    document.getElementById("sg-observaciones").disabled = true;
+    document.getElementById("sg-cancelar-btn").disabled = true;
+    document.getElementById("sg-comprobante-input").disabled = true;
+
+    // El backend ya movió el estatus a "Seguimiento Proveedor" — hay que
+    // reflejarlo también en los datos que ya tenemos en el navegador, si no
+    // el expediente se sigue viendo en la lista hasta refrescar la página.
+    registroActual.estatus = "Seguimiento Proveedor";
+    const idx = expedientesActuales.findIndex(r => r.expediente === registroActual.expediente);
+    if (idx >= 0) expedientesActuales[idx].estatus = "Seguimiento Proveedor";
+    const idxPA = expedientesActualesPA.findIndex(r => r.expediente === registroActual.expediente);
+    if (idxPA >= 0) expedientesActualesPA[idxPA].estatus = "Seguimiento Proveedor";
+
+    // Para que el comentario recién enviado se vea de inmediato en
+    // "Comentarios del Proveedor", sin tener que refrescar la página.
+    cargarComentariosSeguimiento(registroActual.expediente);
+    // Igual para el comprobante recién subido (Pago Anticipado): que se vea
+    // de inmediato el botón "Ver / Descargar" con el archivo que acaba de subir.
+    if (esAnticipado) cargarComprobanteVisor(registroActual.expediente);
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    if (!exito) btn.disabled = false; // si tuvo éxito, se queda deshabilitado a propósito
+  }
+});
+
+document.getElementById("sg-cancelar-btn").addEventListener("click", () => {
+  document.getElementById("sg-observaciones").value = "";
+  updateSeguimientoCounter();
+  toast("Cambios descartados.");
+});
+
+document.getElementById("sg-regresar-btn").addEventListener("click", () => goTo("expedientes"));
+
+/* =========================================================
+   PANTALLA: CONFIGURACIÓN CUENTAS
+   ========================================================= */
+let debounceTimer = null;
+
+document.getElementById("cfg-buscar-cuenta").addEventListener("input", (e) => {
+  clearTimeout(debounceTimer);
+  const texto = e.target.value.trim();
+  const suggestionsEl = document.getElementById("cfg-suggestions");
+
+  const soloAlfabetico = /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]*$/.test(texto);
+  if (texto.length < 3 || !soloAlfabetico) {
+    suggestionsEl.classList.add("hidden");
+    suggestionsEl.innerHTML = "";
+    return;
+  }
+
+  debounceTimer = setTimeout(async () => {
+    try {
+      const resultados = await api("/catalogos/cuentas/buscar", { params: { texto } });
+      if (!resultados.length) {
+        suggestionsEl.innerHTML = `<div class="empty-suggestion">Sin resultados.</div>`;
+      } else {
+        suggestionsEl.innerHTML = resultados.map(c =>
+          `<div data-cl="${c.cl_cuenta}" data-nombre="${escapeHtml(c.nombre)}">${c.cl_cuenta} — ${escapeHtml(c.nombre)}</div>`
+        ).join("");
+        suggestionsEl.querySelectorAll("div[data-cl]").forEach(div => {
+          div.addEventListener("click", () => agregarCuentaConfigurada(div.dataset.cl, div.dataset.nombre));
+        });
+      }
+      suggestionsEl.classList.remove("hidden");
+    } catch (err) {
+      toast(err.message, "error");
+    }
+  }, 300);
+});
+
+async function agregarCuentaConfigurada(clCuenta, nombre) {
+  try {
+    await api("/configuracion/cuentas", { method: "POST", body: { cl_cuenta: parseInt(clCuenta, 10), nombre } });
+    document.getElementById("cfg-buscar-cuenta").value = "";
+    document.getElementById("cfg-suggestions").classList.add("hidden");
+    toast("Cuenta agregada.", "success");
+    cargarGridCuentas();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function cargarGridCuentas() {
+  const tbody = document.getElementById("cfg-tbody");
+  tbody.innerHTML = `<tr><td colspan="3" class="mini-empty">Cargando…</td></tr>`;
+  try {
+    const cuentas = await api("/configuracion/cuentas");
+    document.getElementById("cfgCount").textContent = cuentas.length;
+    if (!cuentas.length) {
+      tbody.innerHTML = `<tr><td colspan="3" class="mini-empty">Aún no hay cuentas configuradas.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = cuentas.map((c, i) => `
+      <tr>
+        <td data-label="#">${i + 1}</td>
+        <td data-label="Cuenta"><span class="cuenta-chip">${escapeHtml(String(c.cl_cuenta))}</span>${escapeHtml(c.nombre)}</td>
+        <td data-label="Acciones">
+          <button class="icon-btn" data-cl="${c.cl_cuenta}" title="Eliminar cuenta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          </button>
+        </td>
+      </tr>
+    `).join("");
+    tbody.querySelectorAll(".icon-btn").forEach(btn => {
+      btn.addEventListener("click", () => eliminarCuentaConfigurada(btn.dataset.cl));
+    });
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="3" class="mini-empty">${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+async function eliminarCuentaConfigurada(clCuenta) {
+  try {
+    await api("/configuracion/cuentas/" + clCuenta, { method: "DELETE" });
+    toast("Cuenta eliminada.");
+    cargarGridCuentas();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+document.getElementById("cfg-cancelar-btn").addEventListener("click", async () => {
+  try {
+    await api("/configuracion/cuentas/limpiar", { method: "POST" });
+    toast("Grid limpiado.");
+    cargarGridCuentas();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+});
+
+document.getElementById("cfg-aceptar-btn").addEventListener("click", () => {
+  // Cada cuenta ya se guardó al agregarla; este botón es solo confirmación visual.
+  toast("Configuración guardada.", "success");
+});
+
+document.addEventListener("click", (e) => {
+  if (!e.target.closest(".autocomplete")) {
+    document.getElementById("cfg-suggestions").classList.add("hidden");
+  }
+});
+
+/* =========================================================
+   PANTALLA: USUARIOS Y ACCESOS (Administrador)
+   ========================================================= */
+async function cargarGridAccesos() {
+  const tbody = document.getElementById("acc-tbody");
+  tbody.innerHTML = `<tr><td colspan="8" class="mini-empty">Cargando…</td></tr>`;
+  try {
+    const accesos = await api("/admin/accesos");
+    document.getElementById("accCount").textContent = accesos.length;
+    if (!accesos.length) {
+      tbody.innerHTML = `<tr><td colspan="8" class="mini-empty">Aún no hay accesos registrados.</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = accesos.map(a => `
+      <tr>
+        <td data-label="RFC">${escapeHtml(a.rfc)}</td>
+        <td data-label="Nombre">${escapeHtml(a.nombre)}</td>
+        <td data-label="Perfil"><span class="badge perfil-${a.perfil}">${escapeHtml(NOMBRES_PERFIL[String(a.perfil)] || a.perfil)}</span></td>
+        <td data-label="Entidad">${escapeHtml(a.entidad || "NA")}</td>
+        <td data-label="Correo">${escapeHtml(a.correo || "NA")}</td>
+        <td data-label="Estado"><span class="badge ${a.activo ? "activo" : "inactivo"}">${a.activo ? "Activo" : "Inactivo"}</span></td>
+        <td data-label="Contraseña">${a.tiene_password ? '<span class="muted">Ya creada</span>' : '<span class="muted">Pendiente</span>'}</td>
+        <td data-label="Acciones">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${a.perfil === PERFIL_PROVEEDOR_JS ? `
+            <button class="row-action-btn accion-reset" data-accion="cambiar-entidad" data-rfc="${escapeHtml(a.rfc)}" data-entidad="${escapeHtml(a.entidad || "")}" title="Cambiar la entidad asignada a este Proveedor">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+              Cambiar entidad
+            </button>` : ""}
+            <button class="row-action-btn accion-reset" data-accion="reset" data-rfc="${escapeHtml(a.rfc)}" title="La persona tendrá que crear una contraseña nueva la próxima vez que entre">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+              Resetear contraseña
+            </button>
+            ${a.activo ? `
+            <button class="row-action-btn accion-eliminar" data-accion="inactivar" data-rfc="${escapeHtml(a.rfc)}" title="La persona ya no podrá iniciar sesión, pero el registro se conserva">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+              Inactivar
+            </button>` : `
+            <button class="row-action-btn accion-reset" data-accion="reactivar" data-rfc="${escapeHtml(a.rfc)}" title="La persona vuelve a poder iniciar sesión">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Reactivar
+            </button>`}
+          </div>
+        </td>
+      </tr>
+    `).join("");
+    tbody.querySelectorAll('.row-action-btn[data-accion="inactivar"]').forEach(btn => {
+      btn.addEventListener("click", () => inactivarAcceso(btn.dataset.rfc));
+    });
+    tbody.querySelectorAll('.row-action-btn[data-accion="reactivar"]').forEach(btn => {
+      btn.addEventListener("click", () => reactivarAcceso(btn.dataset.rfc));
+    });
+    tbody.querySelectorAll('.row-action-btn[data-accion="reset"]').forEach(btn => {
+      btn.addEventListener("click", () => resetearPasswordAcceso(btn.dataset.rfc));
+    });
+    tbody.querySelectorAll('.row-action-btn[data-accion="cambiar-entidad"]').forEach(btn => {
+      btn.addEventListener("click", () => abrirModalCambiarEntidad(btn.dataset.rfc, btn.dataset.entidad));
+    });
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8" class="mini-empty">${escapeHtml(err.message)}</td></tr>`;
+  }
+}
+
+let entidadesCatalogo = [];
+async function cargarCatalogoEntidades() {
+  // Catálogo fijo de las 32 entidades -- se comparte entre el alta de
+  // Proveedor (admin) y los filtros de Entidad de Expedientes/Expedientes PA.
+  if (entidadesCatalogo.length) return entidadesCatalogo;
+  try {
+    entidadesCatalogo = await api("/admin/accesos/entidades");
+  } catch (err) {
+    toast("No se pudo cargar el catálogo de entidades: " + err.message, "error");
+  }
+  return entidadesCatalogo;
+}
+
+function poblarSelectEntidades(selectId, opcionVacia) {
+  const select = document.getElementById(selectId);
+  const seleccionActual = select.value;
+  select.innerHTML = `<option value="">${opcionVacia}</option>` +
+    entidadesCatalogo.map(e => `<option value="${escapeHtml(e)}">${escapeHtml(e)}</option>`).join("");
+  if (entidadesCatalogo.includes(seleccionActual)) select.value = seleccionActual;
+}
+
+async function cargarCatalogoEntidadesAcc() {
+  await cargarCatalogoEntidades();
+  poblarSelectEntidades("acc-entidad", "Selecciona una entidad");
+}
+
+const PERFIL_PROVEEDOR_JS = 3;
+document.getElementById("acc-perfil").addEventListener("change", (e) => {
+  const esProveedor = parseInt(e.target.value, 10) === PERFIL_PROVEEDOR_JS;
+  document.getElementById("acc-entidad-field").classList.toggle("hidden", !esProveedor);
+  document.getElementById("acc-correo-field").classList.toggle("hidden", !esProveedor);
+  if (esProveedor) cargarCatalogoEntidadesAcc();
+});
+
+document.getElementById("acc-dar-alta-btn").addEventListener("click", async () => {
+  const rfc = document.getElementById("acc-rfc").value.trim().toUpperCase();
+  const nombre = document.getElementById("acc-nombre").value.trim();
+  const perfil = parseInt(document.getElementById("acc-perfil").value, 10);
+  const entidad = document.getElementById("acc-entidad").value;
+  const correo = document.getElementById("acc-correo").value.trim();
+  if (!rfc || !nombre) {
+    toast("Ingresa el RFC y el nombre.", "error");
+    return;
+  }
+  if (!/^[A-Z]{4}\d{6}$/.test(rfc)) {
+    toast("El RFC debe tener 10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456).", "error");
+    return;
+  }
+  if (perfil === PERFIL_PROVEEDOR_JS && !entidad) {
+    toast("Debes asignarle una entidad al perfil Proveedor.", "error");
+    return;
+  }
+  if (perfil === PERFIL_PROVEEDOR_JS && !correo) {
+    toast("Debes asignarle un correo al perfil Proveedor.", "error");
+    return;
+  }
+  const btn = document.getElementById("acc-dar-alta-btn");
+  btn.disabled = true;
+  try {
+    await api("/admin/accesos", {
+      method: "POST",
+      body: { rfc, nombre, perfil, entidad: entidad || undefined, correo: correo || undefined },
+    });
+    toast("Acceso creado. La persona ya puede entrar y crear su contraseña.", "success");
+    document.getElementById("acc-rfc").value = "";
+    document.getElementById("acc-nombre").value = "";
+    document.getElementById("acc-entidad").value = "";
+    document.getElementById("acc-correo").value = "";
+    cargarGridAccesos();
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+document.getElementById("acc-rfc").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); document.getElementById("acc-dar-alta-btn").click(); }
+});
+document.getElementById("acc-nombre").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); document.getElementById("acc-dar-alta-btn").click(); }
+});
+
+async function inactivarAcceso(rfc) {
+  if (!confirm(`¿Inactivar el acceso de ${rfc}? Ya no podrá iniciar sesión, pero el registro se conserva (puedes reactivarlo después).`)) return;
+  try {
+    await api("/admin/accesos/" + encodeURIComponent(rfc) + "/inactivar", { method: "POST" });
+    toast("Acceso inactivado.");
+    cargarGridAccesos();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function reactivarAcceso(rfc) {
+  if (!confirm(`¿Reactivar el acceso de ${rfc}?`)) return;
+  try {
+    await api("/admin/accesos/" + encodeURIComponent(rfc) + "/reactivar", { method: "POST" });
+    toast("Acceso reactivado.", "success");
+    cargarGridAccesos();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function resetearPasswordAcceso(rfc) {
+  if (!confirm(`¿Resetear la contraseña de ${rfc}? Deberá crear una nueva la próxima vez que entre.`)) return;
+  try {
+    await api("/admin/accesos/" + encodeURIComponent(rfc) + "/resetear-password", { method: "POST" });
+    toast("Contraseña reseteada.");
+    cargarGridAccesos();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+let cambiarEntidadRfc = null;
+
+async function abrirModalCambiarEntidad(rfc, entidadActual) {
+  cambiarEntidadRfc = rfc;
+  document.getElementById("cambiar-entidad-modal-rfc").textContent =
+    `RFC: ${rfc} — entidad actual: ${entidadActual || "NA"}`;
+  await cargarCatalogoEntidades();
+  poblarSelectEntidades("cambiar-entidad-select", "Selecciona una entidad");
+  document.getElementById("cambiar-entidad-select").value = entidadActual || "";
+  document.getElementById("cambiar-entidad-modal-overlay").classList.remove("hidden");
+}
+
+function cerrarModalCambiarEntidad() {
+  document.getElementById("cambiar-entidad-modal-overlay").classList.add("hidden");
+  cambiarEntidadRfc = null;
+}
+
+document.getElementById("cambiar-entidad-modal-cerrar").addEventListener("click", cerrarModalCambiarEntidad);
+document.getElementById("cambiar-entidad-modal-cancelar").addEventListener("click", cerrarModalCambiarEntidad);
+document.getElementById("cambiar-entidad-modal-overlay").addEventListener("click", (e) => {
+  if (e.target.id === "cambiar-entidad-modal-overlay") cerrarModalCambiarEntidad();
+});
+
+document.getElementById("cambiar-entidad-modal-guardar").addEventListener("click", async () => {
+  if (!cambiarEntidadRfc) return;
+  const entidad = document.getElementById("cambiar-entidad-select").value;
+  if (!entidad) {
+    toast("Selecciona una entidad.", "error");
+    return;
+  }
+  const btn = document.getElementById("cambiar-entidad-modal-guardar");
+  btn.disabled = true;
+  try {
+    await api("/admin/accesos/" + encodeURIComponent(cambiarEntidadRfc) + "/entidad", {
+      method: "POST",
+      body: { entidad },
+    });
+    toast("Entidad actualizada.", "success");
+    cerrarModalCambiarEntidad();
+    cargarGridAccesos();
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+/* =========================================================
+   ARRANQUE (va al final: usa funciones y variables ya definidas)
+   ========================================================= */
+// Si ya había una sesión activa en este mismo tab (recarga de página), no pedir login de nuevo.
+if (getToken()) {
+  showApp();
+} else {
+  const ultimoRfc = localStorage.getItem("ultimoRfc");
+  if (ultimoRfc) {
+    document.getElementById("login-rfc").value = ultimoRfc;
+    document.getElementById("login-form").requestSubmit(); // ya verifica el RFC y salta al paso de contraseña
+  } else {
+    document.getElementById("login-rfc").focus();
+  }
+}
+</script>
+</body>
+</html>
