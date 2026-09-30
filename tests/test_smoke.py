@@ -832,7 +832,7 @@ def test_seguimiento_regresar_exige_comentario(client):
         headers=headers,
     )
     assert r.status_code == 400
-    assert "motivo" in r.json()["detail"].lower()
+    assert "comentario" in r.json()["detail"].lower()
 
 
 def test_seguimiento_regresar_con_comentario_ok(client):
@@ -915,6 +915,121 @@ def test_actualizar_seguimiento_proveedor_no_puede_reenviar_dos_veces(client):
         headers=headers,
     )
     assert r.status_code == 400
+
+
+def test_pago_anticipado_default_no_marcado(client):
+    headers = _auth_headers_cabina(client)
+    r = client.get("/seguimiento/pago-anticipado/1001", headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"es_anticipado": False, "bloqueado": False}
+
+
+def test_pago_anticipado_marcar_prohibido_para_cabina(client):
+    headers = _auth_headers_cabina(client)
+    r = client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=headers)
+    assert r.status_code == 403
+
+
+def test_pago_anticipado_proveedor_puede_marcar_y_desmarcar_antes_de_enviar(client):
+    headers = _auth_headers_proveedor(client)
+    r = client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=headers)
+    assert r.status_code == 200, r.text
+    r = client.get("/seguimiento/pago-anticipado/1001", headers=headers)
+    assert r.json() == {"es_anticipado": True, "bloqueado": False}
+
+    r = client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": False}, headers=headers)
+    assert r.status_code == 200, r.text
+    r = client.get("/seguimiento/pago-anticipado/1001", headers=headers)
+    assert r.json() == {"es_anticipado": False, "bloqueado": False}
+
+
+def test_pago_anticipado_se_bloquea_tras_primer_envio(client):
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+
+    headers = _auth_headers_proveedor(client)
+    client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=headers)
+
+    comentario = "Se atendió al paciente correctamente sin ninguna novedad que reportar hoy."
+    r = client.post(
+        "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": comentario}, headers=headers
+    )
+    assert r.status_code == 200, r.text
+
+    r = client.get("/seguimiento/pago-anticipado/1001", headers=headers)
+    assert r.json() == {"es_anticipado": True, "bloqueado": True}
+
+    r = client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": False}, headers=headers)
+    assert r.status_code == 400
+
+
+def test_seguimiento_de_cita_exige_marca_pago_anticipado(client):
+    headers = _auth_headers_cabina(client)
+    r = client.post(
+        "/seguimiento/estatus",
+        json={"cl_expediente": 1001, "estatus": "Seguimiento de Cita", "comentario": "Se acepta la cita."},
+        headers=headers,
+    )
+    assert r.status_code == 400
+    assert "pago anticipado" in r.json()["detail"].lower()
+
+
+def test_seguimiento_de_cita_flujo_completo(client):
+    import io
+
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    prov_headers = _auth_headers_proveedor(client)
+    cabina_headers = _auth_headers_cabina(client)
+
+    # Proveedor marca el expediente como pago anticipado y manda su primer comentario.
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=prov_headers)
+    comentario1 = "Se atendió al paciente correctamente sin ninguna novedad que reportar hoy."
+    r = client.post(
+        "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": comentario1}, headers=prov_headers
+    )
+    assert r.status_code == 200, r.text
+
+    # Cabina revisa: la cita fue aceptada -> lo regresa como "Seguimiento de Cita".
+    r = client.post(
+        "/seguimiento/estatus",
+        json={"cl_expediente": 1001, "estatus": "Seguimiento de Cita", "comentario": "Se acepta la cita."},
+        headers=cabina_headers,
+    )
+    assert r.status_code == 200, r.text
+
+    r = client.get("/seguimiento/comentarios/1001", headers=cabina_headers)
+    encontrado = next(c for c in r.json() if "Se acepta la cita" in c["comentario"])
+    assert encontrado["origen"] == "cabina"
+
+    # Proveedor intenta mandar sin comprobante -> rechazado.
+    comentario2 = "Se sube el comprobante de pago correspondiente a esta atencion medica."
+    r = client.post(
+        "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": comentario2}, headers=prov_headers
+    )
+    assert r.status_code == 400
+    assert "comprobante" in r.json()["detail"].lower()
+
+    # Sube el comprobante y ahora sí puede mandar -> regresa a "Seguimiento Proveedor".
+    r = client.post(
+        "/seguimiento/comprobante",
+        data={"cl_expediente": 1001},
+        files={"archivo": ("comprobante.pdf", io.BytesIO(b"contenido"), "application/pdf")},
+        headers=prov_headers,
+    )
+    assert r.status_code == 200, r.text
+
+    r = client.post(
+        "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": comentario2}, headers=prov_headers
+    )
+    assert r.status_code == 200, r.text
+
+    r = client.get("/expedientes", params={"cl_expediente": 1001}, headers=cabina_headers)
+    assert r.json()[0]["estatus"] == "Seguimiento Proveedor"
 
 
 def test_configuracion_cuentas_ciclo_completo(client):

@@ -5,13 +5,12 @@ from pydantic import BaseModel, Field
 
 class SeguimientoInput(BaseModel):
     """
-    Body del POST /seguimiento/actualizar (botón 'Actualizar en SISE').
+    Body del POST /seguimiento/actualizar (botón 'Actualizar Core').
     El clUsrApp NO va aquí: se toma del usuario autenticado (token JWT).
 
-    tipo_expediente: lo determina el frontend según desde qué pantalla se
-    abrió el expediente ("normal" = Expedientes, "anticipado" = Pago
-    Anticipado) -- por ahora ambas pantallas jalan los mismos datos de SISE,
-    en lo que se configura un campo/consulta real que los distinga.
+    tipo_expediente: ya no se usa para decidir si el comprobante es
+    obligatorio (ver pago_anticipado_repo.py) -- se deja solo por
+    compatibilidad, sin efecto en el router.
     """
 
     cl_expediente: int
@@ -50,3 +49,14 @@ class ComprobanteMeta(BaseModel):
     nombre_archivo: str
     tipo_mime: str
     fecha: str
+
+
+class PagoAnticipadoInput(BaseModel):
+    """Body del POST /seguimiento/pago-anticipado/{cl_expediente}."""
+
+    es_anticipado: bool
+
+
+class PagoAnticipadoResponse(BaseModel):
+    es_anticipado: bool
+    bloqueado: bool

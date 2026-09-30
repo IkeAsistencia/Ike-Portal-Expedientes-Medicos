@@ -130,23 +130,41 @@ def enviar_correo_proveedores(expedientes: list[dict], usuario_nombre: str) -> R
     return ResultadoEnvio(enviados=len(expedientes), destinatarios=[destinatario], simulado=not enviado)
 
 
+MENSAJES_REGRESO_POR_ESTATUS = {
+    # (asunto, frase de qué pasó) según a qué estatus Cabina regresó el expediente.
+    "En Espera de Respuesta": (
+        "regresado para corrección",
+        "fue regresado por {usuario} y requiere que lo corrijas",
+    ),
+    "Seguimiento de Cita": (
+        "cita aceptada — sube tu comprobante de pago",
+        "fue regresado por {usuario}: la cita fue aceptada, ya puedes subir el comprobante de pago",
+    ),
+}
+
+
 def enviar_notificacion_regreso(
-    cl_expediente: int, cuenta: str, nombre_paciente: str, comentario: str, usuario_nombre: str
+    cl_expediente: int, cuenta: str, nombre_paciente: str, comentario: str, usuario_nombre: str,
+    nuevo_estatus: str = "En Espera de Respuesta",
 ) -> ResultadoEnvio:
     """
-    Aviso a Proveedor cuando Cabina regresa un expediente ("Regresar a
-    Proveedor (corregir respuesta)" en Estado del Caso) porque encontró
-    algo mal o incompleto en su respuesta anterior.
+    Aviso a Proveedor cuando Cabina regresa un expediente desde "Estado del
+    Caso" -- ya sea para que lo corrija ("En Espera de Respuesta") o porque
+    la cita fue aceptada y debe subir el comprobante de pago ("Seguimiento
+    de Cita").
     """
     settings = get_settings()
     destinatario = settings.smtp_remitente or "proveedor@pendiente-confirmar.com"
+    etiqueta_asunto, frase = MENSAJES_REGRESO_POR_ESTATUS.get(
+        nuevo_estatus, MENSAJES_REGRESO_POR_ESTATUS["En Espera de Respuesta"]
+    )
     html = f"""
-    <p>El expediente <b>{cl_expediente}</b> (cuenta: {cuenta}, paciente: {nombre_paciente}) fue
-    regresado por {usuario_nombre} y requiere que lo corrijas.</p>
-    <p><b>Motivo del regreso:</b></p>
+    <p>El expediente <b>{cl_expediente}</b> (cuenta: {cuenta}, paciente: {nombre_paciente})
+    {frase.format(usuario=usuario_nombre)}.</p>
+    <p><b>Comentario:</b></p>
     <p>{comentario}</p>
     """
-    enviado = _enviar_o_simular(destinatario, f"Expediente {cl_expediente} regresado para corrección", html)
+    enviado = _enviar_o_simular(destinatario, f"Expediente {cl_expediente} {etiqueta_asunto}", html)
     return ResultadoEnvio(enviados=1, destinatarios=[destinatario], simulado=not enviado)
 
 

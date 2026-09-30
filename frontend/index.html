@@ -549,6 +549,7 @@ tbody tr:hover{background:#FAFAFA;}
                   <option value="Abierto">Abierto</option>
                   <option value="En Espera de Respuesta">En Espera de Respuesta</option>
                   <option value="Seguimiento Proveedor">Seguimiento Proveedor</option>
+                  <option value="Seguimiento de Cita">Seguimiento de Cita</option>
                   <option value="Finalizado">Finalizado</option>
                 </select>
               </div>
@@ -756,6 +757,13 @@ tbody tr:hover{background:#FAFAFA;}
               <div class="info-item"><label>Teléfono</label><div class="value" id="ig-telefono">—</div></div>
               <div class="info-item"><label>Correo</label><div class="value" id="ig-correo">—</div></div>
             </div>
+            <div class="field" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-border);">
+              <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer;">
+                <input type="checkbox" id="ig-pago-anticipado" style="width:auto;">
+                ¿Es un expediente de pago anticipado?
+              </label>
+              <div class="hint" id="ig-pago-anticipado-hint">Solo el Proveedor puede marcar esta casilla.</div>
+            </div>
           </div>
         </div>
 
@@ -787,12 +795,13 @@ tbody tr:hover{background:#FAFAFA;}
                   <option value="Abierto">Abierto</option>
                   <option value="Finalizado">Finalizado</option>
                   <option value="En Espera de Respuesta">Regresar a Proveedor (corregir respuesta)</option>
+                  <option value="Seguimiento de Cita" id="sg-estatus-opcion-cita" class="hidden">Seguimiento de Cita (cita aceptada)</option>
                 </select>
               </div>
               <button class="btn btn-secondary" id="sg-estatus-btn">Actualizar Estado</button>
             </div>
             <div class="field hidden" id="sg-motivo-regreso-field" style="margin-top:12px;">
-              <label for="sg-motivo-regreso">Motivo del regreso (obligatorio)</label>
+              <label for="sg-motivo-regreso" id="sg-motivo-regreso-label">Motivo del regreso (obligatorio)</label>
               <textarea id="sg-motivo-regreso" rows="4" maxlength="1500" placeholder="Explica qué le falta o qué está mal en la respuesta del proveedor..."></textarea>
               <div class="hint">Se guarda en Core igual que el comentario del proveedor, y se le notifica por correo.</div>
             </div>
@@ -1270,11 +1279,19 @@ function estatusDefaultParaPerfil() {
   return "En Espera de Respuesta";
 }
 
-// Proveedor solo puede ver expedientes en estos dos estatus: "En Espera de
-// Respuesta" (los que le corresponde atender) y "Seguimiento Proveedor"
-// (los que ya mandó, en modo solo lectura mientras Cabina los revisa).
-// Cualquier otro estatus (Abierto, Finalizado) no le corresponde verlo.
-const ESTATUS_VISIBLES_PROVEEDOR = ["En Espera de Respuesta", "Seguimiento Proveedor"];
+// Estados a los que Cabina "regresa" el expediente a Proveedor -- ambos
+// exigen comentario obligatorio (ver sg-motivo-regreso-field).
+const ESTATUS_DE_REGRESO = ["En Espera de Respuesta", "Seguimiento de Cita"];
+
+// Proveedor solo puede ver expedientes en estos estatus: "En Espera de
+// Respuesta" y "Seguimiento de Cita" (los que le corresponde atender) y
+// "Seguimiento Proveedor" (los que ya mandó, en modo solo lectura mientras
+// Cabina los revisa). Cualquier otro estatus (Abierto, Finalizado) no le
+// corresponde verlo.
+const ESTATUS_VISIBLES_PROVEEDOR = ["En Espera de Respuesta", "Seguimiento Proveedor", "Seguimiento de Cita"];
+// De esos, en cuáles puede realmente registrar/actualizar algo (en
+// "Seguimiento Proveedor" solo puede ver, ya está en revisión de Cabina).
+const ESTATUS_ACCIONABLES_PROVEEDOR = ["En Espera de Respuesta", "Seguimiento de Cita"];
 function proveedorPuedeVer(estatus) {
   return !esPerfilProveedor() || ESTATUS_VISIBLES_PROVEEDOR.includes(estatus);
 }
@@ -1310,13 +1327,17 @@ function aplicarPermisosPerfil() {
   document.getElementById("kpi-seguimiento-card").classList.toggle("hidden-perfil", !cabina);
   document.getElementById("pa-kpi-seguimiento-card").classList.toggle("hidden-perfil", !cabina);
 
-  // Administrador ahora también puede ver Expedientes/Expedientes PA (para
-  // buscar/seleccionar y "Generar corte"), pero sin las acciones operativas
-  // de Cabina -- por eso "Seguimiento de expedientes" (dar seguimiento al
-  // caso) sigue sin corresponderle.
+  // Administrador también puede ver Expedientes (para buscar/seleccionar y
+  // "Generar corte"), pero sin las acciones operativas de Cabina -- por eso
+  // "Seguimiento de expedientes" (dar seguimiento al caso) sigue sin
+  // corresponderle.
   document.getElementById("nav-expedientes").classList.toggle("hidden-perfil", false);
   document.getElementById("nav-seguimiento").classList.toggle("hidden-perfil", admin);
-  document.getElementById("nav-pago-anticipado").classList.toggle("hidden-perfil", false);
+  // Expedientes PA queda oculta para todos: el flujo de pago anticipado ya
+  // vive dentro de Expedientes (casilla "¿Es pago anticipado?" + estatus
+  // "Seguimiento de Cita"). El código sigue aquí por si se vuelve a
+  // necesitar, pero nadie debe poder llegar a esta pantalla.
+  document.getElementById("nav-pago-anticipado").classList.toggle("hidden-perfil", true);
   // Configuración Cuentas y Usuarios y Accesos son exclusivos de Administrador.
   document.getElementById("nav-configuracion").classList.toggle("hidden-perfil", !admin);
   document.getElementById("nav-accesos").classList.toggle("hidden-perfil", !admin);
@@ -1554,6 +1575,7 @@ function badgeEstatus(estatus) {
     "Abierto": "pendiente",
     "En Espera de Respuesta": "espera",
     "Seguimiento Proveedor": "seguimiento",
+    "Seguimiento de Cita": "programado",
     "Finalizado": "activo",
   };
   const cls = map[estatus] || "pendiente";
@@ -2435,7 +2457,7 @@ document.getElementById("corte-modal-confirmar").addEventListener("click", async
    ========================================================= */
 let registroActual = null;
 let accessSource = "menu"; // "menu" | "link"
-let tipoExpedienteActual = "normal"; // "normal" | "anticipado"
+let pagoAnticipadoActual = { es_anticipado: false, bloqueado: false }; // del expediente abierto actualmente, ver cargarPagoAnticipado()
 
 function openSeguimientoMenu() {
   goTo("seguimiento");
@@ -2462,7 +2484,6 @@ async function abrirSeguimiento(record, source, tipo) {
   goTo("seguimiento");
   accessSource = source;
   registroActual = record;
-  tipoExpedienteActual = tipo || "normal";
 
   const buscarCard = document.getElementById("sg-buscar-card");
   if (source === "link") {
@@ -2484,7 +2505,8 @@ async function abrirSeguimiento(record, source, tipo) {
 
   document.getElementById("sg-estatus").value = record.estatus;
   document.getElementById("sg-motivo-regreso").value = "";
-  document.getElementById("sg-motivo-regreso-field").classList.toggle("hidden", record.estatus !== "En Espera de Respuesta");
+  document.getElementById("sg-motivo-regreso-field").classList.toggle("hidden", !ESTATUS_DE_REGRESO.includes(record.estatus));
+  actualizarTextoMotivoRegreso(record.estatus);
   document.getElementById("sg-observaciones").value = "";
   document.getElementById("sg-observaciones").disabled = false;
   document.getElementById("sg-cancelar-btn").disabled = false;
@@ -2502,13 +2524,9 @@ async function abrirSeguimiento(record, source, tipo) {
   // "En Espera de Respuesta" -- si ya lo mandó (quedó "Seguimiento
   // Proveedor"), lo puede seguir viendo pero en modo solo lectura, hasta
   // que el coordinador lo revise (lo regrese o lo finalice).
-  const proveedorSoloLectura = esPerfilProveedor() && record.estatus !== "En Espera de Respuesta";
+  const proveedorSoloLectura = esPerfilProveedor() && !ESTATUS_ACCIONABLES_PROVEEDOR.includes(record.estatus);
   document.getElementById("sg-seguimiento-card").classList.toggle("hidden", proveedorSoloLectura);
   document.getElementById("sg-solo-lectura-card").classList.toggle("hidden", !proveedorSoloLectura);
-
-  // El comprobante de pago solo aplica a expedientes de Pago Anticipado.
-  const esAnticipado = tipoExpedienteActual === "anticipado";
-  document.getElementById("sg-comprobante-field").classList.toggle("hidden", !(esAnticipado && esPerfilProveedor()));
 
   // Comentarios (del Proveedor y del Coordinador): visibles para ambos
   // perfiles, sin importar por dónde se entró a este expediente.
@@ -2516,11 +2534,73 @@ async function abrirSeguimiento(record, source, tipo) {
   document.getElementById("sg-comentarios-coordinador-card").classList.remove("hidden");
   cargarComentariosSeguimiento(record.expediente);
 
-  // Comprobante de pago (solo Pago Anticipado): Cabina lo revisa y ahora
-  // también Proveedor puede volver a verlo/descargarlo (antes solo podía
-  // subir uno nuevo, sin forma de confirmar qué había quedado subido).
-  document.getElementById("sg-comprobante-visor-wrap").classList.toggle("hidden", !esAnticipado);
-  if (esAnticipado) cargarComprobanteVisor(record.expediente);
+  await cargarPagoAnticipado(record);
+}
+
+async function cargarPagoAnticipado(record) {
+  const chk = document.getElementById("ig-pago-anticipado");
+  const hint = document.getElementById("ig-pago-anticipado-hint");
+  const opcionCita = document.getElementById("sg-estatus-opcion-cita");
+  let flag = { es_anticipado: false, bloqueado: false };
+  try {
+    flag = await api("/seguimiento/pago-anticipado/" + record.expediente);
+  } catch (err) {
+    toast("No se pudo cargar si es pago anticipado: " + err.message, "error");
+  }
+  pagoAnticipadoActual = flag;
+
+  chk.checked = flag.es_anticipado;
+  const puedeEditar = esPerfilProveedor() && !flag.bloqueado;
+  chk.disabled = !puedeEditar;
+  hint.textContent = flag.bloqueado
+    ? "Ya no se puede cambiar: el expediente ya fue enviado."
+    : (esPerfilProveedor() ? "Márcala antes de mandar tu primer comentario -- después ya no se puede cambiar." : "Solo el Proveedor puede marcar esta casilla.");
+
+  // "Seguimiento de Cita" solo aplica (y solo se ve) si es pago anticipado.
+  opcionCita.classList.toggle("hidden", !flag.es_anticipado);
+  if (document.getElementById("sg-estatus").value === "Seguimiento de Cita" && !flag.es_anticipado) {
+    document.getElementById("sg-estatus").value = record.estatus;
+  }
+
+  // El comprobante de pago solo se pide hasta que Cabina regresó el
+  // expediente como "Seguimiento de Cita" (cita ya aceptada) -- no antes.
+  const necesitaComprobante = flag.es_anticipado && record.estatus === "Seguimiento de Cita";
+  document.getElementById("sg-comprobante-field").classList.toggle("hidden", !(necesitaComprobante && esPerfilProveedor()));
+
+  // Comprobante de pago (solo Pago Anticipado): Cabina lo revisa y Proveedor
+  // puede volver a verlo/descargarlo si ya subió uno antes.
+  document.getElementById("sg-comprobante-visor-wrap").classList.toggle("hidden", !flag.es_anticipado);
+  if (flag.es_anticipado) cargarComprobanteVisor(record.expediente);
+}
+
+document.getElementById("ig-pago-anticipado").addEventListener("change", async (e) => {
+  const chk = e.target;
+  const valorAnterior = !chk.checked;
+  chk.disabled = true;
+  try {
+    await api("/seguimiento/pago-anticipado/" + registroActual.expediente, {
+      method: "POST",
+      body: { es_anticipado: chk.checked },
+    });
+    toast("Guardado.", "success");
+    await cargarPagoAnticipado(registroActual);
+  } catch (err) {
+    chk.checked = valorAnterior;
+    chk.disabled = false;
+    toast(err.message, "error");
+  }
+});
+
+function actualizarTextoMotivoRegreso(estatus) {
+  const label = document.getElementById("sg-motivo-regreso-label");
+  const textarea = document.getElementById("sg-motivo-regreso");
+  if (estatus === "Seguimiento de Cita") {
+    label.textContent = "Comentario (obligatorio)";
+    textarea.placeholder = "Ej. Se acepta la cita, el paciente puede proceder...";
+  } else {
+    label.textContent = "Motivo del regreso (obligatorio)";
+    textarea.placeholder = "Explica qué le falta o qué está mal en la respuesta del proveedor...";
+  }
 }
 
 async function cargarComprobanteVisor(clExpediente) {
@@ -2610,16 +2690,17 @@ document.getElementById("sg-buscar-expediente").addEventListener("keydown", (e) 
 });
 
 document.getElementById("sg-estatus").addEventListener("change", (e) => {
-  document.getElementById("sg-motivo-regreso-field").classList.toggle("hidden", e.target.value !== "En Espera de Respuesta");
+  document.getElementById("sg-motivo-regreso-field").classList.toggle("hidden", !ESTATUS_DE_REGRESO.includes(e.target.value));
+  actualizarTextoMotivoRegreso(e.target.value);
 });
 
 document.getElementById("sg-estatus-btn").addEventListener("click", async () => {
   if (!registroActual) return;
   const nuevoEstatus = document.getElementById("sg-estatus").value;
-  const esRegreso = nuevoEstatus === "En Espera de Respuesta";
+  const esRegreso = ESTATUS_DE_REGRESO.includes(nuevoEstatus);
   const motivoRegreso = document.getElementById("sg-motivo-regreso").value.trim();
   if (esRegreso && !motivoRegreso) {
-    toast("Indica el motivo por el que regresas el expediente al proveedor.", "error");
+    toast("Indica un comentario para regresar el expediente al proveedor.", "error");
     return;
   }
   try {
@@ -2643,9 +2724,11 @@ document.getElementById("sg-estatus-btn").addEventListener("click", async () => 
     if (esRegreso) {
       document.getElementById("sg-motivo-regreso").value = "";
       document.getElementById("sg-motivo-regreso-field").classList.add("hidden");
-      // Para que el motivo que se acaba de mandar se vea de inmediato en
+      // Para que el comentario que se acaba de mandar se vea de inmediato en
       // "Comentarios del Coordinador", sin tener que refrescar la página.
       cargarComentariosSeguimiento(registroActual.expediente);
+      // El comprobante se activa (o no) según el nuevo estatus.
+      cargarPagoAnticipado(registroActual);
       toast("Expediente regresado a Proveedor. Se le notificó por correo.", "success");
     } else {
       toast("Estado actualizado.", "success");
@@ -2679,9 +2762,11 @@ document.getElementById("sg-actualizar-btn").addEventListener("click", async () 
     return;
   }
 
-  const esAnticipado = tipoExpedienteActual === "anticipado";
+  // El comprobante solo se exige hasta la segunda vuelta, cuando Cabina ya
+  // regresó el expediente como "Seguimiento de Cita" (ver cargarPagoAnticipado).
+  const necesitaComprobante = pagoAnticipadoActual.es_anticipado && registroActual.estatus === "Seguimiento de Cita";
   const archivoComprobante = document.getElementById("sg-comprobante-input").files[0];
-  if (esAnticipado && esPerfilProveedor()) {
+  if (necesitaComprobante && esPerfilProveedor()) {
     if (!archivoComprobante) {
       toast("Debes subir el comprobante de pago antes de continuar.", "error");
       return;
@@ -2700,7 +2785,7 @@ document.getElementById("sg-actualizar-btn").addEventListener("click", async () 
   btn.disabled = true;
   let exito = false;
   try {
-    if (esAnticipado && esPerfilProveedor()) {
+    if (necesitaComprobante && esPerfilProveedor()) {
       const formData = new FormData();
       formData.append("cl_expediente", registroActual.expediente);
       formData.append("archivo", archivoComprobante);
@@ -2709,7 +2794,7 @@ document.getElementById("sg-actualizar-btn").addEventListener("click", async () 
 
     await api("/seguimiento/actualizar", {
       method: "POST",
-      body: { cl_expediente: registroActual.expediente, comentario, tipo_expediente: tipoExpedienteActual },
+      body: { cl_expediente: registroActual.expediente, comentario },
     });
     exito = true;
     toast("Seguimiento registrado en Core.", "success");
@@ -2732,9 +2817,9 @@ document.getElementById("sg-actualizar-btn").addEventListener("click", async () 
     // Para que el comentario recién enviado se vea de inmediato en
     // "Comentarios del Proveedor", sin tener que refrescar la página.
     cargarComentariosSeguimiento(registroActual.expediente);
-    // Igual para el comprobante recién subido (Pago Anticipado): que se vea
-    // de inmediato el botón "Ver / Descargar" con el archivo que acaba de subir.
-    if (esAnticipado) cargarComprobanteVisor(registroActual.expediente);
+    // Refresca el comprobante y la casilla de pago anticipado (ya queda
+    // bloqueada tras este primer/segundo envío, ver backend).
+    cargarPagoAnticipado(registroActual);
   } catch (err) {
     toast(err.message, "error");
   } finally {

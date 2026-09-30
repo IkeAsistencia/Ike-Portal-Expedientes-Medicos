@@ -2,10 +2,29 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from app.core.security import usuario_actual
-from app.repositories import accesos_repo, comprobantes_repo, estatus_repo, expedientes_repo, seguimiento_repo
+from app.repositories import (
+    accesos_repo,
+    comprobantes_repo,
+    estatus_repo,
+    expedientes_repo,
+    pago_anticipado_repo,
+    seguimiento_repo,
+)
 from app.schemas.expediente import EstatusExpediente, ExpedienteFiltro
-from app.schemas.seguimiento import ComentarioSeguimiento, ComprobanteMeta, EstatusInput, SeguimientoInput
+from app.schemas.seguimiento import (
+    ComentarioSeguimiento,
+    ComprobanteMeta,
+    EstatusInput,
+    PagoAnticipadoInput,
+    PagoAnticipadoResponse,
+    SeguimientoInput,
+)
 from app.services import email_service
+
+# Cabina puede regresar el expediente a Proveedor en cualquiera de estos dos
+# estatus -- ambos exigen comentario obligatorio, se escriben en Core y
+# disparan una notificación por correo (ver /estatus más abajo).
+ESTATUS_DE_REGRESO = (EstatusExpediente.EN_ESPERA_RESPUESTA, EstatusExpediente.SEGUIMIENTO_CITA)
 
 router = APIRouter(prefix="/seguimiento", tags=["Seguimiento"])
 
@@ -34,20 +53,28 @@ def actualizar_seguimiento(data: SeguimientoInput, usuario: dict = Depends(usuar
         )
 
     # Proveedor solo puede registrar seguimiento mientras el expediente está
-    # "En Espera de Respuesta" -- si ya lo mandó antes (quedó "Seguimiento
-    # Proveedor") o está en cualquier otro estatus, no le corresponde y no
-    # se puede volver a mandar aunque se llame al endpoint directo.
-    if usuario.get("perfil") == accesos_repo.PERFIL_PROVEEDOR:
+    # "En Espera de Respuesta" (primer envío) o "Seguimiento de Cita" (ya con
+    # la cita aceptada, segundo envío con el comprobante) -- en cualquier
+    # otro estatus no le corresponde, aunque se llame al endpoint directo.
+    es_proveedor = usuario.get("perfil") == accesos_repo.PERFIL_PROVEEDOR
+    estatus_actual = None
+    if es_proveedor:
         encontrados = expedientes_repo.listar_expedientes(ExpedienteFiltro(cl_expediente=data.cl_expediente))
-        if not encontrados or encontrados[0].estatus != EstatusExpediente.EN_ESPERA_RESPUESTA:
+        if not encontrados:
+            raise HTTPException(404, "No se encontró el expediente.")
+        estatus_actual = encontrados[0].estatus
+        if estatus_actual not in (EstatusExpediente.EN_ESPERA_RESPUESTA, EstatusExpediente.SEGUIMIENTO_CITA):
             raise HTTPException(
                 400, "Este expediente ya no está en espera de respuesta, no puedes actualizarlo."
             )
 
-    # Pago Anticipado: obligatorio subir el comprobante antes de poder continuar.
+    # Pago Anticipado: el comprobante se vuelve obligatorio hasta la segunda
+    # vuelta, cuando Cabina ya regresó el expediente como "Seguimiento de
+    # Cita" (cita aceptada) -- no en el primer envío.
     if (
-        data.tipo_expediente == "anticipado"
-        and usuario.get("perfil") == accesos_repo.PERFIL_PROVEEDOR
+        es_proveedor
+        and estatus_actual == EstatusExpediente.SEGUIMIENTO_CITA
+        and pago_anticipado_repo.es_anticipado(data.cl_expediente)
         and not comprobantes_repo.existe_comprobante(data.cl_expediente)
     ):
         raise HTTPException(400, "Debes subir el comprobante de pago antes de continuar.")
@@ -63,8 +90,11 @@ def actualizar_seguimiento(data: SeguimientoInput, usuario: dict = Depends(usuar
     identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
     seguimiento_repo.guardar_comentario_local(data.cl_expediente, identificador, data.comentario, origen="proveedor")
 
-    if usuario.get("perfil") == accesos_repo.PERFIL_PROVEEDOR:
+    if es_proveedor:
         estatus_repo.actualizar_estatus(data.cl_expediente, EstatusExpediente.SEGUIMIENTO_PROVEEDOR, identificador)
+        # A partir del primer envío, si marcó (o no) la casilla de pago
+        # anticipado, ya no se puede volver a cambiar.
+        pago_anticipado_repo.bloquear(data.cl_expediente)
 
     return resultado
 
@@ -105,6 +135,34 @@ async def subir_comprobante(
     return {"ok": True}
 
 
+@router.get("/pago-anticipado/{cl_expediente}", response_model=PagoAnticipadoResponse)
+def obtener_pago_anticipado(cl_expediente: int, usuario: dict = Depends(usuario_actual)):
+    """
+    Solo el Proveedor sabe si un expediente es de pago anticipado -- Cabina
+    también puede consultarlo (de solo lectura) para decidir si le
+    corresponde regresarlo como "Seguimiento de Cita".
+    """
+    row = pago_anticipado_repo.obtener(cl_expediente)
+    if not row:
+        return PagoAnticipadoResponse(es_anticipado=False, bloqueado=False)
+    return PagoAnticipadoResponse(es_anticipado=bool(row["es_anticipado"]), bloqueado=bool(row["bloqueado"]))
+
+
+@router.post("/pago-anticipado/{cl_expediente}")
+def marcar_pago_anticipado(
+    cl_expediente: int, data: PagoAnticipadoInput, usuario: dict = Depends(usuario_actual)
+):
+    """Casilla '¿Es un expediente de pago anticipado?' -- exclusiva de Proveedor, y solo antes de su primer envío."""
+    if usuario.get("perfil") != accesos_repo.PERFIL_PROVEEDOR:
+        raise HTTPException(403, "Solo el perfil Proveedor puede marcar si un expediente es de pago anticipado.")
+    actual = pago_anticipado_repo.obtener(cl_expediente)
+    if actual and actual["bloqueado"]:
+        raise HTTPException(400, "Ya no se puede cambiar: el expediente ya fue enviado.")
+    identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
+    pago_anticipado_repo.marcar(cl_expediente, data.es_anticipado, identificador)
+    return {"ok": True}
+
+
 @router.get("/comprobante/{cl_expediente}", response_model=ComprobanteMeta)
 def obtener_comprobante_meta(cl_expediente: int, usuario: dict = Depends(usuario_actual)):
     comprobante = comprobantes_repo.obtener_comprobante(cl_expediente)
@@ -138,25 +196,29 @@ def actualizar_estatus(data: EstatusInput, usuario: dict = Depends(usuario_actua
     except ValueError:
         opciones = ", ".join(e.value for e in EstatusExpediente)
         raise HTTPException(400, f"Estado inválido: '{data.estatus}'. Opciones: {opciones}")
-    # Regla de negocio: "En Espera de Respuesta" se activa solo o cuando Cabina
-    # regresa el expediente a mano (si detectó un error en lo que mandó
-    # Proveedor, para que lo vuelva a llenar). Nadie más lo puede asignar.
-    if estatus == EstatusExpediente.EN_ESPERA_RESPUESTA and usuario.get("perfil") != accesos_repo.PERFIL_CABINA:
-        raise HTTPException(400, "'En Espera de Respuesta' no se puede asignar a mano desde este perfil.")
+    # Regla de negocio: "En Espera de Respuesta" y "Seguimiento de Cita" se
+    # activan solo cuando Cabina regresa el expediente a mano (corrección, o
+    # cita aceptada en pago anticipado). Nadie más los puede asignar.
+    if estatus in ESTATUS_DE_REGRESO and usuario.get("perfil") != accesos_repo.PERFIL_CABINA:
+        raise HTTPException(400, f"'{estatus.value}' no se puede asignar a mano desde este perfil.")
     # "Seguimiento Proveedor" solo se activa automático desde "Actualizar Core"
     # (ver arriba). Cabina no puede ponerlo a mano — no le corresponde esa etapa.
     if estatus == EstatusExpediente.SEGUIMIENTO_PROVEEDOR and usuario.get("perfil") == accesos_repo.PERFIL_CABINA:
         raise HTTPException(400, "'Seguimiento Proveedor' es automático, Cabina no puede asignarlo a mano.")
+    # "Seguimiento de Cita" es exclusivo de expedientes que el Proveedor marcó
+    # como pago anticipado -- no tiene sentido en cualquier otro caso.
+    if estatus == EstatusExpediente.SEGUIMIENTO_CITA and not pago_anticipado_repo.es_anticipado(data.cl_expediente):
+        raise HTTPException(400, "Este expediente no está marcado como pago anticipado.")
 
     identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
 
-    if estatus == EstatusExpediente.EN_ESPERA_RESPUESTA:
+    if estatus in ESTATUS_DE_REGRESO:
         # Cabina está regresando el expediente a Proveedor: exige el motivo,
-        # lo escribe en SISE (igual que el comentario del Proveedor) y avisa
+        # lo escribe en Core (igual que el comentario del Proveedor) y avisa
         # por correo. No es un simple cambio de estatus como los demás.
         comentario = (data.comentario or "").strip()
         if not comentario:
-            raise HTTPException(400, "Debes indicar el motivo por el que regresas el expediente.")
+            raise HTTPException(400, "Debes indicar un comentario para regresar el expediente.")
 
         cl_usr_app = usuario.get("cl_usr_app")
         if cl_usr_app is None:
@@ -171,7 +233,8 @@ def actualizar_estatus(data: EstatusInput, usuario: dict = Depends(usuario_actua
         if encontrados:
             registro = encontrados[0]
             email_service.enviar_notificacion_regreso(
-                data.cl_expediente, registro.cuenta, registro.nombre_paciente, comentario, identificador
+                data.cl_expediente, registro.cuenta, registro.nombre_paciente, comentario, identificador,
+                nuevo_estatus=estatus.value,
             )
 
     estatus_repo.actualizar_estatus(data.cl_expediente, estatus, identificador)

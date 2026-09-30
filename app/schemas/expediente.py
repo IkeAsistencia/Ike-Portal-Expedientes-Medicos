@@ -9,6 +9,7 @@ class EstatusExpediente(str, Enum):
     ABIERTO = "Abierto"
     EN_ESPERA_RESPUESTA = "En Espera de Respuesta"  # automático: Cabina mandó correo. No editable a mano.
     SEGUIMIENTO_PROVEEDOR = "Seguimiento Proveedor"  # automático: Proveedor dejó un comentario (Actualizar Core).
+    SEGUIMIENTO_CITA = "Seguimiento de Cita"  # Cabina regresa el expediente de pago anticipado ya con cita aceptada.
     SEGUIMIENTO_COORDINADOR = "Finalizado"
 
 

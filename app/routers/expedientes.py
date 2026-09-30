@@ -138,7 +138,7 @@ def generar_corte(data: GenerarCorteInput, usuario: dict = Depends(usuario_actua
     filas_excel = []
     for r in registros:
         fila = r.model_dump()
-        if estatus_lote == EstatusExpediente.EN_ESPERA_RESPUESTA:
+        if estatus_lote in (EstatusExpediente.EN_ESPERA_RESPUESTA, EstatusExpediente.SEGUIMIENTO_CITA):
             detalle = estatus_repo.obtener_detalle(r.expediente) or {}
             fila["rfc_envio"] = detalle.get("rfc_cambio") or "NA"
             fila["fecha_envio"] = detalle.get("fecha_cambio") or "NA"

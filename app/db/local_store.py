@@ -112,6 +112,19 @@ CREATE TABLE IF NOT EXISTS cortes_generados (
     destinatario    TEXT,
     fecha_enviado   TEXT
 );
+
+-- Si un expediente es de "pago anticipado" -- solo el Proveedor lo sabe, por
+-- eso lo marca él desde Seguimiento de expediente. "bloqueado" se activa
+-- solo (no se puede desmarcar) en cuanto Proveedor manda su primer
+-- comentario por "Actualizar Core", para que no cambie después de que
+-- Cabina ya empezó a revisarlo con ese valor.
+CREATE TABLE IF NOT EXISTS expediente_pago_anticipado (
+    cl_expediente INTEGER PRIMARY KEY,
+    es_anticipado INTEGER NOT NULL DEFAULT 0,
+    bloqueado     INTEGER NOT NULL DEFAULT 0,
+    rfc           TEXT,
+    fecha         TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
 """
 
 
