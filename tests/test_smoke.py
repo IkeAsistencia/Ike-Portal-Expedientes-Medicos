@@ -139,6 +139,13 @@ def _patch_sql_server(monkeypatch):
     monkeypatch.setattr(auth_repo_module, "call_procedure", fake_call_procedure)
     monkeypatch.setattr(seguimiento_repo_module, "call_procedure_write", fake_call_procedure_write)
 
+    # El rate limiter de /auth (app/core/rate_limit.py) guarda su conteo en
+    # memoria del proceso -- sin esto, pruebas que hacen login varias veces
+    # (o varias pruebas seguidas con el mismo usuario) chocarían entre sí.
+    from app.core.rate_limit import limpiar_todo
+
+    limpiar_todo()
+
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
@@ -931,6 +938,13 @@ def test_pago_anticipado_marcar_prohibido_para_cabina(client):
 
 
 def test_pago_anticipado_proveedor_puede_marcar_y_desmarcar_antes_de_enviar(client):
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    # Proveedor solo puede marcar pago anticipado en expedientes que le
+    # corresponde atender (ver _verificar_proveedor_puede_ver).
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+
     headers = _auth_headers_proveedor(client)
     r = client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=headers)
     assert r.status_code == 200, r.text
@@ -1018,7 +1032,7 @@ def test_seguimiento_de_cita_flujo_completo(client):
     r = client.post(
         "/seguimiento/comprobante",
         data={"cl_expediente": 1001},
-        files={"archivo": ("comprobante.pdf", io.BytesIO(b"contenido"), "application/pdf")},
+        files={"archivo": ("comprobante.pdf", io.BytesIO(b"%PDF-1.4 contenido"), "application/pdf")},
         headers=prov_headers,
     )
     assert r.status_code == 200, r.text
