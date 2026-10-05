@@ -110,7 +110,7 @@ def listar_expedientes(filtro: ExpedienteFiltro) -> list[Expediente]:
                 tipo_servicio=row["TipoServicio"],
                 tipo_subservicio=row["TipoSubservicio"],
                 nombre_titular=row.get("NombreTitular"),
-                nombre_paciente=row["NombrePaciente"],
+                nombre_paciente=row.get("NombrePaciente"),
                 especialidad=row.get("Especialidad"),
                 entidad=row.get("Entidad"),
                 municipio=row.get("Municipio"),

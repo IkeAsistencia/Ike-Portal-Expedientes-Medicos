@@ -168,6 +168,8 @@ body{
   transition:box-shadow .15s ease, transform .15s ease;
 }
 .kpi-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px);}
+.kpi-card.kpi-clickable{cursor:pointer;}
+.kpi-card.kpi-clickable.kpi-activo{border-color:var(--blue);box-shadow:0 0 0 2px var(--blue-light);}
 .kpi-icon{
   width:44px;height:44px;border-radius:10px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
@@ -176,6 +178,10 @@ body{
 .kpi-total .kpi-icon{background:var(--blue-light);color:var(--blue-dark);}
 .kpi-proceso .kpi-icon{background:var(--amber-bg);color:var(--amber);}
 .kpi-seguimiento .kpi-icon{background:var(--purple-bg);color:var(--purple);}
+.kpi-cita .kpi-icon{background:var(--teal-bg);color:var(--teal);}
+/* "Seguimiento de Cita" se ve igual sin importar el perfil: mismo color y
+   mismo ícono de calendario que la tarjeta de Cabina (ver aplicarEtiquetasKPI). */
+.kpi-card.kpi-estilo-cita .kpi-icon{background:var(--teal-bg);color:var(--teal);}
 .kpi-info{min-width:0;}
 .kpi-value{font-size:24px;font-weight:700;color:var(--navy);line-height:1.15;}
 .kpi-label{font-size:11.5px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
@@ -470,25 +476,32 @@ tbody tr:hover{background:#FAFAFA;}
         </div>
 
         <div class="kpi-row">
-          <div class="kpi-card kpi-total">
+          <div class="kpi-card kpi-total kpi-clickable" id="kpi-total-card" title="Ver solo estos expedientes">
             <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4"/><path d="M9 3v6h6"/><path d="M9 3l11 11"/></svg></div>
             <div class="kpi-info">
               <div class="kpi-value" id="kpi-total">0</div>
               <div class="kpi-label" id="kpi-total-label">Total Expedientes</div>
             </div>
           </div>
-          <div class="kpi-card kpi-proceso">
-            <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
+          <div class="kpi-card kpi-proceso kpi-clickable" id="kpi-proceso-card" title="Ver solo estos expedientes">
+            <div class="kpi-icon" id="kpi-proceso-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></div>
             <div class="kpi-info">
               <div class="kpi-value" id="kpi-proceso">0</div>
               <div class="kpi-label" id="kpi-proceso-label">En Proceso</div>
             </div>
           </div>
-          <div class="kpi-card kpi-seguimiento hidden-perfil" id="kpi-seguimiento-card">
+          <div class="kpi-card kpi-seguimiento kpi-clickable hidden-perfil" id="kpi-seguimiento-card" title="Ver solo estos expedientes">
             <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></div>
             <div class="kpi-info">
               <div class="kpi-value" id="kpi-seguimiento">0</div>
               <div class="kpi-label">Seguimiento Proveedor</div>
+            </div>
+          </div>
+          <div class="kpi-card kpi-cita kpi-clickable hidden-perfil" id="kpi-cita-card" title="Ver solo estos expedientes">
+            <div class="kpi-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+            <div class="kpi-info">
+              <div class="kpi-value" id="kpi-cita">0</div>
+              <div class="kpi-label">Seguimiento de Cita</div>
             </div>
           </div>
         </div>
@@ -1038,13 +1051,13 @@ function celdaExpediente(numeroExpediente, claseLink) {
   if (esPerfilAdministrador()) return escapeHtml(String(numeroExpediente));
   return `<a href="#" class="${claseLink}" data-exp="${numeroExpediente}">${numeroExpediente}</a>`;
 }
-function toast(message, type) {
+function toast(message, type, duracionMs) {
   const container = document.getElementById("toast-container");
   const el = document.createElement("div");
   el.className = "toast" + (type ? " " + type : "");
   el.textContent = message;
   container.appendChild(el);
-  setTimeout(() => el.remove(), 4000);
+  setTimeout(() => el.remove(), duracionMs || 4000);
 }
 
 /* =========================================================
@@ -1325,6 +1338,7 @@ function aplicarPermisosPerfil() {
 
   // KPI adicional "Seguimiento Proveedor", solo para Cabina.
   document.getElementById("kpi-seguimiento-card").classList.toggle("hidden-perfil", !cabina);
+  document.getElementById("kpi-cita-card").classList.toggle("hidden-perfil", !cabina);
   document.getElementById("pa-kpi-seguimiento-card").classList.toggle("hidden-perfil", !cabina);
 
   // Administrador también puede ver Expedientes (para buscar/seleccionar y
@@ -1355,6 +1369,7 @@ function logout(silent) {
   sessionStorage.removeItem("rfc");
   sessionStorage.removeItem("nombre");
   sessionStorage.removeItem("perfil");
+  detenerPollingExpedientes();
   resetEstadoExpedientes();
   document.getElementById("view-app").classList.add("hidden");
   document.getElementById("view-login").classList.remove("hidden");
@@ -1369,6 +1384,10 @@ async function showApp() {
   document.getElementById("nav-user").textContent =
     "Sesión: " + sessionStorage.getItem("nombre") + (perfilNombre ? " (" + perfilNombre + ")" : "");
   aplicarPermisosPerfil();
+  // Para que a Proveedor le vayan apareciendo solos los expedientes nuevos
+  // que Cabina le mande (y a Cabina/Admin se les actualice lo que ya ven)
+  // mientras tengan el portal abierto, sin que nadie tenga que refrescar.
+  iniciarPollingExpedientes();
 
   if (perfilActual() === PERFIL_ADMINISTRADOR) {
     // Administrador entra directo a Usuarios y Accesos (su responsabilidad
@@ -1582,11 +1601,64 @@ function badgeEstatus(estatus) {
   return `<span class="badge ${cls}">${escapeHtml(estatus)}</span>`;
 }
 
+// Al hacer clic en un KPI, se guarda aquí qué estatus(es) representa esa
+// tarjeta y se usa como filtro -- sin necesitar que el combo "Estado" tenga
+// una opción exacta para cada KPI (ej. "En Proceso" es dos estatus a la vez).
+let filtroEstatusKPI = null;
+
 function aplicarFiltroEstatusLocal(rows) {
+  // Proveedor no tiene el combo "Estado" (queda oculto/fijo), pero sí puede
+  // darle clic a sus dos KPI para ver solo "En Espera de Respuesta" o solo
+  // "Seguimiento de Cita" -- sin filtro de KPI activo, ve su bandeja completa.
+  if (esPerfilProveedor()) {
+    const permitido = filtroEstatusKPI || ESTATUS_ACCIONABLES_PROVEEDOR;
+    return rows.filter(r => permitido.includes(r.estatus));
+  }
+  if (filtroEstatusKPI) {
+    return rows.filter(r => filtroEstatusKPI.includes(r.estatus));
+  }
   const val = document.getElementById("f-estatus").value;
   if (!val) return rows;
   return rows.filter(r => r.estatus === val);
 }
+
+function marcarKpiActivo(cardId) {
+  document.querySelectorAll("#screen-expedientes .kpi-card.kpi-clickable").forEach(el => {
+    el.classList.toggle("kpi-activo", el.id === cardId);
+  });
+}
+
+function filtrarExpedientesPorKPI(cardId, estatusList, valorCombo) {
+  filtroEstatusKPI = estatusList;
+  document.getElementById("f-estatus").value = valorCombo || "";
+  expedientesPaginaActual = 1;
+  marcarKpiActivo(cardId);
+  const filtrados = aplicarFiltrosLocales(expedientesActuales);
+  // Para que el siguiente refresco silencioso compare contra lo que se ve
+  // AHORA (con este filtro de KPI), y no avise "nuevos" solo porque cambió
+  // el filtro en vez de haber llegado algo de verdad.
+  actualizarBaselineVisiblesExpedientes(filtrados);
+  renderTablaExpedientes(filtrados);
+  renderKPIs();
+  document.getElementById("tabla-expedientes").scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+document.getElementById("kpi-total-card").addEventListener("click", () => {
+  if (esPerfilCabina()) filtrarExpedientesPorKPI("kpi-total-card", ["Abierto"], "Abierto");
+  else if (esPerfilProveedor()) filtrarExpedientesPorKPI("kpi-total-card", ["En Espera de Respuesta"], "En Espera de Respuesta");
+  else filtrarExpedientesPorKPI("kpi-total-card", null, ""); // Administrador: "Total" = sin filtro
+});
+document.getElementById("kpi-proceso-card").addEventListener("click", () => {
+  if (esPerfilCabina()) filtrarExpedientesPorKPI("kpi-proceso-card", ["En Espera de Respuesta"], "En Espera de Respuesta");
+  else if (esPerfilProveedor()) filtrarExpedientesPorKPI("kpi-proceso-card", ["Seguimiento de Cita"], "Seguimiento de Cita");
+  else filtrarExpedientesPorKPI("kpi-proceso-card", ["En Espera de Respuesta", "Seguimiento Proveedor"], "");
+});
+document.getElementById("kpi-seguimiento-card").addEventListener("click", () => {
+  filtrarExpedientesPorKPI("kpi-seguimiento-card", ["Seguimiento Proveedor"], "Seguimiento Proveedor");
+});
+document.getElementById("kpi-cita-card").addEventListener("click", () => {
+  filtrarExpedientesPorKPI("kpi-cita-card", ["Seguimiento de Cita"], "Seguimiento de Cita");
+});
 
 function aplicarFiltroSubservicioLocal(rows) {
   // TEMPORAL: solo se trabaja con los subservicios del catálogo (a validar con el equipo).
@@ -1619,18 +1691,17 @@ function datosResumenPerfil() {
 function renderKPIs() {
   const rows = datosResumenPerfil();
   if (esPerfilProveedor()) {
-    // Su bandeja real es "En Espera de Respuesta"; el segundo KPI marca
-    // urgencia: cuántos de esos llevan más de un día esperando.
-    const enEspera = rows.filter(r => r.estatus === "En Espera de Respuesta");
-    const hoy = new Date().toISOString().slice(0, 10);
-    document.getElementById("kpi-total").textContent = enEspera.length;
-    document.getElementById("kpi-proceso").textContent = enEspera.filter(r => r.fecha_apertura_servicio < hoy).length;
+    // Sus dos tipos de pendientes: los que le mandaron a él y los que ya
+    // regresó Cabina con la cita aceptada (pago anticipado).
+    document.getElementById("kpi-total").textContent = rows.filter(r => r.estatus === "En Espera de Respuesta").length;
+    document.getElementById("kpi-proceso").textContent = rows.filter(r => r.estatus === "Seguimiento de Cita").length;
     return;
   }
   if (esPerfilCabina()) {
     document.getElementById("kpi-total").textContent = rows.filter(r => r.estatus === "Abierto").length;
     document.getElementById("kpi-proceso").textContent = rows.filter(r => r.estatus === "En Espera de Respuesta").length;
     document.getElementById("kpi-seguimiento").textContent = rows.filter(r => r.estatus === "Seguimiento Proveedor").length;
+    document.getElementById("kpi-cita").textContent = rows.filter(r => r.estatus === "Seguimiento de Cita").length;
     return;
   }
   // Perfil sin reglas propias todavía (ej. Administrador): comportamiento genérico.
@@ -1639,16 +1710,29 @@ function renderKPIs() {
     rows.filter(r => ["En Espera de Respuesta", "Seguimiento Proveedor"].includes(r.estatus)).length;
 }
 
+const ICONO_KPI_RELOJ = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`;
+const ICONO_KPI_CALENDARIO = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>`;
+
 function aplicarEtiquetasKPI() {
+  const tarjetaProceso = document.getElementById("kpi-proceso-card");
+  const iconoProceso = document.getElementById("kpi-proceso-icon");
   if (esPerfilProveedor()) {
-    document.getElementById("kpi-total-label").textContent = "Esperando tu respuesta";
-    document.getElementById("kpi-proceso-label").textContent = "Con más de 1 día esperando";
-  } else if (esPerfilCabina()) {
-    document.getElementById("kpi-total-label").textContent = "Expedientes sin asignar";
-    document.getElementById("kpi-proceso-label").textContent = "En espera de respuesta";
+    document.getElementById("kpi-total-label").textContent = "En Espera de Respuesta";
+    document.getElementById("kpi-proceso-label").textContent = "Seguimiento de Cita";
+    // Mismo color/ícono que la tarjeta "Seguimiento de Cita" de Cabina --
+    // el mismo concepto debe verse igual sin importar el perfil.
+    tarjetaProceso.classList.add("kpi-estilo-cita");
+    iconoProceso.innerHTML = ICONO_KPI_CALENDARIO;
   } else {
-    document.getElementById("kpi-total-label").textContent = "Total Expedientes";
-    document.getElementById("kpi-proceso-label").textContent = "En Proceso";
+    tarjetaProceso.classList.remove("kpi-estilo-cita");
+    iconoProceso.innerHTML = ICONO_KPI_RELOJ;
+    if (esPerfilCabina()) {
+      document.getElementById("kpi-total-label").textContent = "Expedientes sin asignar";
+      document.getElementById("kpi-proceso-label").textContent = "En espera de respuesta";
+    } else {
+      document.getElementById("kpi-total-label").textContent = "Total Expedientes";
+      document.getElementById("kpi-proceso-label").textContent = "En Proceso";
+    }
   }
 }
 
@@ -1803,6 +1887,12 @@ function validarRangoFechas(fechaInicioStr, fechaFinStr) {
   return null;
 }
 
+// Guarda la última búsqueda que el usuario realmente mandó (con "Buscar" o
+// al entrar a la pantalla), para que el refresco silencioso en segundo
+// plano (ver iniciarPollingExpedientes) repita EXACTAMENTE esa búsqueda sin
+// importar qué esté a medio escribir en los campos del filtro en ese momento.
+let ultimaBusquedaParams = null;
+
 async function loadExpedientes() {
   const clExpediente = document.getElementById("f-expediente").value;
   const fechaInicio = document.getElementById("f-fechaInicio").value;
@@ -1828,28 +1918,91 @@ async function loadExpedientes() {
     cl_subservicio: clExpediente ? undefined : (document.getElementById("f-subservicio").value || undefined),
     cuentas: clExpediente ? undefined : (cuentasSel.length ? cuentasSel : undefined),
   };
+  ultimaBusquedaParams = params;
+  // Una búsqueda explícita (clic en "Buscar") manda sobre cualquier filtro
+  // rápido que se haya activado antes haciendo clic en un KPI.
+  filtroEstatusKPI = null;
+  marcarKpiActivo(null);
+  expedientesPaginaActual = 1;
 
   const tbody = document.getElementById("tabla-expedientes-body");
   tbody.innerHTML = `<tr><td colspan="17" class="spinner-row">Cargando…</td></tr>`;
+  await ejecutarBusquedaExpedientes(params, { silencioso: false });
+}
 
+// Qué expedientes estaban visibles en pantalla la última vez que se revisó
+// (ver notificarExpedientesNuevos) -- null = todavía no hay una base con
+// qué comparar (primera carga), para no avisar "nuevos" de algo que en
+// realidad el usuario está viendo por primera vez.
+let idsVisiblesAnterioresExpedientes = null;
+
+function actualizarBaselineVisiblesExpedientes(filtrados) {
+  idsVisiblesAnterioresExpedientes = new Set(filtrados.map(r => r.expediente));
+}
+
+function notificarExpedientesNuevos(nuevos) {
+  const numeros = nuevos.map(r => r.expediente);
+  const mensaje = numeros.length === 1
+    ? `Nuevo expediente: ${numeros[0]}.`
+    : numeros.length <= 4
+      ? `Llegaron ${numeros.length} expedientes nuevos: ${numeros.join(", ")}.`
+      : `Llegaron ${numeros.length} expedientes nuevos.`;
+  // Un poco más de tiempo que el toast normal (4s) -- que a uno le dé
+  // tiempo de notar que llegó algo, sin quedarse pegado en pantalla.
+  toast(mensaje, "success", 6000);
+}
+
+async function ejecutarBusquedaExpedientes(params, { silencioso }) {
   try {
     const data = await api("/expedientes", { params });
     data.sort((a, b) => a.fecha_apertura_servicio.localeCompare(b.fecha_apertura_servicio));
     expedientesActuales = data;
-    expedientesPaginaActual = 1;
     actualizarOpcionesEntidad();
     // Igual que con las fechas: al buscar por clave, tampoco se aplican los
     // filtros locales (Estado/Subservicio/Entidad) -- se muestra tal cual.
     // Excepción: Proveedor solo puede ver "En Espera de Respuesta" o
     // "Seguimiento Proveedor" (los suyos), sin importar la clave buscada.
-    const filtrados = clExpediente ? data.filter(r => proveedorPuedeVer(r.estatus)) : aplicarFiltrosLocales(data);
+    const filtrados = params.cl_expediente ? data.filter(r => proveedorPuedeVer(r.estatus)) : aplicarFiltrosLocales(data);
+
+    // Avisar de expedientes nuevos SOLO en el refresco silencioso (no en una
+    // búsqueda que el propio usuario acaba de pedir) y solo si ya había algo
+    // con qué comparar (si no, sería la primera vez que ve esta pantalla).
+    if (silencioso && idsVisiblesAnterioresExpedientes) {
+      const nuevos = filtrados.filter(r => !idsVisiblesAnterioresExpedientes.has(r.expediente));
+      if (nuevos.length > 0) notificarExpedientesNuevos(nuevos);
+    }
+    actualizarBaselineVisiblesExpedientes(filtrados);
+
     renderTablaExpedientes(filtrados);
     renderKPIs();
     actualizarNotificacionAtendidos();
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="17" class="empty">${escapeHtml(err.message)}</td></tr>`;
+    if (silencioso) {
+      console.warn("No se pudo refrescar Expedientes en segundo plano:", err.message);
+      return;
+    }
+    document.getElementById("tabla-expedientes-body").innerHTML =
+      `<tr><td colspan="17" class="empty">${escapeHtml(err.message)}</td></tr>`;
     toast(err.message, "error");
   }
+}
+
+const INTERVALO_POLLING_EXPEDIENTES_MS = 20000; // 20s: se sienta "en vivo" sin saturar al servidor
+let pollingExpedientesId = null;
+
+function iniciarPollingExpedientes() {
+  if (pollingExpedientesId) return; // ya está corriendo
+  pollingExpedientesId = setInterval(() => {
+    if (!ultimaBusquedaParams) return; // todavía no se ha hecho ninguna búsqueda
+    ejecutarBusquedaExpedientes(ultimaBusquedaParams, { silencioso: true });
+  }, INTERVALO_POLLING_EXPEDIENTES_MS);
+}
+
+function detenerPollingExpedientes() {
+  if (!pollingExpedientesId) return;
+  clearInterval(pollingExpedientesId);
+  pollingExpedientesId = null;
+  ultimaBusquedaParams = null;
 }
 
 document.getElementById("btn-buscar-expedientes").addEventListener("click", loadExpedientes);
@@ -1928,6 +2081,8 @@ function resetEstadoExpedientes() {
   expedientesSeleccionados.clear();
   expedientesPaginaActual = 1;
   cuentasSeleccionadas.clear();
+  filtroEstatusKPI = null;
+  idsVisiblesAnterioresExpedientes = null;
   document.getElementById("f-expediente").value = "";
   document.getElementById("f-fechaInicio").value = "";
   document.getElementById("f-fechaFin").value = "";

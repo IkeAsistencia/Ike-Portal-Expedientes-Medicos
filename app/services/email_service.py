@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Optional
 
 from app.config import get_settings
 
@@ -145,7 +146,7 @@ MENSAJES_REGRESO_POR_ESTATUS = {
 
 
 def enviar_notificacion_regreso(
-    cl_expediente: int, cuenta: str, nombre_paciente: str, comentario: str, usuario_nombre: str,
+    cl_expediente: int, cuenta: str, nombre_paciente: Optional[str], comentario: str, usuario_nombre: str,
     nuevo_estatus: str = "En Espera de Respuesta",
 ) -> ResultadoEnvio:
     """
@@ -159,8 +160,11 @@ def enviar_notificacion_regreso(
     etiqueta_asunto, frase = MENSAJES_REGRESO_POR_ESTATUS.get(
         nuevo_estatus, MENSAJES_REGRESO_POR_ESTATUS["En Espera de Respuesta"]
     )
+    # nombre_paciente puede venir None -- ver nota en app/schemas/expediente.py
+    # (LEFT JOIN en dbo.ObtenerExpedientesSinProveedorMedico); html.escape(None)
+    # truena, así que se cubre aquí también (no solo en quien llama a esta función).
     cuerpo_html = f"""
-    <p>El expediente <b>{cl_expediente}</b> (cuenta: {html.escape(cuenta)}, paciente: {html.escape(nombre_paciente)})
+    <p>El expediente <b>{cl_expediente}</b> (cuenta: {html.escape(cuenta)}, paciente: {html.escape(nombre_paciente or "N/A")})
     {html.escape(frase.format(usuario=usuario_nombre))}.</p>
     <p><b>Comentario:</b></p>
     <p>{html.escape(comentario)}</p>

@@ -267,7 +267,7 @@ def actualizar_estatus(data: EstatusInput, usuario: dict = Depends(usuario_actua
         if encontrados:
             registro = encontrados[0]
             email_service.enviar_notificacion_regreso(
-                data.cl_expediente, registro.cuenta, registro.nombre_paciente, comentario, identificador,
+                data.cl_expediente, registro.cuenta, registro.nombre_paciente or "N/A", comentario, identificador,
                 nuevo_estatus=estatus.value,
             )
 

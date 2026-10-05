@@ -26,9 +26,10 @@ class Expediente(BaseModel):
     tipo_servicio: str
     tipo_subservicio: str
     nombre_titular: Optional[str] = None
-    # Optional: con el JOIN a S2_ReferciasMedicas / s2_cPuntoVision / Check_Up ahora
-    # como LEFT (antes era INNER), un expediente sin fila en la fuente que le toca
-    # según su clSubServicio llega con NombrePaciente en NULL -- ya no es garantizado.
+    # Optional: dbo.ObtenerExpedientesSinProveedorMedico ahora hace LEFT JOIN
+    # (antes INNER) a S2_ReferciasMedicas / s2_cPuntoVision / Check_Up según
+    # el clSubServicio del expediente -- si no hay fila en la fuente que le
+    # toca, estos 4 campos llegan en NULL (ver sql/01_..._Medico.sql).
     nombre_paciente: Optional[str] = None
     especialidad: Optional[str] = None
     entidad: Optional[str] = None
