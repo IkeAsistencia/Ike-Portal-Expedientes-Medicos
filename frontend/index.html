@@ -253,6 +253,17 @@ tbody tr:hover{background:#FAFAFA;}
 #tabla-expedientes thead th,
 #pa-tabla thead th{position:sticky;top:0;z-index:3;}
 
+/* Franjas alternadas (zebra) en renglones pares -- azul pastel del mismo
+   sistema de color (--blue-light, el de los focus rings/KPIs), tenue a
+   propósito para no afectar la lectura. El hover (abajo y arriba) debe
+   seguir ganándole a la franja, por eso este bloque va ANTES de los
+   .col-frozen con hover -- en un empate de especificidad gana el último
+   en el archivo. */
+#tabla-expedientes tbody tr:nth-child(even),
+#pa-tabla tbody tr:nth-child(even){background:var(--blue-light);}
+#tabla-expedientes tbody tr:hover,
+#pa-tabla tbody tr:hover{background:#FAFAFA;}
+
 /* Columnas fijas al hacer scroll horizontal (Fecha Apertura, Expediente, Cuenta, Servicio, Subservicio) */
 #tabla-expedientes th.col-frozen,
 #tabla-expedientes td.col-frozen,
@@ -260,6 +271,8 @@ tbody tr:hover{background:#FAFAFA;}
 #pa-tabla td.col-frozen{position:sticky;z-index:1;background:var(--white);}
 #tabla-expedientes thead th.col-frozen,
 #pa-tabla thead th.col-frozen{background:var(--gray-bg);z-index:4;}
+#tabla-expedientes tbody tr:nth-child(even) td.col-frozen,
+#pa-tabla tbody tr:nth-child(even) td.col-frozen{background:var(--blue-light);}
 #tabla-expedientes tbody tr:hover td.col-frozen,
 #pa-tabla tbody tr:hover td.col-frozen{background:#FAFAFA;}
 #tabla-expedientes .col-frozen-last,
