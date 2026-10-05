@@ -246,13 +246,20 @@ tbody tr:hover{background:#FAFAFA;}
 .empty{text-align:center;color:var(--text-secondary);padding:24px !important;}
 .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
 
+/* Encabezado fijo al hacer scroll vertical (el contenedor que realmente
+   scrollea es .content, no la ventana -- position:sticky se ancla solo a
+   eso). z-index por encima de las filas del cuerpo (incluidas las columnas
+   fijas de abajo) para que el encabezado nunca quede debajo. */
+#tabla-expedientes thead th,
+#pa-tabla thead th{position:sticky;top:0;z-index:3;}
+
 /* Columnas fijas al hacer scroll horizontal (Fecha Apertura, Expediente, Cuenta, Servicio, Subservicio) */
 #tabla-expedientes th.col-frozen,
 #tabla-expedientes td.col-frozen,
 #pa-tabla th.col-frozen,
 #pa-tabla td.col-frozen{position:sticky;z-index:1;background:var(--white);}
 #tabla-expedientes thead th.col-frozen,
-#pa-tabla thead th.col-frozen{background:var(--gray-bg);z-index:2;}
+#pa-tabla thead th.col-frozen{background:var(--gray-bg);z-index:4;}
 #tabla-expedientes tbody tr:hover td.col-frozen,
 #pa-tabla tbody tr:hover td.col-frozen{background:#FAFAFA;}
 #tabla-expedientes .col-frozen-last,
