@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_arranque_settings, get_settings, validar_jwt_secret
+from app.db.connection import calentar_pool
 from app.db.local_store import init_local_db
 from app.graphql.schema import graphql_router
 from app.routers import admin_accesos, auth, catalogos, configuracion_cuentas, expedientes, seguimiento
@@ -15,6 +16,10 @@ async def lifespan(_: FastAPI):
     # que arrancar "funcionando" con un secreto público conocido.
     validar_jwt_secret(get_settings())
     init_local_db()
+    # La primera conexión a SQL Server siempre es "fría" (~0.6-0.9s, ver
+    # app/db/connection.py); mejor que la pague el arranque del proceso y
+    # no el primer usuario real que entre.
+    calentar_pool()
     yield
 
 

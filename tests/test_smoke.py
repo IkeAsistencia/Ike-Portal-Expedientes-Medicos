@@ -139,6 +139,13 @@ def _patch_sql_server(monkeypatch):
     monkeypatch.setattr(auth_repo_module, "call_procedure", fake_call_procedure)
     monkeypatch.setattr(seguimiento_repo_module, "call_procedure_write", fake_call_procedure_write)
 
+    # calentar_pool() del lifespan (app/main.py) intenta una conexión real a
+    # SQL Server al arrancar -- contra el DB_SERVER falso de las pruebas se
+    # iría al timeout en cada test. Esta suite no requiere SQL Server real.
+    import app.main as main_module
+
+    monkeypatch.setattr(main_module, "calentar_pool", lambda: None)
+
     # El rate limiter de /auth (app/core/rate_limit.py) guarda su conteo en
     # memoria del proceso -- sin esto, pruebas que hacen login varias veces
     # (o varias pruebas seguidas con el mismo usuario) chocarían entre sí.
