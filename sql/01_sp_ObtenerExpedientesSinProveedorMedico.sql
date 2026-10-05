@@ -48,6 +48,15 @@
 -- Confirmado contra la base real: 226=93, 377=289, 383=300, 420=3
 -- expedientes abiertos (clEstatus=0) -- antes del INNER a RM, el
 -- listado solo podía mostrar los 93 de Referencias Médicas.
+--
+-- ACTUALIZADO 3: regla de negocio confirmada -- no todo expediente con
+-- clEstatus=0 debe mostrarse en esta pantalla. El flujo normal es que
+-- Core puede asignar proveedor de forma automática poco después de
+-- levantado el expediente; esta pantalla es para escalar manualmente
+-- solo los que YA llevan @horasMinimas (default 8) desde FechaApertura
+-- sin que eso haya pasado. Antes de este cambio, un expediente aparecía
+-- aquí desde el segundo 1 de abierto -- antes de darle chance a la
+-- asignación automática de Core.
 -- =====================================================================
 IF OBJECT_ID('dbo.ObtenerExpedientesSinProveedorMedico', 'P') IS NOT NULL
     DROP PROCEDURE dbo.ObtenerExpedientesSinProveedorMedico;
@@ -59,6 +68,7 @@ CREATE PROCEDURE dbo.ObtenerExpedientesSinProveedorMedico
     @fechaFin      DATE          = NULL,
     @clServicio    INT           = NULL,
     @clSubServicio INT           = NULL,
+    @horasMinimas  INT           = 8,
     @Cuenta        dbo.IntList   READONLY
 AS
 BEGIN
@@ -119,6 +129,11 @@ BEGIN
     LEFT JOIN dbo.CitaxExpediente CE         ON CE.clExpediente = E.clExpediente
     WHERE E.clEstatus = 0   -- fijo: "sin proveedor médico asignado"
         AND (@clExpediente  IS NULL OR E.clExpediente = @clExpediente)
+        -- Le da chance a la asignación automática de Core: solo entra a esta
+        -- pantalla si ya pasaron @horasMinimas desde que se abrió. Búsqueda
+        -- puntual por clave (@clExpediente) ignora esta regla -- es exacta,
+        -- no debe importar cuánto tiempo lleva abierto.
+        AND (@clExpediente  IS NOT NULL OR E.FechaApertura <= DATEADD(HOUR, -@horasMinimas, GETDATE()))
         AND (@fechaInicio   IS NULL OR CAST(E.FechaApertura AS DATE) >= @fechaInicio)
         AND (@fechaFin      IS NULL OR CAST(E.FechaApertura AS DATE) <= @fechaFin)
         AND (@clServicio    IS NULL OR E.clServicio = @clServicio)
