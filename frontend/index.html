@@ -233,6 +233,13 @@ body{
 
 /* ---------- TABLE ---------- */
 .table-wrap{overflow-x:auto;}
+/* .table-wrap ya es, sin querer, un contenedor con scroll vertical propio:
+   con overflow-x:auto y overflow-y en su default (visible), el navegador
+   calcula overflow-y como "auto" también (regla del spec de CSS) -- por
+   eso el encabezado "sticky" se anclaba a esa caja invisible y nunca se
+   veía fijo contra .content. Aquí se vuelve explícito (altura acotada +
+   scroll propio), así el encabezado sí tiene contra qué pegarse. */
+.table-wrap-listado{max-height:60vh;overflow-y:auto;}
 table{width:100%;border-collapse:collapse;font-size:12.5px;}
 thead th{
   text-align:left;padding:10px 12px;background:var(--gray-bg);color:var(--navy);
@@ -602,7 +609,7 @@ tbody tr:hover{background:#FAFAFA;}
               <button class="btn btn-primary" id="btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
             </div>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap table-wrap-listado">
             <table id="tabla-expedientes">
               <thead>
                 <tr>
@@ -737,7 +744,7 @@ tbody tr:hover{background:#FAFAFA;}
               <button class="btn btn-primary" id="pa-btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
             </div>
           </div>
-          <div class="table-wrap">
+          <div class="table-wrap table-wrap-listado">
             <table id="pa-tabla">
               <thead>
                 <tr>
