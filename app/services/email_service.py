@@ -15,12 +15,14 @@ flujo completo (validar selección -> armar plantilla -> "enviar") se
 pueda probar de punta a punta.
 """
 
+import html
 import logging
 import smtplib
 from dataclasses import dataclass, field
 from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from typing import Optional
 
 from app.config import get_settings
 
@@ -115,18 +117,18 @@ def enviar_correo_proveedores(expedientes: list[dict], usuario_nombre: str) -> R
     destinatario = settings.smtp_remitente or "proveedor@pendiente-confirmar.com"
 
     filas = "".join(
-        f"<tr><td>{e['expediente']}</td><td>{e.get('cuenta','')}</td>"
-        f"<td>{e.get('nombre_paciente','')}</td></tr>"
+        f"<tr><td>{e['expediente']}</td><td>{html.escape(str(e.get('cuenta','')))}</td>"
+        f"<td>{html.escape(str(e.get('nombre_paciente','')))}</td></tr>"
         for e in expedientes
     )
-    html = f"""
-    <p>Se solicita atención a los siguientes expedientes (enviado por {usuario_nombre}):</p>
+    cuerpo_html = f"""
+    <p>Se solicita atención a los siguientes expedientes (enviado por {html.escape(usuario_nombre)}):</p>
     <table border="1" cellpadding="6" cellspacing="0">
       <tr><th>Expediente</th><th>Cuenta</th><th>Paciente</th></tr>
       {filas}
     </table>
     """
-    enviado = _enviar_o_simular(destinatario, "Expedientes pendientes de atención", html)
+    enviado = _enviar_o_simular(destinatario, "Expedientes pendientes de atención", cuerpo_html)
     return ResultadoEnvio(enviados=len(expedientes), destinatarios=[destinatario], simulado=not enviado)
 
 
@@ -144,7 +146,7 @@ MENSAJES_REGRESO_POR_ESTATUS = {
 
 
 def enviar_notificacion_regreso(
-    cl_expediente: int, cuenta: str, nombre_paciente: str, comentario: str, usuario_nombre: str,
+    cl_expediente: int, cuenta: str, nombre_paciente: Optional[str], comentario: str, usuario_nombre: str,
     nuevo_estatus: str = "En Espera de Respuesta",
 ) -> ResultadoEnvio:
     """
@@ -158,13 +160,16 @@ def enviar_notificacion_regreso(
     etiqueta_asunto, frase = MENSAJES_REGRESO_POR_ESTATUS.get(
         nuevo_estatus, MENSAJES_REGRESO_POR_ESTATUS["En Espera de Respuesta"]
     )
-    html = f"""
-    <p>El expediente <b>{cl_expediente}</b> (cuenta: {cuenta}, paciente: {nombre_paciente})
-    {frase.format(usuario=usuario_nombre)}.</p>
+    # nombre_paciente puede venir None -- ver nota en app/schemas/expediente.py
+    # (LEFT JOIN en dbo.ObtenerExpedientesSinProveedorMedico); html.escape(None)
+    # truena, así que se cubre aquí también (no solo en quien llama a esta función).
+    cuerpo_html = f"""
+    <p>El expediente <b>{cl_expediente}</b> (cuenta: {html.escape(cuenta)}, paciente: {html.escape(nombre_paciente or "N/A")})
+    {html.escape(frase.format(usuario=usuario_nombre))}.</p>
     <p><b>Comentario:</b></p>
-    <p>{comentario}</p>
+    <p>{html.escape(comentario)}</p>
     """
-    enviado = _enviar_o_simular(destinatario, f"Expediente {cl_expediente} {etiqueta_asunto}", html)
+    enviado = _enviar_o_simular(destinatario, f"Expediente {cl_expediente} {etiqueta_asunto}", cuerpo_html)
     return ResultadoEnvio(enviados=1, destinatarios=[destinatario], simulado=not enviado)
 
 
@@ -180,11 +185,11 @@ def enviar_corte_proveedores(
     destinatario = settings.smtp_remitente or "proveedor@pendiente-confirmar.com"
     etiqueta = "Pago Anticipado" if tipo_expediente == "anticipado" else "Expedientes"
     asunto = f"Corte de {etiqueta} — {cantidad} expediente(s)"
-    html = f"""
-    <p>Corte de {cantidad} expediente(s) de {etiqueta}, generado por {usuario_nombre}.</p>
+    cuerpo_html = f"""
+    <p>Corte de {cantidad} expediente(s) de {etiqueta}, generado por {html.escape(usuario_nombre)}.</p>
     <p>Se adjunta el detalle en Excel.</p>
     """
-    enviado = _enviar_o_simular_con_adjunto(destinatario, asunto, html, archivo_nombre, archivo_bytes)
+    enviado = _enviar_o_simular_con_adjunto(destinatario, asunto, cuerpo_html, archivo_nombre, archivo_bytes)
     return ResultadoEnvio(enviados=cantidad, destinatarios=[destinatario], simulado=not enviado)
 
 
@@ -199,13 +204,13 @@ def enviar_alerta_sin_respuesta(expedientes: list[dict], color: str, umbral_hora
     color_css = "#CA5010" if color == "naranja" else "#D13438"
 
     filas = "".join(
-        f"<tr><td>{e['expediente']}</td><td>{e.get('cuenta','')}</td>"
-        f"<td>{e.get('nombre_paciente','')}</td>"
+        f"<tr><td>{e['expediente']}</td><td>{html.escape(str(e.get('cuenta','')))}</td>"
+        f"<td>{html.escape(str(e.get('nombre_paciente','')))}</td>"
         f"<td style='color:{color_css};font-weight:bold;'>{e['fecha_apertura']}</td>"
         f"<td>{e['horas_sin_respuesta']}</td></tr>"
         for e in expedientes
     )
-    html = f"""
+    cuerpo_html = f"""
     <p>Los siguientes expedientes llevan más de {umbral_horas} horas sin respuesta del proveedor:</p>
     <table border="1" cellpadding="6" cellspacing="0">
       <tr><th>Expediente</th><th>Cuenta</th><th>Paciente</th>
@@ -214,5 +219,5 @@ def enviar_alerta_sin_respuesta(expedientes: list[dict], color: str, umbral_hora
     </table>
     """
     asunto = f"[{'URGENTE' if color == 'rojo' else 'Alerta'}] Expedientes sin respuesta del proveedor"
-    enviado = _enviar_o_simular(destinatario, asunto, html)
+    enviado = _enviar_o_simular(destinatario, asunto, cuerpo_html)
     return ResultadoEnvio(enviados=len(expedientes), destinatarios=[destinatario], simulado=not enviado)

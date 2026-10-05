@@ -22,15 +22,47 @@ from app.config import get_settings
 
 ParamsType = Union[dict[str, Any], tuple, list, None]
 
+# Pooling de conexiones: ya es el default de pyodbc, pero se deja explícito
+# a propósito (documentado, no un default silencioso que alguien más podría
+# desactivar sin darse cuenta). Esto delega el pool al ODBC Driver Manager:
+# conn.close() no cierra la conexión física, la regresa al pool para la
+# siguiente llamada con el mismo connection string. Medido contra la base
+# de desarrollo: primera conexión del proceso ~0.6-0.9s (fría), siguientes
+# ~0.05s (pooled) -- incluso con varias conexiones concurrentes.
+pyodbc.pooling = True
+
 
 @contextmanager
-def get_connection():
+def get_connection(timeout: Optional[int] = None):
     settings = get_settings()
-    conn = pyodbc.connect(settings.connection_string)
+    conn = pyodbc.connect(settings.connection_string, timeout=timeout or 0)
     try:
         yield conn
     finally:
         conn.close()
+
+
+def calentar_pool() -> None:
+    """
+    Llamar al arrancar la app (ver app/main.py: lifespan) para que la
+    primera conexión "fría" (~0.6-0.9s) la pague el arranque del proceso,
+    no el primer usuario real. Si la base no está disponible en ese
+    momento, solo se registra -- no debe tumbar el arranque de la app por
+    un problema de red pasajero; cada endpoint ya valida la conexión por
+    su cuenta en cada request.
+
+    timeout=5 a propósito: sin esto, contra un host inalcanzable (ej. en
+    pruebas, donde DB_SERVER es un nombre falso) pyodbc.connect() se queda
+    esperando el timeout default del driver ODBC (puede ser muy largo) y
+    el arranque de la app se cuelga en vez de solo seguir sin pool tibio.
+    """
+    import logging
+
+    try:
+        with get_connection(timeout=5) as conn:
+            conn.cursor().execute("SELECT 1")
+    except Exception as e:
+        logging.getLogger(__name__).warning("No se pudo calentar el pool de conexiones a SQL Server: %s", e)
 
 
 def _build_call(sp_name: str, params: ParamsType) -> tuple[str, list[Any]]:

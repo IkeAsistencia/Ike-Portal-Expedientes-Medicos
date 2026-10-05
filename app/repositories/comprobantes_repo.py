@@ -3,6 +3,23 @@ from app.db.local_store import ahora_local, get_local_connection
 TAMANO_MAXIMO_BYTES = 5 * 1024 * 1024  # 5 MB
 TIPOS_MIME_PERMITIDOS = {"application/pdf", "image/jpeg", "image/png"}
 
+# Primeros bytes ("magic numbers") reales de cada tipo permitido -- el
+# Content-Type de un UploadFile lo manda el cliente (header HTTP), nadie
+# verifica que el contenido real corresponda. Sin esto, se podía subir
+# cualquier archivo con el Content-Type de la lista blanca puesto a mano.
+_FIRMAS_POR_TIPO = {
+    "application/pdf": (b"%PDF",),
+    "image/jpeg": (b"\xff\xd8\xff",),
+    "image/png": (b"\x89PNG\r\n\x1a\n",),
+}
+
+
+def contenido_coincide_con_tipo(contenido: bytes, tipo_mime: str) -> bool:
+    firmas = _FIRMAS_POR_TIPO.get(tipo_mime)
+    if not firmas:
+        return False
+    return any(contenido.startswith(firma) for firma in firmas)
+
 
 def existe_comprobante(cl_expediente: int) -> bool:
     with get_local_connection() as conn:
