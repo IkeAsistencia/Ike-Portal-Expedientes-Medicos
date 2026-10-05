@@ -7,7 +7,8 @@ class LoginInput(BaseModel):
     usuario: str = Field(..., min_length=1, max_length=15)
     password: str = Field(..., min_length=1, max_length=20)
     # NOTA: el SP legado (@pContraseña varchar(10)) solo soporta 10
-    # caracteres; ver sql/05_login_sp_EncriptDesEncriptPassword_NOTAS.md.
+    # caracteres -- ver LARGO_MAXIMO_PASSWORD_SP en auth_repo.py, que
+    # rechaza explícito cualquier contraseña más larga en vez de truncar.
 
 
 class LoginResponse(BaseModel):

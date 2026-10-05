@@ -104,10 +104,10 @@ def rfc_login(data: RfcLoginInput, request: Request):
 
 def _obtener_host_servidor() -> str:
     """
-    Ver sql/05_..._NOTAS.md: un API web no puede obtener el hostname
-    real del equipo del usuario final, solo el del servidor donde
-    corre la app. Si necesitas el hostname real del cliente, hay que
-    capturarlo en el navegador (JS) y mandarlo en el body del login.
+    Un API web no puede obtener el hostname real del equipo del usuario
+    final, solo el del servidor donde corre la app. Si necesitas el
+    hostname real del cliente, hay que capturarlo en el navegador (JS)
+    y mandarlo en el body del login.
     """
     return socket.gethostname()[:20]
 

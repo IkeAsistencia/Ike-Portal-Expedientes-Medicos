@@ -2,9 +2,8 @@
 -- SP: dbo.ObtenerServicioMedico
 -- Pantalla: Expedientes (combo Subservicio en Filtros)
 --
--- Reemplaza el uso del SP legado dbo.sp_GetSubServicios2 (ver
--- 08_subservicios_sp_GetSubServicios2_NOTAS.md — DEPRECADO desde este
--- script). Ese SP legado filtraba por cobertura de una cuenta
+-- Reemplaza el uso del SP legado dbo.sp_GetSubServicios2 -- DEPRECADO
+-- desde este script. Ese SP legado filtraba por cobertura de una cuenta
 -- específica (@clCuenta), lo cual no aplica aquí: el filtro Cuenta de
 -- la pantalla Expedientes permite elegir varias cuentas a la vez, así
 -- que el catálogo de Subservicio no puede depender de una sola cuenta.

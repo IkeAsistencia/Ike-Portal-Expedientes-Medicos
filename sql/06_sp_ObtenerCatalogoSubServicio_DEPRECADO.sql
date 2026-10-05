@@ -2,11 +2,11 @@
 -- ⚠️ DEPRECADO — YA NO SE USA, NO EJECUTAR
 -- =====================================================================
 -- Este SP se creó cuando aún no sabíamos que el catálogo real de
--- subservicios se obtiene con el SP legado dbo.sp_GetSubServicios2
+-- subservicios se obtenía con el SP legado dbo.sp_GetSubServicios2
 -- (recibe @clServicio). Se conserva este archivo solo como referencia
--- histórica. El combo Subservicio de la pantalla Expedientes ahora
--- llama directamente a dbo.sp_GetSubServicios2 — ver
--- 08_subservicios_sp_GetSubServicios2_NOTAS.md.
+-- histórica. El combo Subservicio de la pantalla Expedientes ya no usa
+-- ninguno de los dos -- ahora usa dbo.ObtenerServicioMedico (ver
+-- 07_sp_ObtenerServicioMedico.sql), que tampoco depende de la cuenta.
 -- =====================================================================
 
 -- =====================================================================
