@@ -1,7 +1,10 @@
+import mimetypes
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.config import get_arranque_settings, get_settings, validar_jwt_secret
 from app.db.connection import calentar_pool
@@ -35,10 +38,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS: por default abierto ("*", ver CORS_ALLOWED_ORIGINS en .env) para poder
-# probar el frontend (frontend/index.html, abierto como archivo local o
-# servido en otro puerto) contra esta API en desarrollo. ANTES de pasar a un
-# ambiente real, pon la URL exacta donde viva el frontend definitivo.
+# CORS: el portal ya lo sirve esta misma app (ver el final de este archivo),
+# así que no lo necesita. Se deja por si algún cliente externo consume la API
+# desde otro origen; por default abierto ("*", ver CORS_ALLOWED_ORIGINS en
+# .env) -- ANTES de pasar a un ambiente real, restríngelo.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_arranque_settings().cors_allowed_origins_list,
@@ -71,3 +74,15 @@ app.include_router(graphql_router, prefix="/graphql", tags=["GraphQL"])
 @app.get("/health", tags=["Salud"])
 def health():
     return {"status": "ok"}
+
+
+# Frontend del portal (frontend/index.html + css/ + js/), servido en "/".
+# Va al FINAL a propósito: un mount en "/" atrapa cualquier ruta, así que
+# todos los endpoints de arriba deben estar registrados antes.
+# En Windows, el registro a veces asocia .js a "text/plain" y el navegador se
+# niega a cargarlo como módulo (sobre todo con X-Content-Type-Options:
+# nosniff), por eso se fijan los tipos explícitamente.
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
+FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

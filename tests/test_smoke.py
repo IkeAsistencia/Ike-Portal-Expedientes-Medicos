@@ -221,6 +221,24 @@ def test_health(client):
     assert r.json() == {"status": "ok"}
 
 
+def test_portal_se_sirve_en_la_raiz(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert '<script type="module" src="js/app.js">' in r.text
+
+    # Los módulos deben salir como JavaScript: con "nosniff", un .js servido
+    # como text/plain (pasa en algunos Windows) el navegador no lo ejecuta.
+    r = client.get("/js/app.js")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("text/javascript")
+
+
+def test_portal_no_tapa_los_endpoints(client):
+    # El mount del frontend en "/" va al final: las rutas de la API ganan.
+    r = client.get("/expedientes")
+    assert r.status_code == 401
+
+
 def test_login_ok(client):
     r = _login(client)
     assert r.status_code == 200, r.text

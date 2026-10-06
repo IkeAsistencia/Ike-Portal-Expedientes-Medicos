@@ -122,8 +122,9 @@ class ArranqueSettings(BaseSettings):
     sin tener todavía un .env completo (ej. pytest recolectando las pruebas).
     """
 
-    # "*" (default) permite cualquier origen -- cómodo mientras frontend/index.html
-    # se abre como archivo local o se prueba desde otro puerto, pero NUNCA debe
+    # El portal (frontend/) lo sirve esta misma app, así que no necesita CORS;
+    # esto solo aplica a clientes externos que consuman la API desde otro
+    # origen. "*" (default) permite cualquier origen, pero NUNCA debe
     # quedar así en producción: pon aquí la URL exacta del frontend definitivo
     # (ej. "https://expedientes.ike.local", separadas por coma si son varias)
     # en cuanto se decida dónde vive.
