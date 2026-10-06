@@ -80,11 +80,11 @@ let filtroEstatusKPI = null;
 let ultimaBusquedaParams = null;
 let pollingId = null;
 
-// Qué expedientes estaban visibles en pantalla la última vez que se revisó
-// (ver notificarExpedientesNuevos) -- null = todavía no hay una base con
-// qué comparar (primera carga), para no avisar "nuevos" de algo que en
-// realidad el usuario está viendo por primera vez.
-let idsVisiblesAnteriores = null;
+// Qué expedientes estaban visibles en pantalla la última vez que se revisó,
+// y con qué estatus (ver notificarExpedientesNuevos / notificarRespuestaProveedor)
+// -- null = todavía no hay una base con qué comparar (primera carga), para no
+// avisar "nuevos" de algo que en realidad el usuario está viendo por primera vez.
+let estatusVisiblesAnteriores = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -294,7 +294,7 @@ async function loadExpedientes() {
 }
 
 function actualizarBaselineVisibles(filtrados) {
-  idsVisiblesAnteriores = new Set(filtrados.map(r => r.expediente));
+  estatusVisiblesAnteriores = new Map(filtrados.map(r => [r.expediente, r.estatus]));
 }
 
 function notificarExpedientesNuevos(nuevos) {
@@ -306,6 +306,19 @@ function notificarExpedientesNuevos(nuevos) {
       : `Llegaron ${numeros.length} expedientes nuevos.`;
   // Un poco más de tiempo que el toast normal (4s) -- que a uno le dé
   // tiempo de notar que llegó algo, sin quedarse pegado en pantalla.
+  toast(mensaje, "success", 6000);
+}
+
+// Aviso a Cabina cuando un Proveedor responde (el expediente ya estaba en
+// pantalla, pero cambió a "Seguimiento Proveedor") -- antes solo se avisaba
+// de expedientes nuevos, no de este cambio de estatus.
+function notificarRespuestaProveedor(respondidos) {
+  const numeros = respondidos.map(r => r.expediente);
+  const mensaje = numeros.length === 1
+    ? `El proveedor respondió: expediente ${numeros[0]}.`
+    : numeros.length <= 4
+      ? `El proveedor respondió ${numeros.length} expedientes: ${numeros.join(", ")}.`
+      : `El proveedor respondió ${numeros.length} expedientes.`;
   toast(mensaje, "success", 6000);
 }
 
@@ -324,9 +337,18 @@ async function ejecutarBusqueda(params, { silencioso }) {
     // Avisar de expedientes nuevos SOLO en el refresco silencioso (no en una
     // búsqueda que el propio usuario acaba de pedir) y solo si ya había algo
     // con qué comparar (si no, sería la primera vez que ve esta pantalla).
-    if (silencioso && idsVisiblesAnteriores) {
-      const nuevos = filtrados.filter(r => !idsVisiblesAnteriores.has(r.expediente));
+    if (silencioso && estatusVisiblesAnteriores) {
+      const nuevos = filtrados.filter(r => !estatusVisiblesAnteriores.has(r.expediente));
       if (nuevos.length > 0) notificarExpedientesNuevos(nuevos);
+
+      if (esPerfilCabina() || esPerfilAdministrador()) {
+        const respondidos = filtrados.filter(r =>
+          r.estatus === "Seguimiento Proveedor" &&
+          estatusVisiblesAnteriores.has(r.expediente) &&
+          estatusVisiblesAnteriores.get(r.expediente) !== "Seguimiento Proveedor"
+        );
+        if (respondidos.length > 0) notificarRespuestaProveedor(respondidos);
+      }
     }
     actualizarBaselineVisibles(filtrados);
 
@@ -517,7 +539,7 @@ export function reiniciar() {
   seleccionados.clear();
   paginaActual = 1;
   filtroEstatusKPI = null;
-  idsVisiblesAnteriores = null;
+  estatusVisiblesAnteriores = null;
   limpiarFiltros();
   $("f-estatus").value = "";
   $("tabla-expedientes-body").innerHTML = "";
