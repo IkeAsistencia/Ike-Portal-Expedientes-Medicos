@@ -92,8 +92,15 @@ Esto levanta el portal en `http://localhost:8000` con datos inventados (no
 toca SQL Server para nada). Ábrelo en tu navegador en esa dirección e
 inicia sesión con:
 
-- Usuario: `ijimenez`
-- Contraseña: `clave123`
+| RFC | Perfil |
+|---|---|
+| `ADMI000001` | Administrador |
+| `CABI000001` | Cabina |
+| `PROV000001` | Proveedor (entidad Campeche) |
+
+El servidor los da de alta solo al arrancar. La primera vez que entres con
+cada uno, el portal te pide crear su contraseña (mínimo 8 caracteres, con
+mayúscula, minúscula, número y carácter especial).
 
 Así puedes confirmar que la parte visual y los flujos (filtros, KPIs,
 Seguimiento, Configuración Cuentas) funcionan bien, **antes** de meter la
@@ -107,7 +114,9 @@ Una vez que tengas los scripts SQL corridos y tu `.env` configurado:
 uvicorn app.main:app --reload --port 8000
 ```
 
-y abre `http://localhost:8000` con tu usuario real.
+y abre `http://localhost:8000` con tu usuario real. Si todavía no hay RFC
+dados de alta en tu base local, `python -m scripts.seed_usuarios_prueba`
+crea los mismos tres RFC de prueba de la tabla de arriba.
 
 El frontend es HTML + CSS + JavaScript puro con módulos ES (sin frameworks
 ni build step). Lo sirve el mismo FastAPI (`app/main.py`, al final), así

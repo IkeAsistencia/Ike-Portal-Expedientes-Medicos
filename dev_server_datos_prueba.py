@@ -9,9 +9,12 @@ por separado de si la conexión a SQL Server funciona bien.
 Uso:
     python dev_server_datos_prueba.py
 
-Luego abre http://127.0.0.1:8000 en tu navegador e inicia sesión con:
-    usuario:    ijimenez
-    contraseña: clave123
+Luego abre http://127.0.0.1:8000 en tu navegador e inicia sesión con
+cualquiera de estos RFC de prueba (se dan de alta solos al arrancar; la
+primera vez el portal te pide crear una contraseña):
+    ADMI000001 -> Administrador
+    CABI000001 -> Cabina
+    PROV000001 -> Proveedor (entidad Campeche)
 
 NO usar en producción ni contra la base real — todos los datos que
 regresa este servidor son inventados en este mismo archivo.
@@ -76,6 +79,12 @@ EXPEDIENTES_DEMO = [
 
 def fake_call_procedure(sp_name, params=None):
     if sp_name == "dbo.ObtenerExpedientesSinProveedorMedico":
+        # Igual que el SP real: si se pide un expediente puntual, regresa solo
+        # ése (sin esto, el backend tomaba siempre el primero de la lista, ej.
+        # "Enviar correo" sobre el 1002 terminaba marcando el 1001).
+        cl_expediente = (params or {}).get("clExpediente")
+        if cl_expediente is not None:
+            return [e for e in EXPEDIENTES_DEMO if e["Expediente"] == int(cl_expediente)]
         return EXPEDIENTES_DEMO
     if sp_name == "dbo.ObtenerCatalogoServicio":
         return [{"clServicio": 4, "dsServicio": "Servicio Médico"}]
@@ -120,7 +129,10 @@ seguimiento_repo_module.call_procedure_write = fake_call_procedure_write
 from app.main import app  # noqa: E402
 
 if __name__ == "__main__":
+    from scripts.seed_usuarios_prueba import USUARIOS_PRUEBA, ejecutar as seed_usuarios_prueba
+
+    seed_usuarios_prueba()
     print("Servidor de DATOS DE PRUEBA (sin SQL Server) en http://127.0.0.1:8000")
-    print("Usuario: ijimenez / Contraseña: clave123")
+    print("RFC de prueba: " + ", ".join(f"{rfc} ({nombre})" for rfc, nombre, *_ in USUARIOS_PRUEBA))
     print("Abre http://127.0.0.1:8000 en tu navegador para probarlo.")
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
