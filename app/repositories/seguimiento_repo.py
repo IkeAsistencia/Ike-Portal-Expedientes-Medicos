@@ -3,6 +3,23 @@ from app.db.local_store import ahora_local, get_local_connection
 from app.schemas.seguimiento import SeguimientoInput
 
 
+# Formato del texto que se inserta en Core (dbo.Seguimiento.Observaciones):
+#   "Cabina Médica --> {nombre}\n{comentario}"   (Coordinador de Cabina)
+#   "Proveedores --> {nombre}\n{comentario}"     (Proveedor)
+# y, si el expediente es de pago anticipado, el comentario del Proveedor
+# empieza con "PA-" -- así los identifican en Core.
+ETIQUETA_CORE_CABINA = "Cabina Médica"
+ETIQUETA_CORE_PROVEEDOR = "Proveedores"
+PREFIJO_PAGO_ANTICIPADO = "PA-"
+# Tamaño de @Observaciones en dbo.RegistrarSeguimiento (NVARCHAR(1500)):
+# lo que pase de ahí SQL Server lo cortaría sin avisar.
+LONGITUD_MAXIMA_OBSERVACIONES_CORE = 1500
+
+
+def observaciones_para_core(etiqueta: str, nombre: str, comentario: str) -> str:
+    return f"{etiqueta} --> {nombre}\n{comentario}"
+
+
 def registrar_seguimiento(data: SeguimientoInput, cl_usr_app: int) -> dict:
     """
     Inserta un registro en dbo.Seguimiento (tabla ya existente). El

@@ -123,8 +123,13 @@ def fake_call_procedure(sp_name, params=None):
     raise AssertionError(f"SP inesperado: {sp_name} / params={params}")
 
 
+# Lo que cada prueba mandó a dbo.RegistrarSeguimiento (se limpia en el fixture).
+OBSERVACIONES_ENVIADAS_A_CORE: list[str] = []
+
+
 def fake_call_procedure_write(sp_name, params=None):
     if sp_name == "dbo.RegistrarSeguimiento":
+        OBSERVACIONES_ENVIADAS_A_CORE.append(params["Observaciones"])
         # 42 = viene de una sesión SISE legada (clUsrApp real del token);
         # 0 = placeholder para sesiones RFC (ver CL_USR_APP_PLACEHOLDER_RFC).
         assert params["clUsrApp"] in (42, 0)
@@ -167,6 +172,7 @@ def client(tmp_path, monkeypatch):
     from app.config import get_settings
 
     get_settings.cache_clear()
+    OBSERVACIONES_ENVIADAS_A_CORE.clear()
 
     with TestClient(app) as c:
         yield c
@@ -1069,6 +1075,87 @@ def test_seguimiento_de_cita_flujo_completo(client):
 
     r = client.get("/expedientes", params={"cl_expediente": 1001}, headers=cabina_headers)
     assert r.json()[0]["estatus"] == "Seguimiento Proveedor"
+
+
+COMENTARIO_PROVEEDOR = "Se atendió al paciente correctamente sin ninguna novedad que reportar hoy."
+
+
+def test_core_recibe_encabezado_del_proveedor(client):
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    prov_headers = _auth_headers_proveedor(client)
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    r = client.post(
+        "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": COMENTARIO_PROVEEDOR}, headers=prov_headers
+    )
+    assert r.status_code == 200, r.text
+    assert OBSERVACIONES_ENVIADAS_A_CORE[-1] == f"Proveedores --> Proveedor de Prueba\n{COMENTARIO_PROVEEDOR}"
+
+    # La copia local (la que muestra el portal) va sin el encabezado.
+    r = client.get("/seguimiento/comentarios/1001", headers=prov_headers)
+    assert any(c["comentario"] == COMENTARIO_PROVEEDOR for c in r.json())
+
+
+def test_core_pago_anticipado_lleva_prefijo_pa(client):
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    prov_headers = _auth_headers_proveedor(client)
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=prov_headers)
+
+    # Aunque el comentario llegue sin "PA-" (ej. lo borraron a mano), se agrega.
+    r = client.post(
+        "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": COMENTARIO_PROVEEDOR}, headers=prov_headers
+    )
+    assert r.status_code == 200, r.text
+    assert OBSERVACIONES_ENVIADAS_A_CORE[-1] == f"Proveedores --> Proveedor de Prueba\nPA-{COMENTARIO_PROVEEDOR}"
+
+
+def test_core_pago_anticipado_no_duplica_prefijo(client):
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    prov_headers = _auth_headers_proveedor(client)
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=prov_headers)
+    r = client.post(
+        "/seguimiento/actualizar",
+        json={"cl_expediente": 1001, "comentario": "PA-" + COMENTARIO_PROVEEDOR},
+        headers=prov_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert OBSERVACIONES_ENVIADAS_A_CORE[-1] == f"Proveedores --> Proveedor de Prueba\nPA-{COMENTARIO_PROVEEDOR}"
+
+
+def test_core_recibe_encabezado_del_coordinador(client):
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    cabina_headers = _auth_headers_cabina(client)
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.SEGUIMIENTO_PROVEEDOR, "RFCPROVTEST")
+    r = client.post(
+        "/seguimiento/estatus",
+        json={"cl_expediente": 1001, "estatus": "En Espera de Respuesta", "comentario": "Falta el número de póliza."},
+        headers=cabina_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert OBSERVACIONES_ENVIADAS_A_CORE[-1] == "Cabina Médica --> Cabina de Prueba\nFalta el número de póliza."
+
+
+def test_core_rechaza_comentario_que_no_cabe_con_encabezado(client):
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    prov_headers = _auth_headers_proveedor(client)
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    r = client.post(
+        "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": "x" * 1500}, headers=prov_headers
+    )
+    assert r.status_code == 400
+    assert "demasiado largo" in r.json()["detail"]
+    assert OBSERVACIONES_ENVIADAS_A_CORE == []
 
 
 def test_configuracion_cuentas_ciclo_completo(client):

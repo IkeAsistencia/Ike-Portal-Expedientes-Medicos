@@ -30,6 +30,24 @@ router = APIRouter(prefix="/seguimiento", tags=["Seguimiento"])
 
 LONGITUD_MINIMA_COMENTARIO_PROVEEDOR = 50
 
+
+def _observaciones_core(etiqueta: str, usuario: dict, comentario: str) -> str:
+    """Arma el texto que se inserta en Core con el encabezado de quién lo
+    escribió (ver seguimiento_repo.observaciones_para_core) y valida que
+    quepa en @Observaciones: si no, se rechaza en vez de que SQL Server lo
+    corte en silencio."""
+    nombre = usuario.get("nombre") or usuario.get("rfc") or usuario.get("usuario") or "desconocido"
+    observaciones = seguimiento_repo.observaciones_para_core(etiqueta, nombre, comentario)
+    sobran = len(observaciones) - seguimiento_repo.LONGITUD_MAXIMA_OBSERVACIONES_CORE
+    if sobran > 0:
+        raise HTTPException(
+            400,
+            f"El comentario es demasiado largo para Core: quítale {sobran} caracter(es). "
+            f"El registro admite {seguimiento_repo.LONGITUD_MAXIMA_OBSERVACIONES_CORE} caracteres "
+            "contando el encabezado con tu nombre.",
+        )
+    return observaciones
+
 # Proveedor solo debe poder leer comprobante/comentarios/pago-anticipado de
 # expedientes que le corresponde atender -- igual que ESTATUS_VISIBLES_PROVEEDOR
 # en frontend/js/core/reglas-expedientes.js. Sin esto, cualquier Proveedor autenticado podía leer
@@ -108,11 +126,24 @@ def actualizar_seguimiento(data: SeguimientoInput, usuario: dict = Depends(usuar
         # Ver nota en accesos_repo.CL_USR_APP_PLACEHOLDER_RFC.
         cl_usr_app = accesos_repo.CL_USR_APP_PLACEHOLDER_RFC
 
-    resultado = seguimiento_repo.registrar_seguimiento(data, cl_usr_app=cl_usr_app)
+    # Pago anticipado: el comentario del Proveedor debe empezar con "PA-"
+    # (así lo identifican en Core). El portal ya lo pone al marcar la
+    # casilla; esto lo garantiza aunque lo borren a mano.
+    if pago_anticipado_repo.es_anticipado(data.cl_expediente) and not comentario_limpio.startswith(
+        seguimiento_repo.PREFIJO_PAGO_ANTICIPADO
+    ):
+        comentario_limpio = seguimiento_repo.PREFIJO_PAGO_ANTICIPADO + comentario_limpio
 
-    # Copia local: Cabina no puede escribir aquí, pero sí necesita poder leerlo.
+    observaciones = _observaciones_core(seguimiento_repo.ETIQUETA_CORE_PROVEEDOR, usuario, comentario_limpio)
+    resultado = seguimiento_repo.registrar_seguimiento(
+        SeguimientoInput(cl_expediente=data.cl_expediente, comentario=observaciones),
+        cl_usr_app=cl_usr_app,
+    )
+
+    # Copia local (sin el encabezado: el portal ya muestra quién lo escribió).
+    # Cabina no puede escribir aquí, pero sí necesita poder leerlo.
     identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
-    seguimiento_repo.guardar_comentario_local(data.cl_expediente, identificador, data.comentario, origen="proveedor")
+    seguimiento_repo.guardar_comentario_local(data.cl_expediente, identificador, comentario_limpio, origen="proveedor")
 
     if es_proveedor:
         estatus_repo.actualizar_estatus(data.cl_expediente, EstatusExpediente.SEGUIMIENTO_PROVEEDOR, identificador)
@@ -257,8 +288,9 @@ def actualizar_estatus(data: EstatusInput, usuario: dict = Depends(usuario_actua
         cl_usr_app = usuario.get("cl_usr_app")
         if cl_usr_app is None:
             cl_usr_app = accesos_repo.CL_USR_APP_PLACEHOLDER_RFC
+        observaciones = _observaciones_core(seguimiento_repo.ETIQUETA_CORE_CABINA, usuario, comentario)
         seguimiento_repo.registrar_seguimiento(
-            SeguimientoInput(cl_expediente=data.cl_expediente, comentario=comentario),
+            SeguimientoInput(cl_expediente=data.cl_expediente, comentario=observaciones),
             cl_usr_app=cl_usr_app,
         )
         seguimiento_repo.guardar_comentario_local(data.cl_expediente, identificador, comentario, origen="cabina")
