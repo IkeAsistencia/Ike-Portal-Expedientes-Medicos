@@ -1930,14 +1930,14 @@ async function loadExpedientes() {
   await ejecutarBusquedaExpedientes(params, { silencioso: false });
 }
 
-// Qué expedientes estaban visibles en pantalla la última vez que se revisó
-// (ver notificarExpedientesNuevos) -- null = todavía no hay una base con
-// qué comparar (primera carga), para no avisar "nuevos" de algo que en
-// realidad el usuario está viendo por primera vez.
+// Qué expedientes estaban visibles en pantalla la última vez que se revisó,
+// y con qué estatus (ver notificarExpedientesNuevos / notificarRespuestaProveedor)
+// -- null = todavía no hay una base con qué comparar (primera carga), para no
+// avisar "nuevos" de algo que en realidad el usuario está viendo por primera vez.
 let idsVisiblesAnterioresExpedientes = null;
 
 function actualizarBaselineVisiblesExpedientes(filtrados) {
-  idsVisiblesAnterioresExpedientes = new Set(filtrados.map(r => r.expediente));
+  idsVisiblesAnterioresExpedientes = new Map(filtrados.map(r => [r.expediente, r.estatus]));
 }
 
 function notificarExpedientesNuevos(nuevos) {
@@ -1949,6 +1949,19 @@ function notificarExpedientesNuevos(nuevos) {
       : `Llegaron ${numeros.length} expedientes nuevos.`;
   // Un poco más de tiempo que el toast normal (4s) -- que a uno le dé
   // tiempo de notar que llegó algo, sin quedarse pegado en pantalla.
+  toast(mensaje, "success", 6000);
+}
+
+// Aviso a Cabina cuando un Proveedor responde (el expediente ya estaba en
+// pantalla, pero cambió a "Seguimiento Proveedor") -- antes solo se avisaba
+// de expedientes nuevos, no de este cambio de estatus.
+function notificarRespuestaProveedor(respondidos) {
+  const numeros = respondidos.map(r => r.expediente);
+  const mensaje = numeros.length === 1
+    ? `El proveedor respondió: expediente ${numeros[0]}.`
+    : numeros.length <= 4
+      ? `El proveedor respondió ${numeros.length} expedientes: ${numeros.join(", ")}.`
+      : `El proveedor respondió ${numeros.length} expedientes.`;
   toast(mensaje, "success", 6000);
 }
 
@@ -1970,6 +1983,15 @@ async function ejecutarBusquedaExpedientes(params, { silencioso }) {
     if (silencioso && idsVisiblesAnterioresExpedientes) {
       const nuevos = filtrados.filter(r => !idsVisiblesAnterioresExpedientes.has(r.expediente));
       if (nuevos.length > 0) notificarExpedientesNuevos(nuevos);
+
+      if (esPerfilCabina() || esPerfilAdministrador()) {
+        const respondidos = filtrados.filter(r =>
+          r.estatus === "Seguimiento Proveedor" &&
+          idsVisiblesAnterioresExpedientes.has(r.expediente) &&
+          idsVisiblesAnterioresExpedientes.get(r.expediente) !== "Seguimiento Proveedor"
+        );
+        if (respondidos.length > 0) notificarRespuestaProveedor(respondidos);
+      }
     }
     actualizarBaselineVisiblesExpedientes(filtrados);
 
