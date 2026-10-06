@@ -37,6 +37,29 @@ corra cada hora (o el intervalo que prefieran):
    archivo agregando `> log.txt 2>&1` si programas la tarea con un `.bat`
    intermedio en vez de invocar python.exe directo).
 
+### Programarlo en Linux (cron)
+
+Igual que en Windows: el script corre, revisa y termina. Agrega esta línea
+al crontab del **mismo usuario que ejecuta el servicio del portal**
+(`crontab -e`), ajustando la ruta del proyecto:
+
+```cron
+0 * * * * cd /opt/portal-expedientes && .venv/bin/python -m jobs.validar_estatus_proveedor >> /var/log/portal-expedientes/job.log 2>&1
+```
+
+- El `cd` es necesario: sin él no encuentra el `.env` ni el paquete `app`.
+- La carpeta del log debe existir y el usuario debe poder escribir en ella
+  (`sudo mkdir -p /var/log/portal-expedientes && sudo chown portal /var/log/portal-expedientes`).
+- Si el servidor no está en la hora de México, agrega `TZ=America/Mexico_City`
+  como primera línea del crontab: el job guarda la fecha de cada alerta
+  con la hora del servidor.
+
+Para probarlo a mano en Linux, desde la carpeta del proyecto:
+
+```bash
+.venv/bin/python -m jobs.validar_estatus_proveedor
+```
+
 ### Por qué un script aparte y no un scheduler dentro de la API
 
 Se recomienda esto (en vez de, por ejemplo, `APScheduler` corriendo
@@ -48,7 +71,7 @@ dentro del proceso de `uvicorn`) porque:
   alertas; un script externo programado una sola vez no tiene ese
   problema.
 - Es más fácil de monitorear/reintentar desde las herramientas propias
-  de Windows que ya usa el equipo.
+  del sistema operativo (Programador de tareas en Windows, cron en Linux).
 
 ### Pendiente de confirmar
 

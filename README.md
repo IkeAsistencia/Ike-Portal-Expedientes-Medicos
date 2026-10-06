@@ -41,7 +41,8 @@ dev_server_datos_prueba.py       # API con datos de ejemplo, para probar el fron
 ## 🔒 Sobre las credenciales de la base de datos
 
 - Ahora se soportan **dos modos** (`DB_AUTH_MODE` en `.env`):
-  - `windows` — Autenticación integrada de Windows, sin usuario/contraseña en ningún archivo.
+  - `windows` — Autenticación integrada de Windows, sin usuario/contraseña
+    en ningún archivo. Solo funciona si la app corre en Windows.
   - `sql` — Autenticación de SQL Server. **Tú llenas `DB_USER`/`DB_PASSWORD`
     directamente en tu `.env` local**, que nunca se comparte por chat ni
     se sube a control de versiones (ver `.gitignore`). Coloca ese `.env`
@@ -50,20 +51,33 @@ dev_server_datos_prueba.py       # API con datos de ejemplo, para probar el fron
 
 ## Requisitos
 
-- Python 3.11+
-- [Microsoft ODBC Driver 17 (o 18) para SQL Server](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server)
+- Python 3.11+ (el desarrollo se hace con 3.13).
+- Driver ODBC de Microsoft para SQL Server:
+  - **Windows:** [Microsoft ODBC Driver 17 o 18 para SQL Server](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) (instalador `.msi`).
+  - **Linux:** `unixODBC` y `msodbcsql18`, desde el [repositorio de paquetes de Microsoft para tu distribución](https://learn.microsoft.com/sql/connect/odbc/linux-mac/installing-the-microsoft-odbc-driver-for-sql-server).
+    En el `.env` usa `DB_DRIVER=ODBC Driver 18 for SQL Server` y `DB_AUTH_MODE=sql`.
 - Acceso de red a SQL Server 2012 de desarrollo, con permisos de
   `EXECUTE` sobre los Stored Procedures usados.
 
 ## Instalación
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate        # Windows
-# source .venv/bin/activate   # Linux/Mac
+**Windows (PowerShell):**
 
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-copy .env.example .env        # Windows (o: cp .env.example .env)
+Copy-Item .env.example .env
+```
+
+**Linux:**
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+chmod 600 .env
 ```
 
 Edita `.env` con los datos reales de tu ambiente de desarrollo (servidor,
@@ -73,6 +87,9 @@ tu propio `JWT_SECRET_KEY`:
 ```bash
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
+
+Con el entorno virtual activado, los comandos `python ...` de este README
+son iguales en Windows y en Linux.
 
 ## Antes de arrancar: correr los scripts SQL
 
@@ -143,6 +160,85 @@ Como usa módulos, **no funciona abriendo `index.html` con doble clic**
   `index.html` (con `data-pantalla="..."`) y su regla en `pantallaPermitida()`.
 
 Documentación interactiva del API (Swagger) en `http://localhost:8000/docs`.
+
+## Despliegue en un servidor
+
+En cualquier sistema operativo, el portal necesita lo mismo:
+
+- **Un solo proceso de uvicorn**, sin `--workers`: el límite de intentos
+  de login vive en la memoria del proceso (ver `app/core/rate_limit.py`).
+- **Un proxy inverso con TLS** delante (uvicorn solo habla HTTP), con
+  uvicorn escuchando en `127.0.0.1:8000` para no exponerlo a la red.
+- **El proxy debe reemplazar `X-Forwarded-For` con la IP real del cliente.**
+  La app cuenta los intentos de login por esa IP; si el proxy no la manda,
+  todos los usuarios aparecen como la misma IP y se bloquean entre sí, y
+  si la agrega al final, un cliente puede falsearla.
+- **Publicarlo en la raíz de un dominio** (`https://expedientes.dominio/`),
+  no bajo una subruta: el portal llama a la API con rutas absolutas.
+- **Hora local de México en el servidor** (`America/Mexico_City`): las
+  fechas que guarda la app (estatus, comentarios, cortes) usan la hora
+  del servidor.
+- **Respaldo de `data/app_local.db`**: es la única copia de accesos,
+  estatus, comentarios, comprobantes y cortes.
+- El job de alertas programado cada hora (ver `jobs/README.md`).
+
+### Windows
+
+Para correrlo como servicio de Windows, una opción es
+[NSSM](https://nssm.cc/), con estos valores:
+
+- Path: `C:\ruta\al\proyecto\.venv\Scripts\python.exe`
+- Startup directory: `C:\ruta\al\proyecto`
+- Arguments: `-m uvicorn app.main:app --host 127.0.0.1 --port 8000`
+
+El proxy con TLS puede ser IIS con *Application Request Routing* (ARR) y
+*URL Rewrite*, reenviando a `http://127.0.0.1:8000`.
+
+### Linux
+
+Servicio systemd (rutas y usuario de ejemplo):
+
+```ini
+# /etc/systemd/system/portal-expedientes.service
+[Unit]
+Description=Portal Expedientes Medicos
+After=network-online.target
+
+[Service]
+User=portal
+WorkingDirectory=/opt/portal-expedientes
+Environment=TZ=America/Mexico_City
+ExecStart=/opt/portal-expedientes/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now portal-expedientes
+journalctl -u portal-expedientes -f     # logs
+```
+
+Proxy nginx:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name expedientes.dominio;
+    # ssl_certificate / ssl_certificate_key del dominio
+    client_max_body_size 6m;   # comprobantes de pago de hasta 5 MB
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        # La app toma la IP del cliente de aquí: se REEMPLAZA con la IP real
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
 
 ## Ejecutar las pruebas (sin necesitar SQL Server)
 
