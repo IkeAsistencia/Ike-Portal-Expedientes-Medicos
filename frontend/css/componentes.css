@@ -1,0 +1,245 @@
+/* Componentes reutilizables: tarjetas, KPIs, filtros, multiselect,
+   tablas, paginador, badges, modales y elementos de las pantallas. */
+
+/* ---------- CARDS / KPIs ---------- */
+.card{
+  background:var(--white);border:1px solid var(--gray-border);border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);margin-bottom:16px;
+}
+.card-header{padding:14px 18px;border-bottom:1px solid var(--gray-border);display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.card-header h2{font-size:14px;margin:0;font-weight:600;color:var(--navy);}
+.card-body{padding:16px 18px;}
+
+.notif-banner{
+  display:flex;align-items:center;gap:10px;background:var(--amber-bg);color:var(--amber);
+  border:1px solid var(--amber);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px;
+}
+.notif-banner svg{width:18px;height:18px;flex-shrink:0;}
+.notif-banner.notif-success{background:var(--green-bg);color:var(--green);border-color:var(--green);font-weight:600;}
+.notif-close{
+  margin-left:auto;background:none;border:none;color:var(--amber);cursor:pointer;font-size:14px;font-weight:700;
+}
+
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));gap:14px;margin-bottom:20px;}
+.kpi-card{
+  background:var(--white);border:1px solid var(--gray-border);border-radius:10px;
+  padding:16px;box-shadow:var(--shadow-sm);display:flex;align-items:center;gap:14px;
+  transition:box-shadow .15s ease, transform .15s ease;
+}
+.kpi-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px);}
+.kpi-card.kpi-clickable{cursor:pointer;}
+.kpi-card.kpi-clickable.kpi-activo{border-color:var(--blue);box-shadow:0 0 0 2px var(--blue-light);}
+.kpi-icon{
+  width:44px;height:44px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.kpi-icon svg{width:22px;height:22px;}
+.kpi-total .kpi-icon{background:var(--blue-light);color:var(--blue-dark);}
+.kpi-proceso .kpi-icon{background:var(--amber-bg);color:var(--amber);}
+.kpi-seguimiento .kpi-icon{background:var(--purple-bg);color:var(--purple);}
+.kpi-cita .kpi-icon{background:var(--teal-bg);color:var(--teal);}
+/* "Seguimiento de Cita" se ve igual sin importar el perfil: mismo color y
+   mismo ícono de calendario que la tarjeta de Cabina (ver aplicarEtiquetasKPI). */
+.kpi-card.kpi-estilo-cita .kpi-icon{background:var(--teal-bg);color:var(--teal);}
+.kpi-info{min-width:0;}
+.kpi-value{font-size:24px;font-weight:700;color:var(--navy);line-height:1.15;}
+.kpi-label{font-size:11.5px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+@media (max-width:480px){ .kpi-row{grid-template-columns:1fr;} }
+
+/* ---------- FILTERS ---------- */
+.filters-grid{display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:12px;align-items:end;}
+.filters-actions{display:flex;gap:8px;margin-top:12px;}
+.field-wide{grid-column:span 2;min-width:320px;}
+@media (max-width:480px){ .field-wide{min-width:0;grid-column:1 / -1;} }
+
+/* ---------- DROPDOWN MULTISELECT (Cuenta) ---------- */
+.ms-dropdown{position:relative;}
+.ms-toggle{
+  width:100%;height:34px;border:1px solid var(--gray-mid);border-radius:4px;
+  background:var(--white);padding:0 10px;font-family:inherit;font-size:13px;color:#201F1E;
+  display:flex;align-items:center;justify-content:space-between;gap:8px;cursor:pointer;text-align:left;
+}
+.ms-toggle:hover{border-color:var(--gray-border);}
+.ms-toggle.open{border-color:var(--blue);box-shadow:0 0 0 2px var(--blue-light);}
+.ms-toggle span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ms-chevron{width:12px;height:12px;flex-shrink:0;color:var(--text-secondary);transition:transform .15s ease;}
+.ms-toggle.open .ms-chevron{transform:rotate(180deg);}
+.ms-panel{
+  position:absolute;top:38px;left:0;right:0;background:var(--white);
+  border:1px solid var(--gray-mid);border-radius:4px;box-shadow:var(--shadow-md);
+  z-index:20;overflow:hidden;
+}
+.ms-search{padding:8px;border-bottom:1px solid var(--gray-border);}
+.ms-search input{
+  width:100%;height:30px;border:1px solid var(--gray-mid);border-radius:4px;
+  padding:0 8px;font-family:inherit;font-size:12.5px;
+}
+.ms-actions{display:flex;justify-content:space-between;padding:6px 10px;border-bottom:1px solid var(--gray-border);}
+.ms-link{background:none;border:none;color:var(--blue);font-size:11.5px;font-weight:600;cursor:pointer;padding:2px;}
+.ms-link:hover{text-decoration:underline;}
+.ms-options{max-height:180px;overflow-y:auto;}
+.ms-option{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;font-size:12.5px;cursor:pointer;
+}
+.ms-option:hover{background:var(--blue-light);}
+.ms-option input[type="checkbox"]{
+  width:14px;height:14px;min-height:14px;padding:0;margin:0;flex-shrink:0;
+  border:1px solid var(--gray-mid);border-radius:3px;accent-color:var(--blue);
+}
+.ms-option span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.ms-empty{padding:14px;text-align:center;color:var(--text-secondary);font-size:12.5px;}
+
+/* ---------- TABLE ---------- */
+.table-wrap{overflow-x:auto;}
+/* .table-wrap ya es, sin querer, un contenedor con scroll vertical propio:
+   con overflow-x:auto y overflow-y en su default (visible), el navegador
+   calcula overflow-y como "auto" también (regla del spec de CSS) -- por
+   eso el encabezado "sticky" se anclaba a esa caja invisible y nunca se
+   veía fijo contra .content. Aquí se vuelve explícito (altura acotada +
+   scroll propio), así el encabezado sí tiene contra qué pegarse. */
+.table-wrap-listado{max-height:60vh;overflow-y:auto;}
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+thead th{
+  text-align:left;padding:10px 12px;background:var(--gray-bg);color:var(--navy);
+  font-weight:600;border-bottom:1px solid var(--gray-border);white-space:nowrap;
+}
+tbody td{padding:9px 12px;border-bottom:1px solid var(--gray-border);white-space:nowrap;}
+tbody tr:hover{background:#FAFAFA;}
+.link-expediente{color:var(--blue);text-decoration:none;font-weight:600;}
+.link-expediente:hover{text-decoration:underline;}
+.muted{color:var(--text-secondary);}
+.empty{text-align:center;color:var(--text-secondary);padding:24px !important;}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;}
+
+/* Encabezado fijo al hacer scroll vertical (el contenedor que realmente
+   scrollea es .content, no la ventana -- position:sticky se ancla solo a
+   eso). z-index por encima de las filas del cuerpo (incluidas las columnas
+   fijas de abajo) para que el encabezado nunca quede debajo. */
+.tabla-expedientes thead th{position:sticky;top:0;z-index:3;}
+
+/* Franjas alternadas (zebra) en renglones pares -- azul pastel del mismo
+   sistema de color (--blue-light, el de los focus rings/KPIs), tenue a
+   propósito para no afectar la lectura. El hover (abajo y arriba) debe
+   seguir ganándole a la franja, por eso este bloque va ANTES de los
+   .col-frozen con hover -- en un empate de especificidad gana el último
+   en el archivo. */
+.tabla-expedientes tbody tr:nth-child(even){background:var(--blue-light);}
+.tabla-expedientes tbody tr:hover{background:#FAFAFA;}
+
+/* Columnas fijas al hacer scroll horizontal (Fecha Apertura, Expediente, Cuenta, Servicio, Subservicio) */
+.tabla-expedientes th.col-frozen,
+.tabla-expedientes td.col-frozen{position:sticky;z-index:1;background:var(--white);}
+.tabla-expedientes thead th.col-frozen{background:var(--gray-bg);z-index:4;}
+.tabla-expedientes tbody tr:nth-child(even) td.col-frozen{background:var(--blue-light);}
+.tabla-expedientes tbody tr:hover td.col-frozen{background:#FAFAFA;}
+.tabla-expedientes .col-frozen-last{border-right:2px solid var(--gray-border);}
+
+/* Paginador */
+.pager{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;gap:12px;flex-wrap:wrap;}
+.pager-info{font-size:12px;color:var(--text-secondary);}
+.pager-controls{display:flex;align-items:center;gap:10px;}
+.pager-controls .pager-page{font-size:12.5px;color:var(--navy);font-weight:600;}
+.pager-controls button:disabled{opacity:.5;cursor:not-allowed;}
+
+.badge{
+  display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;
+}
+.badge.pendiente{background:var(--amber-bg);color:var(--amber);}
+.badge.espera{background:var(--teal-bg);color:var(--teal);}
+.badge.seguimiento{background:var(--blue-light);color:var(--blue-dark);}
+.badge.programado{background:var(--purple-bg);color:var(--purple);}
+.badge.perfil-1{background:var(--purple-bg);color:var(--purple);}
+.badge.perfil-2{background:var(--blue-light);color:var(--blue-dark);}
+.badge.perfil-3{background:var(--teal-bg);color:var(--teal);}
+.badge.activo{background:var(--green-bg);color:var(--green);}
+.badge.inactivo{background:var(--red-bg);color:var(--red);}
+
+/* ---------- SEGUIMIENTO ---------- */
+.info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
+.info-item label{display:block;font-size:11px;color:var(--text-secondary);margin-bottom:3px;}
+.info-item .value{font-size:13px;font-weight:600;color:var(--navy);}
+.char-counter{font-size:11px;color:var(--text-secondary);text-align:right;margin-top:4px;}
+.char-counter.limit{color:var(--red);font-weight:600;}
+.actions-row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
+.actions-row.between{justify-content:space-between;}
+.estatus-row{display:flex;align-items:end;gap:10px;}
+.estatus-row .field{flex:1;margin-bottom:0;}
+.hint{font-size:11px;color:var(--text-secondary);margin-top:6px;}
+
+/* ---------- CONFIGURACION CUENTAS ---------- */
+.autocomplete{position:relative;}
+.suggestions{
+  position:absolute;top:38px;left:0;right:0;background:var(--white);
+  border:1px solid var(--gray-mid);border-radius:4px;box-shadow:var(--shadow-md);
+  max-height:180px;overflow-y:auto;z-index:20;
+}
+.suggestions div{padding:8px 10px;font-size:12.5px;cursor:pointer;}
+.suggestions div:hover{background:var(--blue-light);}
+.suggestions .empty-suggestion{color:var(--text-secondary);cursor:default;}
+.suggestions .empty-suggestion:hover{background:none;}
+
+.mini-table{width:100%;border-collapse:collapse;font-size:12.5px;}
+.mini-table thead th{text-align:left;padding:8px 10px;background:var(--gray-bg);color:var(--navy);border-bottom:1px solid var(--gray-border);}
+.mini-table tbody td{padding:8px 10px;border-bottom:1px solid var(--gray-border);}
+.mini-table tbody tr:hover{background:#FAFAFA;}
+.mini-empty{padding:20px;text-align:center;color:var(--text-secondary);}
+
+.comentario-item{
+  border:1px solid var(--gray-border);border-radius:6px;padding:12px 14px;margin-bottom:10px;background:var(--gray-bg);
+}
+.comentario-item:last-child{margin-bottom:0;}
+.comentario-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--text-secondary);margin-bottom:6px;font-weight:600;}
+.comentario-texto{font-size:13px;color:#201F1E;white-space:pre-wrap;}
+.cuenta-chip{
+  display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:22px;padding:0 6px;
+  border-radius:11px;background:var(--blue-light);color:var(--blue-dark);font-size:11px;font-weight:700;
+  margin-right:8px;flex-shrink:0;
+}
+.icon-btn{
+  background:none;border:none;cursor:pointer;color:var(--red);
+  display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:4px;
+}
+.icon-btn svg{width:15px;height:15px;}
+.icon-btn:hover{background:var(--red-bg);}
+
+.row-action-btn{
+  background:none;border:1px solid var(--gray-mid);cursor:pointer;border-radius:4px;
+  display:inline-flex;align-items:center;gap:5px;padding:5px 9px;font-size:12px;font-family:inherit;font-weight:600;
+  color:var(--navy);white-space:nowrap;
+}
+.row-action-btn svg{width:13px;height:13px;flex-shrink:0;}
+.row-action-btn.accion-reset{color:var(--blue-dark);border-color:var(--blue-light);}
+.row-action-btn.accion-reset:hover{background:var(--blue-light);}
+.row-action-btn.accion-eliminar{color:var(--red);border-color:var(--red-bg);}
+.row-action-btn.accion-eliminar:hover{background:var(--red-bg);}
+
+@media (max-width:640px){
+  .mini-table thead{display:none;}
+  .mini-table, .mini-table tbody, .mini-table tr, .mini-table td{display:block;width:100%;}
+  .mini-table tr{border:1px solid var(--gray-border);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--white);}
+  .mini-table td:not(.mini-empty){border-bottom:none;padding:4px 0;display:flex;align-items:center;justify-content:space-between;gap:10px;}
+  .mini-table td[data-label]::before{content:attr(data-label);font-size:11px;font-weight:600;color:var(--text-secondary);}
+  .mini-table td[data-label="#"]{display:none;}
+  .mini-table tr:has(.mini-empty){border:none;padding:0;}
+}
+
+/* ---------- MODAL CORTE ---------- */
+.modal-overlay{
+  position:fixed;inset:0;background:rgba(11,41,66,.55);
+  display:flex;align-items:center;justify-content:center;z-index:200;
+}
+.modal-card{
+  background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow-lg);
+  width:640px;max-width:92vw;max-height:86vh;display:flex;flex-direction:column;
+}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--gray-border);flex-shrink:0;}
+.modal-header h3{margin:0;font-size:16px;color:var(--navy);}
+.modal-close{background:none;border:none;font-size:22px;line-height:1;cursor:pointer;color:var(--text-secondary);padding:0 4px;}
+.modal-close:hover{color:var(--navy);}
+.modal-body{padding:16px 20px;overflow-y:auto;}
+.modal-body p{margin:0 0 12px;font-size:13px;color:var(--text-secondary);}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;padding:14px 20px;border-top:1px solid var(--gray-border);flex-shrink:0;}
+.mini-table-corte{width:100%;border-collapse:collapse;font-size:12px;}
+.mini-table-corte th{background:var(--gray-bg);text-align:left;padding:6px 8px;position:sticky;top:0;}
+.mini-table-corte td{padding:6px 8px;border-bottom:1px solid var(--gray-border);}

@@ -32,7 +32,7 @@ LONGITUD_MINIMA_COMENTARIO_PROVEEDOR = 50
 
 # Proveedor solo debe poder leer comprobante/comentarios/pago-anticipado de
 # expedientes que le corresponde atender -- igual que ESTATUS_VISIBLES_PROVEEDOR
-# en frontend/index.html. Sin esto, cualquier Proveedor autenticado podía leer
+# en frontend/js/core/reglas-expedientes.js. Sin esto, cualquier Proveedor autenticado podía leer
 # estos datos de CUALQUIER expediente adivinando el número (IDOR).
 ESTATUS_VISIBLES_PROVEEDOR = (
     EstatusExpediente.EN_ESPERA_RESPUESTA,

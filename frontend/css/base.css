@@ -1,0 +1,77 @@
+/* Base: variables de color, tipografía, campos, botones, toasts y utilidades.
+   Lo usan todas las pantallas. */
+:root{
+  --navy: #0B2942;
+  --navy-dark: #071C30;
+  --navy-light: #14395A;
+  --blue: #0078D4;
+  --blue-dark: #005A9E;
+  --blue-light: #DEECF9;
+
+  --gray-bg: #F3F2F1;
+  --gray-border: #E1DFDD;
+  --gray-mid: #C8C6C4;
+
+  --teal: #005E54;
+  --teal-bg: #DCF4F1;
+
+  --green: #107C10;
+  --green-bg: #DFF6DD;
+  --amber: #CA5010;
+  --amber-bg: #FDE7D9;
+  --red: #D13438;
+  --red-bg: #FDE7E9;
+  --purple: #5C2D91;
+  --purple-bg: #EDE7F6;
+
+  --white: #FFFFFF;
+  --text-secondary: #605E5C;
+  --radius: 6px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,.08);
+  --shadow-md: 0 2px 8px rgba(0,0,0,.10);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,.16);
+}
+*{box-sizing:border-box;}
+body{
+  margin:0;
+  font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,"Helvetica Neue",Arial,sans-serif;
+  background:var(--gray-bg);
+  color:#201F1E;
+}
+.hidden{display:none !important;}
+.hidden-perfil{display:none !important;}
+
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--navy);margin-bottom:4px;}
+.field input, .field select, .field textarea{
+  width:100%;height:34px;border:1px solid var(--gray-mid);border-radius:4px;
+  padding:0 10px;font-family:inherit;font-size:13px;background:var(--white);
+}
+.field textarea{height:auto;padding:8px 10px;resize:vertical;}
+.field input:focus, .field select:focus, .field textarea:focus{
+  outline:none;border-color:var(--blue);box-shadow:0 0 0 2px var(--blue-light);
+}
+.field input:disabled, .field select:disabled, .field textarea:disabled{background:var(--gray-bg);color:var(--text-secondary);cursor:not-allowed;}
+.btn{
+  height:34px;padding:0 16px;border:none;border-radius:4px;font-size:13px;font-weight:600;
+  cursor:pointer;font-family:inherit;
+}
+.btn-primary{background:var(--blue);color:#fff;}
+.btn-primary:hover{background:var(--blue-dark);}
+.btn-primary:disabled{background:var(--gray-mid);cursor:not-allowed;}
+.btn-secondary{background:var(--white);color:var(--navy);border:1px solid var(--gray-mid);}
+.btn-secondary:hover{background:var(--gray-bg);}
+.btn-danger{background:var(--white);color:var(--red);border:1px solid var(--red);}
+.btn-danger:hover{background:var(--red-bg);}
+.btn-block{width:100%;}
+
+/* ---------- TOAST ---------- */
+#toast-container{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:1000;}
+.toast{
+  background:var(--navy);color:#fff;padding:10px 16px;border-radius:4px;font-size:13px;
+  box-shadow:var(--shadow-md);min-width:220px;
+}
+.toast.error{background:var(--red);}
+.toast.success{background:var(--green);}
+
+.spinner-row{padding:24px;text-align:center;color:var(--text-secondary);font-size:13px;}
