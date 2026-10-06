@@ -53,17 +53,18 @@ def guardar_comentario_local(cl_expediente: int, rfc: str, comentario: str, orig
 
 
 def listar_comentarios_local(cl_expediente: int, origen: str | None = None) -> list[dict]:
+    """El nombre de quien escribió se toma de los accesos dados de alta (así
+    aplica también a comentarios ya guardados); si el RFC ya no existe ahí,
+    se regresa el RFC como nombre."""
+    consulta = (
+        "SELECT c.rfc, COALESCE(u.nombre, c.rfc) AS nombre, c.comentario, c.origen, c.fecha "
+        "FROM comentarios_seguimiento c LEFT JOIN usuarios_acceso u ON u.rfc = c.rfc "
+        "WHERE c.cl_expediente = ?"
+    )
+    parametros: tuple = (cl_expediente,)
+    if origen:
+        consulta += " AND c.origen = ?"
+        parametros += (origen,)
+    consulta += " ORDER BY c.fecha DESC"
     with get_local_connection() as conn:
-        if origen:
-            rows = conn.execute(
-                "SELECT rfc, comentario, origen, fecha FROM comentarios_seguimiento "
-                "WHERE cl_expediente = ? AND origen = ? ORDER BY fecha DESC",
-                (cl_expediente, origen),
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT rfc, comentario, origen, fecha FROM comentarios_seguimiento "
-                "WHERE cl_expediente = ? ORDER BY fecha DESC",
-                (cl_expediente,),
-            ).fetchall()
-        return [dict(r) for r in rows]
+        return [dict(r) for r in conn.execute(consulta, parametros).fetchall()]

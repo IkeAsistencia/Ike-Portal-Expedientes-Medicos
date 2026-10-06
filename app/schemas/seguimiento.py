@@ -37,6 +37,7 @@ class ComentarioSeguimiento(BaseModel):
     """
 
     rfc: str
+    nombre: str  # nombre de quien lo escribió (o su RFC si ya no está dado de alta)
     comentario: str
     origen: str = "proveedor"
     fecha: str

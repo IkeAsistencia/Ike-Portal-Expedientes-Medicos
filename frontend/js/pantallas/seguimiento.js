@@ -354,9 +354,14 @@ function renderListaComentarios(contId, comentarios, mensajeVacio) {
     cont.innerHTML = `<div class="mini-empty">${mensajeVacio}</div>`;
     return;
   }
+  // Mismo encabezado que se guarda en Core: "Cabina Médica --> Nombre" o
+  // "Proveedores --> Nombre", y abajo el texto.
   cont.innerHTML = comentarios.map(c => `
     <div class="comentario-item">
-      <div class="comentario-meta"><span>${escapeHtml(c.rfc)}</span><span>${formatDateTime(c.fecha)}</span></div>
+      <div class="comentario-meta">
+        <span>${c.origen === "cabina" ? ETIQUETA_CORE_CABINA : ETIQUETA_CORE_PROVEEDOR} --&gt; ${escapeHtml(c.nombre || c.rfc)}</span>
+        <span>${formatDateTime(c.fecha)}</span>
+      </div>
       <div class="comentario-texto">${escapeHtml(c.comentario)}</div>
     </div>
   `).join("");

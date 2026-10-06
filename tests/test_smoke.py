@@ -1092,9 +1092,12 @@ def test_core_recibe_encabezado_del_proveedor(client):
     assert r.status_code == 200, r.text
     assert OBSERVACIONES_ENVIADAS_A_CORE[-1] == f"Proveedores --> Proveedor de Prueba\n{COMENTARIO_PROVEEDOR}"
 
-    # La copia local (la que muestra el portal) va sin el encabezado.
+    # La copia local (la que muestra el portal) va sin el encabezado, pero
+    # trae el nombre para que el portal lo muestre igual que en Core.
     r = client.get("/seguimiento/comentarios/1001", headers=prov_headers)
-    assert any(c["comentario"] == COMENTARIO_PROVEEDOR for c in r.json())
+    comentario = next(c for c in r.json() if c["comentario"] == COMENTARIO_PROVEEDOR)
+    assert comentario["nombre"] == "Proveedor de Prueba"
+    assert comentario["rfc"] == "RFCPROVTEST"
 
 
 def test_core_pago_anticipado_lleva_prefijo_pa(client):
@@ -1142,6 +1145,10 @@ def test_core_recibe_encabezado_del_coordinador(client):
     )
     assert r.status_code == 200, r.text
     assert OBSERVACIONES_ENVIADAS_A_CORE[-1] == "Cabina Médica --> Cabina de Prueba\nFalta el número de póliza."
+
+    r = client.get("/seguimiento/comentarios/1001", headers=cabina_headers)
+    comentario = next(c for c in r.json() if c["origen"] == "cabina")
+    assert comentario["nombre"] == "Cabina de Prueba"
 
 
 def test_core_rechaza_comentario_que_no_cabe_con_encabezado(client):
