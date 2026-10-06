@@ -27,8 +27,14 @@ tests/                           # pruebas automatizadas (no requieren SQL Serve
 jobs/
 ├── validar_estatus_proveedor.py # cron: alerta expedientes sin respuesta del proveedor (8h/24h)
 └── README.md                    # cómo programarlo con el Programador de tareas de Windows
-frontend/
-└── index.html                   # frontend funcional (HTML+JS puro) que consume la API
+frontend/                        # portal (HTML + CSS + JS puro, sin build), servido por FastAPI en "/"
+├── index.html                   # marco: login, menú lateral y barra superior
+├── css/                         # base.css · layout.css · componentes.css
+└── js/
+    ├── app.js                   # arranque, sesión, menú por perfil y navegación (#/pantalla)
+    ├── core/                    # api, sesión, router, catálogos, reglas de negocio, formato, toast
+    ├── componentes/             # piezas reutilizables: tabla, filtros, multiselect, paginador, KPI, modal
+    └── pantallas/               # un módulo por pantalla (su HTML + su lógica)
 dev_server_datos_prueba.py       # API con datos de ejemplo, para probar el frontend sin SQL Server
 ```
 
@@ -82,9 +88,9 @@ funcionando de punta a punta (login incluido) con datos de ejemplo:
 python dev_server_datos_prueba.py
 ```
 
-Esto levanta la API en `http://localhost:8000` con datos inventados (no
-toca SQL Server para nada). Luego abre `frontend/index.html` directamente
-en tu navegador (doble clic) e inicia sesión con:
+Esto levanta el portal en `http://localhost:8000` con datos inventados (no
+toca SQL Server para nada). Ábrelo en tu navegador en esa dirección e
+inicia sesión con:
 
 - Usuario: `ijimenez`
 - Contraseña: `clave123`
@@ -101,16 +107,31 @@ Una vez que tengas los scripts SQL corridos y tu `.env` configurado:
 uvicorn app.main:app --reload --port 8000
 ```
 
-y abre `frontend/index.html` igual, con tu usuario real. El frontend
-detecta automáticamente `http://localhost:8000`; si tu API corre en otra
-URL/puerto, usa el enlace "Configuración de conexión" en la pantalla de
-login para apuntarlo a la URL correcta.
+y abre `http://localhost:8000` con tu usuario real.
 
-El frontend es un único archivo HTML autocontenido (sin frameworks ni
-build step) — puedes abrirlo directamente o servirlo con cualquier
-servidor estático (`python -m http.server`, Live Server de VS Code, etc.).
-CORS ya está habilitado en el backend (`app/main.py`) para que esto
-funcione sin configuración adicional en desarrollo.
+El frontend es HTML + CSS + JavaScript puro con módulos ES (sin frameworks
+ni build step). Lo sirve el mismo FastAPI (`app/main.py`, al final), así
+que portal y API comparten origen: no hace falta configurar URL ni CORS.
+Como usa módulos, **no funciona abriendo `index.html` con doble clic**
+(`file://`); siempre entra por `http://localhost:8000`.
+
+### Cómo está organizado el frontend
+
+- Cada pantalla vive en `frontend/js/pantallas/<pantalla>.js` y trae su
+  propio HTML. Todas siguen el mismo contrato, que `app.js` usa para
+  montarlas y navegar: `montar(contenedor)`, `aplicarPermisos()`,
+  `alEntrar()` y `reiniciar()` (las tres últimas son opcionales).
+- Lo que se repite entre pantallas (tabla de expedientes, filtros,
+  multiselect de cuentas, paginador, KPIs, modal) está en
+  `frontend/js/componentes/`.
+- Qué pantalla ve cada perfil se decide en un solo lugar:
+  `pantallaPermitida()` en `frontend/js/app.js`.
+- Cuando una pantalla cambia el estatus de un expediente, avisa con un
+  evento (`notificarCambioEstatus`, en `core/reglas-expedientes.js`) y las
+  demás actualizan sus datos en memoria, sin importarse entre sí.
+- Para agregar una pantalla nueva: crea su módulo en `pantallas/`,
+  regístralo en `PANTALLAS` de `app.js`, agrega su entrada al menú en
+  `index.html` (con `data-pantalla="..."`) y su regla en `pantallaPermitida()`.
 
 Documentación interactiva del API (Swagger) en `http://localhost:8000/docs`.
 

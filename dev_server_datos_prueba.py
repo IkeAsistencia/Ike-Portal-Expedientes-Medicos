@@ -1,7 +1,7 @@
 """
 Servidor de DESARROLLO con datos de ejemplo (no toca SQL Server).
 
-Sirve para probar visualmente el frontend (frontend/index.html) y el
+Sirve para probar visualmente el portal (frontend/) y el
 flujo de login de punta a punta ANTES de tener la base de datos real
 conectada — así puedes confirmar que la parte visual funciona bien,
 por separado de si la conexión a SQL Server funciona bien.
@@ -9,7 +9,7 @@ por separado de si la conexión a SQL Server funciona bien.
 Uso:
     python dev_server_datos_prueba.py
 
-Luego abre frontend/index.html en tu navegador e inicia sesión con:
+Luego abre http://127.0.0.1:8000 en tu navegador e inicia sesión con:
     usuario:    ijimenez
     contraseña: clave123
 
@@ -122,5 +122,5 @@ from app.main import app  # noqa: E402
 if __name__ == "__main__":
     print("Servidor de DATOS DE PRUEBA (sin SQL Server) en http://127.0.0.1:8000")
     print("Usuario: ijimenez / Contraseña: clave123")
-    print("Abre frontend/index.html en tu navegador para probarlo.")
+    print("Abre http://127.0.0.1:8000 en tu navegador para probarlo.")
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
