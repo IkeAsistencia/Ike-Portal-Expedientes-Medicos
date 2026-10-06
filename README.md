@@ -1,4 +1,4 @@
-# API Expedientes Médicos (Python + FastAPI + SQL Server)
+# Portal Expedientes Médicos (Python + FastAPI + SQL Server)
 
 Backend REST del sistema de gestión de Expedientes Médicos, sucesor formal
 del prototipo HTML. Lee y escribe contra SQL Server **exclusivamente por
