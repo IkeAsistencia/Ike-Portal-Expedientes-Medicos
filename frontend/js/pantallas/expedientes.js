@@ -14,6 +14,7 @@ import {
 } from "../core/reglas-expedientes.js";
 import { ICONOS } from "../componentes/iconos.js";
 import { kpiHtml } from "../componentes/kpi.js";
+import { limitarADigitos } from "../componentes/campo-numerico.js";
 import { crearMultiselectCuentas } from "../componentes/multiselect-cuentas.js";
 import { filtrosExpedientesHtml, leerParametrosBusqueda } from "../componentes/filtros-expedientes.js";
 import { paginar, renderPaginador } from "../componentes/paginador.js";
@@ -424,6 +425,7 @@ function limpiarFiltros() {
 export function montar(contenedor) {
   contenedor.innerHTML = PLANTILLA;
   msCuentas = crearMultiselectCuentas("f-cuentas");
+  limitarADigitos($("f-expediente"));
 
   $("notif-atendidos-cerrar").addEventListener("click", () => $("notif-atendidos").classList.add("hidden"));
 

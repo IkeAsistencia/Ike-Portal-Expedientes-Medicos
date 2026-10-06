@@ -11,7 +11,7 @@ export function filtrosExpedientesHtml({ prefijo, opcionesEstatus, idBuscar, idL
         <div class="filters-grid">
           <div class="field">
             <label for="${p}f-expediente">Expediente</label>
-            <input type="number" id="${p}f-expediente" placeholder="Núm. expediente">
+            <input type="text" id="${p}f-expediente" inputmode="numeric" autocomplete="off" placeholder="Núm. expediente" title="Número de expediente">
           </div>
           <div class="field">
             <label for="${p}f-fechaInicio">Fecha Inicio</label>

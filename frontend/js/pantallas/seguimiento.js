@@ -8,6 +8,7 @@ import { esPerfilCabina, esPerfilProveedor, nombreUsuario } from "../core/sesion
 import {
   ESTATUS_ACCIONABLES_PROVEEDOR, ESTATUS_DE_REGRESO, notificarCambioEstatus, proveedorPuedeVer,
 } from "../core/reglas-expedientes.js";
+import { limitarADigitos } from "../componentes/campo-numerico.js";
 import { ICONOS } from "../componentes/iconos.js";
 
 const PLANTILLA = `
@@ -525,13 +526,7 @@ export function montar(contenedor) {
   contenedor.innerHTML = PLANTILLA;
 
   $("sg-buscar-btn").addEventListener("click", buscarExpediente);
-  // Solo dígitos, máximo 10: limpia también lo que se pegue (letras,
-  // espacios, signos). Sin maxlength a propósito: cortaría el texto pegado
-  // ANTES de quitar lo que no es número y se perderían dígitos.
-  $("sg-buscar-expediente").addEventListener("input", (e) => {
-    const soloDigitos = e.target.value.replace(/\D/g, "").slice(0, 10);
-    if (soloDigitos !== e.target.value) e.target.value = soloDigitos;
-  });
+  limitarADigitos($("sg-buscar-expediente"));
   $("sg-buscar-expediente").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); buscarExpediente(); }
   });
