@@ -6,9 +6,31 @@
   background:var(--white);border:1px solid var(--gray-border);border-radius:var(--radius);
   box-shadow:var(--shadow-sm);margin-bottom:16px;
 }
-.card-header{padding:14px 18px;border-bottom:1px solid var(--gray-border);display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.card-header{
+  padding:14px 18px;border-bottom:1px solid var(--tono-azul-borde);display:flex;justify-content:space-between;align-items:center;gap:12px;
+  /* Encabezado con tono suave para que cada sección se distinga del fondo.
+     Por default azul; cada tarjeta puede elegir otro con .tono-* (abajo). */
+  background:var(--tono-azul);border-radius:var(--radius) var(--radius) 0 0;
+}
 .card-header h2{font-size:14px;margin:0;font-weight:600;color:var(--navy);}
 .card-body{padding:16px 18px;}
+
+/* Tono de cada tarjeta: colorea su borde y su encabezado. En pantallas con
+   dos tarjetas se alternan azul (formularios/filtros) y verde azulado
+   (resultados/listas); en Seguimiento cada sección lleva el suyo. */
+.card.tono-azul{border-color:var(--tono-azul-borde);}
+.card.tono-azul > .card-header{background:var(--tono-azul);border-bottom-color:var(--tono-azul-borde);}
+.card.tono-verdeazul{border-color:var(--tono-verdeazul-borde);}
+.card.tono-verdeazul > .card-header{background:var(--tono-verdeazul);border-bottom-color:var(--tono-verdeazul-borde);}
+.card.tono-morado{border-color:var(--tono-morado-borde);}
+.card.tono-morado > .card-header{background:var(--tono-morado);border-bottom-color:var(--tono-morado-borde);}
+.card.tono-ambar{border-color:var(--tono-ambar-borde);}
+.card.tono-ambar > .card-header{background:var(--tono-ambar);border-bottom-color:var(--tono-ambar-borde);}
+.card.tono-verde{border-color:var(--tono-verde-borde);}
+.card.tono-verde > .card-header{background:var(--tono-verde);border-bottom-color:var(--tono-verde-borde);}
+/* Cuerpo de la tarjeta con fondo azul, el mismo de los renglones alternos
+   de la tabla (ej. "Información General" en Seguimiento). */
+.card.fondo-azul > .card-body{background:var(--blue-light);border-radius:0 0 var(--radius) var(--radius);}
 
 .notif-banner{
   display:flex;align-items:center;gap:10px;background:var(--amber-bg);color:var(--amber);
@@ -161,10 +183,29 @@ tbody tr:hover{background:#FAFAFA;}
 .info-item .value{font-size:13px;font-weight:600;color:var(--navy);}
 .char-counter{font-size:11px;color:var(--text-secondary);text-align:right;margin-top:4px;}
 .char-counter.limit{color:var(--red);font-weight:600;}
+/* Casilla con tono según su estado (ej. "¿Es un expediente de pago
+   anticipado?"): sin marcar en morado (como "Comentarios del Coordinador")
+   y marcada en verde azulado (como "Comentarios del Proveedor"). Se colorea
+   todo el renglón porque el fondo de una casilla nativa sin marcar no se
+   puede pintar. */
+.field label.casilla-tono{
+  display:inline-flex;align-items:center;gap:8px;margin:0;padding:8px 12px;
+  font-size:13px;font-weight:normal;color:var(--navy);cursor:pointer;
+  background:var(--tono-morado);border:1px solid var(--tono-morado-borde);border-radius:var(--radius);
+  transition:background-color .15s ease, border-color .15s ease;
+}
+.field label.casilla-tono:has(input:checked){background:var(--tono-verdeazul);border-color:var(--tono-verdeazul-borde);}
+.field label.casilla-tono:has(input:disabled){cursor:default;}
+.field label.casilla-tono input{width:auto;height:auto;margin:0;accent-color:var(--teal);}
+.field label.casilla-tono + .hint{margin-top:6px;}
 .actions-row{display:flex;justify-content:flex-end;gap:8px;margin-top:16px;}
 .actions-row.between{justify-content:space-between;}
 .estatus-row{display:flex;align-items:end;gap:10px;}
 .estatus-row .field{flex:1;margin-bottom:0;}
+/* Campo corto (ej. número de expediente de 10 dígitos): no se estira a todo
+   el renglón, solo el ancho de su contenido. */
+.estatus-row .field.field-compacto{flex:0 0 auto;}
+.field.field-compacto input{width:calc(10ch + 48px);font-variant-numeric:tabular-nums;}
 .hint{font-size:11px;color:var(--text-secondary);margin-top:6px;}
 
 /* ---------- CONFIGURACION CUENTAS ---------- */
@@ -233,7 +274,7 @@ tbody tr:hover{background:#FAFAFA;}
   background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow-lg);
   width:640px;max-width:92vw;max-height:86vh;display:flex;flex-direction:column;
 }
-.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--gray-border);flex-shrink:0;}
+.modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--tono-azul-borde);flex-shrink:0;background:var(--tono-azul);border-radius:var(--radius) var(--radius) 0 0;}
 .modal-header h3{margin:0;font-size:16px;color:var(--navy);}
 .modal-close{background:none;border:none;font-size:22px;line-height:1;cursor:pointer;color:var(--text-secondary);padding:0 4px;}
 .modal-close:hover{color:var(--navy);}

@@ -9,7 +9,7 @@ import { ICONOS } from "../componentes/iconos.js";
 import { crearModal } from "../componentes/modal.js";
 
 const PLANTILLA = `
-  <div class="card">
+  <div class="card tono-azul">
     <div class="card-header"><h2>Dar de alta un nuevo acceso</h2></div>
     <div class="card-body">
       <div class="filters-grid">
@@ -47,7 +47,7 @@ const PLANTILLA = `
     </div>
   </div>
 
-  <div class="card">
+  <div class="card tono-verdeazul">
     <div class="card-header">
       <h2>Accesos registrados (<span id="accCount">0</span>)</h2>
     </div>

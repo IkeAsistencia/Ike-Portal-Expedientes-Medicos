@@ -5,7 +5,7 @@ import { multiselectCuentasHtml } from "./multiselect-cuentas.js";
 export function filtrosExpedientesHtml({ prefijo, opcionesEstatus, idBuscar, idLimpiar }) {
   const p = prefijo;
   return `
-    <div class="card">
+    <div class="card tono-azul">
       <div class="card-header"><h2>Filtros</h2></div>
       <div class="card-body">
         <div class="filters-grid">

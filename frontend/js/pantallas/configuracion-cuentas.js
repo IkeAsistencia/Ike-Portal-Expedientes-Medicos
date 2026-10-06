@@ -5,7 +5,7 @@ import { toast } from "../core/toast.js";
 import { ICONOS } from "../componentes/iconos.js";
 
 const PLANTILLA = `
-  <div class="card">
+  <div class="card tono-azul">
     <div class="card-header"><h2>Agregar cuenta</h2></div>
     <div class="card-body">
       <div class="field autocomplete">
@@ -16,7 +16,7 @@ const PLANTILLA = `
     </div>
   </div>
 
-  <div class="card">
+  <div class="card tono-verdeazul">
     <div class="card-header">
       <h2>Cuentas configuradas (<span id="cfgCount">0</span>)</h2>
     </div>

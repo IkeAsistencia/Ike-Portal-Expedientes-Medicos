@@ -4,27 +4,27 @@ import { api, apiArchivo } from "../core/api.js";
 import { escapeHtml, formatDate, formatDateTime } from "../core/formato.js";
 import { toast } from "../core/toast.js";
 import { navegar } from "../core/router.js";
-import { esPerfilCabina, esPerfilProveedor } from "../core/sesion.js";
+import { esPerfilCabina, esPerfilProveedor, nombreUsuario } from "../core/sesion.js";
 import {
   ESTATUS_ACCIONABLES_PROVEEDOR, ESTATUS_DE_REGRESO, notificarCambioEstatus, proveedorPuedeVer,
 } from "../core/reglas-expedientes.js";
 import { ICONOS } from "../componentes/iconos.js";
 
 const PLANTILLA = `
-  <div class="card" id="sg-buscar-card">
+  <div class="card tono-verde" id="sg-buscar-card">
     <div class="card-header"><h2>Buscar expediente</h2></div>
     <div class="card-body">
       <div class="estatus-row">
-        <div class="field">
+        <div class="field field-compacto">
           <label for="sg-buscar-expediente">Número de expediente</label>
-          <input type="number" id="sg-buscar-expediente">
+          <input type="text" id="sg-buscar-expediente" inputmode="numeric" autocomplete="off" title="Número de expediente">
         </div>
         <button class="btn btn-primary" id="sg-buscar-btn">Buscar</button>
       </div>
     </div>
   </div>
 
-  <div class="card hidden" id="sg-info-card">
+  <div class="card tono-azul fondo-azul hidden" id="sg-info-card">
     <div class="card-header"><h2>Información General</h2></div>
     <div class="card-body">
       <div class="info-grid">
@@ -38,8 +38,8 @@ const PLANTILLA = `
         <div class="info-item"><label>Correo</label><div class="value" id="ig-correo">—</div></div>
       </div>
       <div class="field" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-border);">
-        <label style="display:flex;align-items:center;gap:8px;font-weight:normal;cursor:pointer;">
-          <input type="checkbox" id="ig-pago-anticipado" style="width:auto;">
+        <label class="casilla-tono">
+          <input type="checkbox" id="ig-pago-anticipado">
           ¿Es un expediente de pago anticipado?
         </label>
         <div class="hint" id="ig-pago-anticipado-hint">Solo el Proveedor puede marcar esta casilla.</div>
@@ -47,7 +47,7 @@ const PLANTILLA = `
     </div>
   </div>
 
-  <div class="card hidden" id="sg-comentarios-proveedor-card">
+  <div class="card tono-verdeazul hidden" id="sg-comentarios-proveedor-card">
     <div class="card-header"><h2>Comentarios del Proveedor</h2></div>
     <div class="card-body">
       <div id="sg-comentarios-proveedor-lista"></div>
@@ -58,14 +58,14 @@ const PLANTILLA = `
     </div>
   </div>
 
-  <div class="card hidden" id="sg-comentarios-coordinador-card">
+  <div class="card tono-morado hidden" id="sg-comentarios-coordinador-card">
     <div class="card-header"><h2>Comentarios del Coordinador</h2></div>
     <div class="card-body">
       <div id="sg-comentarios-coordinador-lista"></div>
     </div>
   </div>
 
-  <div class="card hidden" id="sg-estatus-card">
+  <div class="card tono-ambar hidden" id="sg-estatus-card">
     <div class="card-header"><h2>Estado del Caso</h2></div>
     <div class="card-body">
       <div class="estatus-row">
@@ -82,13 +82,13 @@ const PLANTILLA = `
       </div>
       <div class="field hidden" id="sg-motivo-regreso-field" style="margin-top:12px;">
         <label for="sg-motivo-regreso" id="sg-motivo-regreso-label">Motivo del regreso (obligatorio)</label>
-        <textarea id="sg-motivo-regreso" rows="4" maxlength="1500" placeholder="Explica qué le falta o qué está mal en la respuesta del proveedor..."></textarea>
+        <textarea id="sg-motivo-regreso" rows="4" placeholder="Explica qué le falta o qué está mal en la respuesta del proveedor..."></textarea>
         <div class="hint">Se guarda en Core igual que el comentario del proveedor, y se le notifica por correo.</div>
       </div>
     </div>
   </div>
 
-  <div class="card hidden" id="sg-seguimiento-card">
+  <div class="card tono-verde hidden" id="sg-seguimiento-card">
     <div class="card-header"><h2>Registrar seguimiento</h2></div>
     <div class="card-body">
       <div class="notif-banner notif-success hidden" id="sg-exito-banner">
@@ -97,7 +97,7 @@ const PLANTILLA = `
       </div>
       <div class="field">
         <label for="sg-observaciones">Observaciones</label>
-        <textarea id="sg-observaciones" rows="7" maxlength="1500"></textarea>
+        <textarea id="sg-observaciones" rows="7"></textarea>
         <div class="char-counter" id="sg-counter">0 / 1500</div>
         <div class="hint">Cada vez que presionas "Actualizar Core" se guarda un nuevo registro en la bitácora de seguimiento, no se sobrescribe el anterior.</div>
       </div>
@@ -132,6 +132,23 @@ const PLANTILLA = `
 const COMPROBANTE_TAMANO_MAXIMO = 5 * 1024 * 1024; // 5 MB
 const COMPROBANTE_TIPOS_PERMITIDOS = ["application/pdf", "image/jpeg", "image/png"];
 const COMENTARIO_PROVEEDOR_MINIMO = 50;
+
+// Igual que en el backend (app/repositories/seguimiento_repo.py): lo que se
+// inserta en Core lleva un encabezado con quién lo escribió
+// ("Proveedores --> Nombre" o "Cabina Médica --> Nombre" + salto de línea) y
+// todo junto debe caber en los 1500 caracteres de Observaciones.
+const LONGITUD_MAXIMA_CORE = 1500;
+const ETIQUETA_CORE_CABINA = "Cabina Médica";
+const ETIQUETA_CORE_PROVEEDOR = "Proveedores";
+// Los comentarios del Proveedor en expedientes de pago anticipado empiezan
+// con "PA-": así los identifican en Core (el backend también lo garantiza).
+const PREFIJO_PAGO_ANTICIPADO = "PA-";
+let maxObservaciones = LONGITUD_MAXIMA_CORE;
+
+function largoDisponible(etiqueta) {
+  const encabezado = `${etiqueta} --> ${nombreUsuario() || ""}\n`;
+  return LONGITUD_MAXIMA_CORE - encabezado.length;
+}
 
 let registroActual = null;
 let pagoAnticipadoActual = { es_anticipado: false, bloqueado: false }; // del expediente abierto actualmente, ver cargarPagoAnticipado()
@@ -262,6 +279,19 @@ async function cargarPagoAnticipado(record) {
   // puede volver a verlo/descargarlo si ya subió uno antes.
   $("sg-comprobante-visor-wrap").classList.toggle("hidden", !flag.es_anticipado);
   if (flag.es_anticipado) cargarComprobanteVisor(record.expediente);
+
+  // Si ya es pago anticipado (ej. segunda vuelta, con la cita aceptada), el
+  // comentario del Proveedor arranca con "PA-".
+  const observaciones = $("sg-observaciones");
+  if (flag.es_anticipado && esPerfilProveedor() && !observaciones.disabled && !observaciones.value) {
+    ponerPrefijoPagoAnticipado();
+  }
+}
+
+function ponerPrefijoPagoAnticipado() {
+  const t = $("sg-observaciones");
+  if (!t.value.startsWith(PREFIJO_PAGO_ANTICIPADO)) t.value = PREFIJO_PAGO_ANTICIPADO + t.value;
+  actualizarContador();
 }
 
 async function cambiarPagoAnticipado(e) {
@@ -274,6 +304,12 @@ async function cambiarPagoAnticipado(e) {
       body: { es_anticipado: chk.checked },
     });
     toast("Guardado.", "success");
+    if (chk.checked) {
+      ponerPrefijoPagoAnticipado();
+    } else {
+      $("sg-observaciones").value = "";
+      actualizarContador();
+    }
     await cargarPagoAnticipado(registroActual);
   } catch (err) {
     chk.checked = valorAnterior;
@@ -402,9 +438,9 @@ function actualizarContador() {
   const len = $("sg-observaciones").value.trim().length;
   const counter = $("sg-counter");
   counter.textContent = len < COMENTARIO_PROVEEDOR_MINIMO
-    ? `${len} / 1500 (mínimo ${COMENTARIO_PROVEEDOR_MINIMO} caracteres)`
-    : `${len} / 1500`;
-  counter.classList.toggle("limit", len < COMENTARIO_PROVEEDOR_MINIMO || len >= 1500);
+    ? `${len} / ${maxObservaciones} (mínimo ${COMENTARIO_PROVEEDOR_MINIMO} caracteres)`
+    : `${len} / ${maxObservaciones}`;
+  counter.classList.toggle("limit", len < COMENTARIO_PROVEEDOR_MINIMO || len >= maxObservaciones);
 }
 
 async function registrarSeguimiento() {
@@ -484,6 +520,13 @@ export function montar(contenedor) {
   contenedor.innerHTML = PLANTILLA;
 
   $("sg-buscar-btn").addEventListener("click", buscarExpediente);
+  // Solo dígitos, máximo 10: limpia también lo que se pegue (letras,
+  // espacios, signos). Sin maxlength a propósito: cortaría el texto pegado
+  // ANTES de quitar lo que no es número y se perderían dígitos.
+  $("sg-buscar-expediente").addEventListener("input", (e) => {
+    const soloDigitos = e.target.value.replace(/\D/g, "").slice(0, 10);
+    if (soloDigitos !== e.target.value) e.target.value = soloDigitos;
+  });
   $("sg-buscar-expediente").addEventListener("keydown", (e) => {
     if (e.key === "Enter") { e.preventDefault(); buscarExpediente(); }
   });
@@ -496,7 +539,7 @@ export function montar(contenedor) {
   $("sg-observaciones").addEventListener("input", actualizarContador);
   $("sg-actualizar-btn").addEventListener("click", registrarSeguimiento);
   $("sg-cancelar-btn").addEventListener("click", () => {
-    $("sg-observaciones").value = "";
+    $("sg-observaciones").value = pagoAnticipadoActual.es_anticipado ? PREFIJO_PAGO_ANTICIPADO : "";
     actualizarContador();
     toast("Cambios descartados.");
   });
@@ -509,6 +552,13 @@ export function aplicarPermisos() {
   // Proveedor no puede cambiar el estado a mano ("Estado del Caso"): en su
   // caso el estatus solo cambia automático al usar "Actualizar Core".
   $("sg-estatus-card").classList.toggle("hidden-perfil", esPerfilProveedor());
+
+  // Lo que cabe en cada cuadro de texto: 1500 menos el encabezado con el
+  // nombre de quien inició sesión.
+  maxObservaciones = largoDisponible(ETIQUETA_CORE_PROVEEDOR);
+  $("sg-observaciones").maxLength = maxObservaciones;
+  $("sg-motivo-regreso").maxLength = largoDisponible(ETIQUETA_CORE_CABINA);
+  actualizarContador();
 }
 
 export function alEntrar() {

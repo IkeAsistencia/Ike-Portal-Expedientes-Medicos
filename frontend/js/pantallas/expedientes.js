@@ -42,7 +42,7 @@ const PLANTILLA = `
     idLimpiar: "btn-limpiar-expedientes",
   })}
 
-  <div class="card">
+  <div class="card tono-verdeazul">
     <div class="card-header">
       <h2>Resultados</h2>
       <div style="display:flex;gap:8px;">

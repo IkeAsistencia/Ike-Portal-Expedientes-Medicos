@@ -24,6 +24,14 @@
   --purple: #5C2D91;
   --purple-bg: #EDE7F6;
 
+  /* Tonos suaves para distinguir secciones (encabezado y borde de tarjetas).
+     Derivados de la misma paleta: azul, verde azulado, morado, ámbar, verde. */
+  --tono-azul: #EEF4FB;        --tono-azul-borde: #CFE0F2;
+  --tono-verdeazul: #EAF6F4;   --tono-verdeazul-borde: #C6E6E0;
+  --tono-morado: #F4F0FA;      --tono-morado-borde: #DCD2EE;
+  --tono-ambar: #FDF4EC;       --tono-ambar-borde: #F2D8C3;
+  --tono-verde: #EDF7EC;       --tono-verde-borde: #CBE6C8;
+
   --white: #FFFFFF;
   --text-secondary: #605E5C;
   --radius: 6px;
