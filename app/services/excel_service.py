@@ -63,7 +63,7 @@ def generar_corte_excel(registros: list[dict], tipo_expediente: str, usuario_nom
     ws.row_dimensions[1].height = 28
 
     ws.merge_cells(f"A2:{ultima_columna}2")
-    generado = datetime.now().strftime("%d/%m/%Y %H:%M")
+    generado = datetime.now().strftime("%Y-%m-%d %H:%M")
     ws["A2"] = f"Generado por {usuario_nombre} el {generado} — {len(registros)} expediente(s)"
     ws["A2"].font = Font(size=10, italic=True, color=COLOR_NAVY)
     ws["A2"].fill = PatternFill("solid", fgColor=COLOR_BLUE_LIGHT)
@@ -86,8 +86,10 @@ def generar_corte_excel(registros: list[dict], tipo_expediente: str, usuario_nom
                 # "EstatusExpediente.EN_ESPERA_RESPUESTA" en vez del valor real.
                 valor = valor.value
             celda = ws.cell(row=fila_idx, column=col_idx, value=valor)
-            if isinstance(valor, (date, datetime)):
-                celda.number_format = "dd/mm/yyyy"
+            if isinstance(valor, datetime):
+                celda.number_format = "yyyy-mm-dd hh:mm"
+            elif isinstance(valor, date):
+                celda.number_format = "yyyy-mm-dd"
 
     ultima_fila = fila_encabezado + len(registros)
     ws.auto_filter.ref = f"A{fila_encabezado}:{ultima_columna}{max(ultima_fila, fila_encabezado)}"
