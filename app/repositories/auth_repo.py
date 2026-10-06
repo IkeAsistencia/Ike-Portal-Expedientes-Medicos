@@ -18,8 +18,9 @@ COLUMNA_ACTIVO = "Activo"
 
 MENSAJE_USUARIO_INACTIVO = "Usuario sin permisos o inactivo, valide con el Supervisor"
 
-# @pContraseña es varchar(10) en el SP, aunque la pantalla de login
-# permite hasta 20 (ver inconsistencia documentada en sql/05_..._NOTAS.md).
+# @pContraseña es varchar(10) en el SP (dbo.sp_EncriptDesEncriptPassword),
+# aunque la pantalla de login permite hasta 20 -- confirmado que 10 es el
+# límite real, la API lo rechaza explícito en vez de truncar en silencio.
 LARGO_MAXIMO_PASSWORD_SP = 10
 
 

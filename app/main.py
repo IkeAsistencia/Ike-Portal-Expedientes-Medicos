@@ -24,7 +24,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="API Expedientes Médicos",
+    title="Portal Expedientes Médicos",
     version="1.0.0",
     description=(
         "Backend para el sistema de gestión de Expedientes Médicos, expuesto "

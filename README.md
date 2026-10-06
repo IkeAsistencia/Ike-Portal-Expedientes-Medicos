@@ -1,4 +1,4 @@
-# API Expedientes Médicos (Python + FastAPI + SQL Server)
+# Portal Expedientes Médicos (Python + FastAPI + SQL Server)
 
 Backend REST del sistema de gestión de Expedientes Médicos, sucesor formal
 del prototipo HTML. Lee y escribe contra SQL Server **exclusivamente por
@@ -124,8 +124,9 @@ pytest tests/ -v
 ## Flujo de autenticación
 
 1. `POST /auth/login` con `{"usuario": "...", "password": "..."}` (según
-   la pantalla de acceso: usuario máx. 15, password máx. 20 — ver el
-   aviso sobre el límite real en `sql/05_login_sp_EncriptDesEncriptPassword_NOTAS.md`).
+   la pantalla de acceso: usuario máx. 15, password máx. 20 — el SP legado
+   solo soporta 10 caracteres de contraseña, ver `LARGO_MAXIMO_PASSWORD_SP`
+   en `app/repositories/auth_repo.py`).
 2. Internamente se llama a `dbo.sp_EncriptDesEncriptPassword` (SP ya
    existente en tu base) para validar credenciales y obtener `clUsrApp`.
 3. Si el login es correcto, la API emite su **propio token (JWT)**, ya
@@ -170,9 +171,7 @@ proyecto y no reemplaza el REST** (ambos siguen funcionando).
 
 ## ⚠️ Pendientes / a confirmar contigo
 
-Ver el detalle completo en `sql/README.md`,
-`sql/05_login_sp_EncriptDesEncriptPassword_NOTAS.md`,
-`sql/08_subservicios_sp_GetSubServicios2_NOTAS.md` y `jobs/README.md`. Resumen:
+Ver el detalle completo en `sql/README.md` y `jobs/README.md`. Resumen:
 
 1. **Límite real de la contraseña** — la pantalla permite 20 caracteres
    pero el SP solo soporta 10 (`@pContraseña varchar(10)`). Por ahora la

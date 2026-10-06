@@ -10,11 +10,11 @@ def listar_servicios(cl_servicio: int = 4) -> list[CatalogoItem]:
 
 def listar_subservicios(cl_servicio: int = 4) -> list[CatalogoItem]:
     """
-    Combo Subservicio. Usa dbo.ObtenerServicioMedico (sql/09_...sql),
+    Combo Subservicio. Usa dbo.ObtenerServicioMedico (sql/07_...sql),
     que reemplaza al SP legado dbo.sp_GetSubServicios2 — ese requería
     @clCuenta (filtra por cobertura de una sola cuenta), lo cual no
     encaja con el filtro Cuenta de la pantalla Expedientes (permite
-    varias a la vez). Ver sql/08_subservicios_sp_GetSubServicios2_NOTAS.md.
+    varias a la vez).
     """
     rows = call_procedure("dbo.ObtenerServicioMedico", {"clServicio": cl_servicio})
     return [CatalogoItem(clave=r["clSubServicio"], descripcion=r["dsSubServicio"]) for r in rows]
