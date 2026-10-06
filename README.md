@@ -30,6 +30,7 @@ jobs/
 frontend/                        # portal (HTML + CSS + JS puro, sin build), servido por FastAPI en "/"
 ├── index.html                   # marco: login, menú lateral y barra superior
 ├── css/                         # base.css · layout.css · componentes.css
+├── img/                         # logo de IKE (blanco para el menú, a color con lema para el login) e ícono
 └── js/
     ├── app.js                   # arranque, sesión, menú por perfil y navegación (#/pantalla)
     ├── core/                    # api, sesión, router, catálogos, reglas de negocio, formato, toast
