@@ -16,9 +16,14 @@ el REST (`app/routers/seguimiento.py`,
 `app/routers/configuracion_cuentas.py`). Si agregas una mutation nueva
 que modifique datos, reutiliza esas reglas en vez de llamar al
 repositorio directo: de lo contrario GraphQL vuelve a ser una puerta
-trasera que se salta los permisos por perfil. La mutation `login`
-también aplica el mismo límite de intentos que `/auth/login` (ver
-`app/core/rate_limit.py`).
+trasera que se salta los permisos por perfil.
+
+> **Disponibilidad:** el explorador GraphiQL solo aparece si
+> `GRAPHQL_IDE_HABILITADO=true` en tu `.env` (apagado por default; en QA y
+> producción debe quedar apagado). La mutation `login` es el login legado
+> por usuario de SISE y está apagada por default
+> (`LOGIN_LEGADO_HABILITADO=false`): el token se obtiene con el login por
+> RFC del REST y sirve igual para GraphQL.
 
 ## ¿Qué es GraphQL, en corto?
 
@@ -45,19 +50,20 @@ dos campos — no te regresan los 15.
 
 ## Ejemplos para copiar y pegar en GraphiQL
 
-### 1. Login (primero que nada, para obtener el token)
+### 1. Obtener el token (primero que nada)
 
-```graphql
-mutation {
-  login(datos: { usuario: "ijimenez", password: "clave123" }) {
-    accessToken
-    nombre
-    clUsrApp
-  }
-}
+El token se pide con el login por RFC del REST (el mismo que usa el
+portal). Por ejemplo, en PowerShell, con un RFC de prueba que ya tenga
+contraseña:
+
+```powershell
+$r = Invoke-RestMethod -Method Post -Uri http://localhost:8000/auth/rfc/login `
+  -ContentType "application/json" `
+  -Body '{"rfc": "CABI000001", "password": "TU_CONTRASEÑA"}'
+$r.access_token
 ```
 
-Copia el valor de `accessToken` de la respuesta. En GraphiQL, abre el
+Copia el valor de `access_token` de la respuesta. En GraphiQL, abre el
 panel de abajo "Headers" (o "Request Headers") y pon:
 
 ```json

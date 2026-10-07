@@ -69,6 +69,22 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480  # 8 horas
 
+    # --- Proxy delante de la app (ver app/core/red.py) ---
+    # Cuántos proxies de confianza agregan su IP a X-Forwarded-For antes de
+    # llegar a la app. La IP real del usuario es la que quedó en esa posición
+    # contando desde el final (lo de antes lo pudo escribir el propio usuario):
+    #   1 = un solo proxy (ALB solo, o nginx que reemplaza el encabezado)
+    #   2 = CloudFront + ALB
+    #   0 = sin proxy (se ignora X-Forwarded-For y se usa la IP de la conexión)
+    proxies_confiables: int = 1
+
+    # --- Login legado por usuario/contraseña de SISE (/auth/login y la
+    # mutación login de GraphQL) ---
+    # El portal entra solo por RFC; este login ya no se usa y queda apagado
+    # para no dejar una puerta extra en producción. Solo se enciende para las
+    # pruebas automatizadas o si algún cliente externo lo vuelve a necesitar.
+    login_legado_habilitado: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
     @property
@@ -122,18 +138,18 @@ class ArranqueSettings(BaseSettings):
     sin tener todavía un .env completo (ej. pytest recolectando las pruebas).
     """
 
-    # El portal (frontend/) lo sirve esta misma app, así que no necesita CORS;
-    # esto solo aplica a clientes externos que consuman la API desde otro
-    # origen. "*" (default) permite cualquier origen, pero NUNCA debe
-    # quedar así en producción: pon aquí la URL exacta del frontend definitivo
-    # (ej. "https://expedientes.ike.local", separadas por coma si son varias)
-    # en cuanto se decida dónde vive.
-    cors_allowed_origins: str = "*"
+    # El portal (frontend/) lo sirve esta misma app, así que no necesita CORS.
+    # Por default no se permite ningún origen externo (lo seguro para
+    # producción). Solo si un cliente externo consume la API desde otro
+    # dominio, pon aquí sus URLs exactas separadas por coma; "*" permite
+    # cualquier origen y solo debe usarse en desarrollo.
+    cors_allowed_origins: str = ""
 
     # GraphiQL (explorador visual) e introspección: cómodos en desarrollo, pero
     # exponen el schema completo (todas las queries/mutations/tipos) sin
-    # autenticación. Pon esto en false en producción.
-    graphql_ide_habilitado: bool = True
+    # autenticación. Apagado por default; enciéndelo solo en desarrollo
+    # (GRAPHQL_IDE_HABILITADO=true en tu .env local).
+    graphql_ide_habilitado: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

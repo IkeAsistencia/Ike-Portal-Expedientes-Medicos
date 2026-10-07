@@ -2,7 +2,9 @@ import socket
 
 from fastapi import APIRouter, HTTPException, Request, status
 
+from app.config import get_settings
 from app.core.rate_limit import verificar_limite
+from app.core.red import ip_cliente
 from app.core.security import crear_token
 from app.repositories import accesos_repo, auth_repo
 from app.schemas.acceso import (
@@ -26,12 +28,17 @@ VENTANA_INTENTOS_LOGIN_SEGUNDOS = 5 * 60
 
 @router.post("/login", response_model=LoginResponse)
 def login(data: LoginInput, request: Request):
+    # Login legado por usuario/contraseña de SISE: apagado por default
+    # (LOGIN_LEGADO_HABILITADO, ver app/config.py). Se responde 404 para no
+    # anunciar que la ruta existe.
+    if not get_settings().login_legado_habilitado:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Not Found")
     host = _obtener_host_servidor()
-    ip = _obtener_ip_cliente(request)
+    ip = ip_cliente(request)
     verificar_limite(f"login:{ip}:{data.usuario}", MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS)
 
     try:
-        resultado = auth_repo.autenticar(data.usuario, data.password, host, ip)
+        resultado = auth_repo.autenticar(data.usuario, data.password, host, ip[:20])
     except auth_repo.UsuarioInactivo as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e))
     except auth_repo.CredencialesInvalidas as e:
@@ -53,7 +60,7 @@ def rfc_estado(data: RfcEstadoInput, request: Request):
     autorizado y si ya tiene contraseña creada, para saber qué pantalla
     mostrar (crear contraseña vs. capturarla).
     """
-    ip = _obtener_ip_cliente(request)
+    ip = ip_cliente(request)
     verificar_limite(f"rfc-estado:{ip}", MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS)
 
     acceso = accesos_repo.buscar_acceso(data.rfc)
@@ -69,7 +76,7 @@ def rfc_estado(data: RfcEstadoInput, request: Request):
 @router.post("/rfc/crear-password", response_model=AccesoLoginResponse)
 def rfc_crear_password(data: CrearPasswordInput, request: Request):
     """Primera vez que un RFC autorizado usa el sistema: crea su contraseña y entra."""
-    ip = _obtener_ip_cliente(request)
+    ip = ip_cliente(request)
     verificar_limite(f"rfc-crear:{ip}:{data.rfc}", MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS)
 
     try:
@@ -88,7 +95,7 @@ def rfc_crear_password(data: CrearPasswordInput, request: Request):
 @router.post("/rfc/login", response_model=AccesoLoginResponse)
 def rfc_login(data: RfcLoginInput, request: Request):
     """Login normal por RFC + contraseña (ya creada previamente)."""
-    ip = _obtener_ip_cliente(request)
+    ip = ip_cliente(request)
     verificar_limite(f"rfc-login:{ip}:{data.rfc}", MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS)
 
     try:
@@ -111,9 +118,3 @@ def _obtener_host_servidor() -> str:
     """
     return socket.gethostname()[:20]
 
-
-def _obtener_ip_cliente(request: Request) -> str:
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()[:20]
-    return (request.client.host if request.client else "")[:20]

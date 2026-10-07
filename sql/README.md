@@ -20,6 +20,53 @@ compatibilidad aplicadas en todos los scripts:
 
 `06_sp_ObtenerCatalogoSubServicio_DEPRECADO.sql` **NO se ejecuta**.
 
+## Para quien corre los scripts en QA o producción
+
+**Permisos de quien los corre:** crear los objetos requiere permisos de
+DDL en la base (`CREATE PROCEDURE`, `CREATE TYPE` y `ALTER` sobre el
+esquema `dbo`, por ejemplo el rol `db_ddladmin`). Solo permiso de
+ejecución no alcanza.
+
+**Antes de correrlos**, verifica que existan en esa base las tablas y el SP
+que usan los scripts:
+
+```sql
+SELECT name, type_desc FROM sys.objects
+WHERE name IN ('Expediente', 'ProveedorxExpediente', 'CitaxExpediente', 'Check_Up',
+               'cCuenta', 'cServicio', 'cSubServicio', 'cEntFed', 'cMunDel',
+               'cEspecialidad', 'cPerfilCheckUp', 'cUsrApp', 'Seguimiento',
+               'sp_S2_BuscaCuenta')
+ORDER BY name;   -- deben salir los 14
+```
+
+**Correr** `00` a `05` y `07`, en ese orden (el `06` no). Se pueden volver
+a correr sin problema: el `00` solo crea el tipo si no existe y los demás
+borran y recrean su SP.
+
+**Permisos del usuario con el que se conecta la app** (el de `DB_USER`;
+solo ejecución, sin acceso directo a tablas):
+
+```sql
+GRANT EXECUTE ON dbo.ObtenerExpedientesSinProveedorMedico   TO [usuario_app];
+GRANT EXECUTE ON dbo.ObtenerCatalogoServicio                TO [usuario_app];
+GRANT EXECUTE ON dbo.ObtenerCatalogoCuentas                 TO [usuario_app];
+GRANT EXECUTE ON dbo.RegistrarSeguimiento                   TO [usuario_app];
+GRANT EXECUTE ON dbo.ObtenerExpedientesSinRespuestaProveedor TO [usuario_app];
+GRANT EXECUTE ON dbo.ObtenerServicioMedico                  TO [usuario_app];
+GRANT EXECUTE ON dbo.sp_S2_BuscaCuenta                      TO [usuario_app];
+GRANT EXECUTE ON TYPE::dbo.IntList                          TO [usuario_app];  -- listas de cuentas (TVP)
+```
+
+**Comprobar** que quedaron creados:
+
+```sql
+SELECT name, create_date FROM sys.procedures
+WHERE name IN ('ObtenerExpedientesSinProveedorMedico', 'ObtenerCatalogoServicio',
+               'ObtenerCatalogoCuentas', 'RegistrarSeguimiento',
+               'ObtenerExpedientesSinRespuestaProveedor', 'ObtenerServicioMedico');  -- deben salir los 6
+SELECT name FROM sys.table_types WHERE name = 'IntList';                             -- debe salir 1
+```
+
 ## SPs existentes que NO se incluyen aquí (ya están en tu base)
 
 - **`dbo.sp_S2_BuscaCuenta`** — typeahead de cuentas (Configuración Cuentas).

@@ -1,0 +1,42 @@
+# EJEMPLO de workflow de despliegue (no está activo).
+# Para activarlo, copiarlo a .github/workflows/deploy.yml cuando ya existan
+# los servidores y los secretos en GitHub (Settings → Secrets and variables →
+# Actions), uno por ambiente:
+#   QA_HOST, QA_USER, QA_SSH_KEY
+#   PROD_HOST, PROD_USER, PROD_SSH_KEY
+#
+# - Push a la rama "test"  → despliega en QA.
+# - Etiqueta "v*" (ej. v1.0.0) → despliega en producción.
+name: Desplegar portal
+
+on:
+  push:
+    branches: [test]
+    tags: ["v*"]
+
+jobs:
+  qa:
+    if: github.ref == 'refs/heads/test'
+    runs-on: ubuntu-latest
+    environment: qa
+    steps:
+      - name: Desplegar en QA por SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.QA_HOST }}
+          username: ${{ secrets.QA_USER }}
+          key: ${{ secrets.QA_SSH_KEY }}
+          script: /opt/portal-expedientes/deploy/desplegar.sh test
+
+  produccion:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: produccion   # en GitHub se puede exigir aprobación manual
+    steps:
+      - name: Desplegar en producción por SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: /opt/portal-expedientes/deploy/desplegar.sh ${{ github.ref_name }}

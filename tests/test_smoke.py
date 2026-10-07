@@ -168,6 +168,9 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PASSWORD", "password-fake")
     monkeypatch.setenv("LOCAL_DB_PATH", str(tmp_path / "test_local.db"))
     monkeypatch.setenv("JWT_SECRET_KEY", "clave-de-prueba")
+    # Las pruebas usan el login legado (usuario SISE) para obtener tokens;
+    # en la app real está apagado por default (ver app/config.py).
+    monkeypatch.setenv("LOGIN_LEGADO_HABILITADO", "true")
 
     from app.config import get_settings
 
@@ -225,6 +228,48 @@ def test_health(client):
     r = client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
+
+
+def test_login_legado_apagado_por_default(client, monkeypatch):
+    from app.config import get_settings
+
+    monkeypatch.setenv("LOGIN_LEGADO_HABILITADO", "false")
+    get_settings.cache_clear()
+    r = _login(client)
+    assert r.status_code == 404
+    # El login por RFC sigue funcionando.
+    assert "Authorization" in _auth_headers_cabina(client)
+
+
+def _request_con(xff, host="10.0.0.9"):
+    from types import SimpleNamespace
+
+    headers = {"x-forwarded-for": xff} if xff is not None else {}
+    return SimpleNamespace(headers=headers, client=SimpleNamespace(host=host))
+
+
+def test_ip_cliente_segun_proxies_confiables(client, monkeypatch):
+    from app.config import get_settings
+    from app.core.red import ip_cliente
+
+    def con_proxies(n):
+        monkeypatch.setenv("PROXIES_CONFIABLES", str(n))
+        get_settings.cache_clear()
+
+    # Un proxy (ALB solo o nginx): la IP real es la última; lo anterior lo
+    # pudo escribir el usuario para falsear su IP.
+    con_proxies(1)
+    assert ip_cliente(_request_con("1.1.1.1, 200.10.10.10")) == "200.10.10.10"
+    assert ip_cliente(_request_con("200.10.10.10")) == "200.10.10.10"
+    # CloudFront + ALB: la penúltima es la del usuario, la última es CloudFront.
+    con_proxies(2)
+    assert ip_cliente(_request_con("1.1.1.1, 200.10.10.10, 130.176.0.5")) == "200.10.10.10"
+    # Sin proxy: se ignora el encabezado.
+    con_proxies(0)
+    assert ip_cliente(_request_con("1.1.1.1")) == "10.0.0.9"
+    # Sin encabezado: la IP de la conexión.
+    con_proxies(1)
+    assert ip_cliente(_request_con(None)) == "10.0.0.9"
 
 
 def test_portal_se_sirve_en_la_raiz(client):

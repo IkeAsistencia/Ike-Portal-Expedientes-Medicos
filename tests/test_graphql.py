@@ -92,6 +92,9 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PASSWORD", "password-fake")
     monkeypatch.setenv("LOCAL_DB_PATH", str(tmp_path / "test_local.db"))
     monkeypatch.setenv("JWT_SECRET_KEY", "clave-de-prueba")
+    # Las pruebas usan el login legado (usuario SISE) para obtener tokens;
+    # en la app real está apagado por default (ver app/config.py).
+    monkeypatch.setenv("LOGIN_LEGADO_HABILITADO", "true")
 
     from app.config import get_settings
 

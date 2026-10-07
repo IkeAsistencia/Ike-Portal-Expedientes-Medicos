@@ -11,6 +11,7 @@ iniciada, sin importar el perfil ni las reglas de negocio).
 import strawberry
 from fastapi import HTTPException
 
+from app.config import get_settings
 from app.core.rate_limit import verificar_limite
 from app.core.security import crear_token
 from app.graphql.inputs import (
@@ -40,6 +41,11 @@ def _elevar_error_graphql(e: HTTPException) -> Exception:
 class Mutation:
     @strawberry.mutation(description="Pantalla de acceso. No requiere sesión previa.")
     def login(self, info: strawberry.Info, datos: LoginInput) -> LoginResult:
+        # Login legado, apagado por default igual que POST /auth/login. Para
+        # obtener un token usa el login por RFC (POST /auth/rfc/login): el
+        # mismo token sirve para GraphQL.
+        if not get_settings().login_legado_habilitado:
+            raise Exception("El login por usuario y contraseña está deshabilitado. Usa el login por RFC (POST /auth/rfc/login).")
         ctx = info.context
         try:
             # Mismo límite que /auth/login (ver app/routers/auth.py): sin esto,
@@ -49,7 +55,7 @@ class Mutation:
                 f"login:{ctx.ip_cliente()}:{datos.usuario}", MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS
             )
             resultado = auth_repo.autenticar(
-                datos.usuario, datos.password, ctx.host_servidor(), ctx.ip_cliente()
+                datos.usuario, datos.password, ctx.host_servidor(), ctx.ip_cliente()[:20]
             )
         except auth_repo.UsuarioInactivo as e:
             raise Exception(str(e))

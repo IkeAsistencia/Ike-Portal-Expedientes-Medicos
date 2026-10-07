@@ -1,0 +1,26 @@
+# Servicio systemd del portal (EC2 Linux).
+# Copiar a /etc/systemd/system/portal-expedientes.service y luego:
+#   sudo systemctl daemon-reload && sudo systemctl enable --now portal-expedientes
+# Logs: journalctl -u portal-expedientes -f
+#
+# Ajustar User y las rutas si el proyecto vive en otra carpeta.
+
+[Unit]
+Description=Portal Expedientes Medicos
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=portal
+WorkingDirectory=/opt/portal-expedientes
+Environment=TZ=America/Mexico_City
+# Un solo proceso, sin --workers: el límite de intentos del login vive en
+# memoria y el SQLite local no debe tener varios escritores.
+# Escucha en todas las interfaces porque el ALB llega por la red privada de
+# la VPC; el security group debe permitir el puerto 8000 SOLO desde el ALB.
+ExecStart=/opt/portal-expedientes/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

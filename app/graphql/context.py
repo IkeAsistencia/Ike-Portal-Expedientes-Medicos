@@ -14,6 +14,7 @@ from typing import Optional
 from fastapi import Request
 from strawberry.fastapi import BaseContext
 
+from app.core.red import ip_cliente
 from app.core.security import usuario_desde_token
 
 
@@ -50,10 +51,8 @@ class Context(BaseContext):
         return socket.gethostname()[:20]
 
     def ip_cliente(self) -> str:
-        forwarded = self.request.headers.get("x-forwarded-for")
-        if forwarded:
-            return forwarded.split(",")[0].strip()[:20]
-        return (self.request.client.host if self.request.client else "")[:20]
+        # Misma regla que el REST (ver app/core/red.py).
+        return ip_cliente(self.request)
 
 
 async def get_context(request: Request) -> Context:

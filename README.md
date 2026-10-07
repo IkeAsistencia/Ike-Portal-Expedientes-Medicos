@@ -204,6 +204,10 @@ En cualquier sistema operativo, el portal necesita lo mismo:
   estatus, comentarios, comprobantes y cortes.
 - El job de alertas programado cada hora (ver `jobs/README.md`).
 
+Para **AWS** (EC2 Linux detrás de CloudFront y ALB, QA y producción) hay
+plantillas listas en [`deploy/`](deploy/README.md): servicio systemd, script
+de despliegue con verificación, workflow de ejemplo y el `.env` por ambiente.
+
 ### Windows
 
 Para correrlo como servicio de Windows, una opción es
@@ -271,38 +275,40 @@ pytest tests/ -v
 
 ## Flujo de autenticación
 
-1. `POST /auth/login` con `{"usuario": "...", "password": "..."}` (según
-   la pantalla de acceso: usuario máx. 15, password máx. 20 — el SP legado
-   solo soporta 10 caracteres de contraseña, ver `LARGO_MAXIMO_PASSWORD_SP`
-   en `app/repositories/auth_repo.py`).
-2. Internamente se llama a `dbo.sp_EncriptDesEncriptPassword` (SP ya
-   existente en tu base) para validar credenciales y obtener `clUsrApp`.
-3. Si el login es correcto, la API emite su **propio token (JWT)**, ya
-   que `@CreateSession` se manda fijo en `0`.
-4. **Todos los demás endpoints exigen ese token** (`Authorization: Bearer <token>`).
-5. En `/seguimiento/actualizar`, el `clUsrApp` que se guarda en
-   `dbo.Seguimiento` se toma del token — nunca de un campo libre del
-   formulario.
+1. El portal entra **por RFC**: `POST /auth/rfc/estado` revisa si el RFC
+   está autorizado y si ya tiene contraseña; la primera vez se crea con
+   `POST /auth/rfc/crear-password` y después se entra con
+   `POST /auth/rfc/login`. Los RFC los da de alta el Administrador.
+2. Las contraseñas se guardan con hash + salt (PBKDF2-SHA256) en la base
+   local; el login por RFC no consulta SQL Server.
+3. La app emite su **propio token (JWT)** de 8 horas. **Todos los demás
+   endpoints exigen ese token** (`Authorization: Bearer <token>`).
+4. Límite de intentos: 10 cada 5 minutos por IP (y RFC). La IP se toma de
+   `X-Forwarded-For` según `PROXIES_CONFIABLES` (ver `app/core/red.py`).
+5. El login legado por usuario de SISE (`POST /auth/login`, vía
+   `dbo.sp_EncriptDesEncriptPassword`) sigue en el código pero está
+   **apagado por default** (`LOGIN_LEGADO_HABILITADO=false`).
 
 ## Endpoints
 
-| Método | Ruta | Auth | Pantalla / uso | Origen del dato |
-|---|---|---|---|---|
-| POST | `/auth/login` | No | Pantalla de acceso | `dbo.sp_EncriptDesEncriptPassword` (SQL Server, ya existente) |
-| GET | `/expedientes` | Sí | Expedientes: tabla + filtros (incluye Servicio/Subservicio) | `dbo.ObtenerExpedientesSinProveedorMedico` + estatus local |
-| POST | `/expedientes/enviar-correo-proveedores` | Sí | Botón "Enviar correo a proveedores" | `app/services/email_service.py` (simulado hasta configurar SMTP) |
-| GET | `/catalogos/servicios` | Sí | Combo Servicio | `dbo.ObtenerCatalogoServicio` |
-| GET | `/catalogos/subservicios?cl_servicio=` | Sí | Combo Subservicio (cascada de Servicio) | `dbo.sp_GetSubServicios2` (ya existente) |
-| GET | `/catalogos/cuentas` | Sí | Combo Cuenta | `dbo.ObtenerCatalogoCuentas` |
-| GET | `/catalogos/cuentas/buscar?texto=` | Sí | Configuración Cuentas (typeahead) | `dbo.sp_S2_BuscaCuenta` (ya existente) |
-| POST | `/seguimiento/actualizar` | Sí | Botón "Actualizar en SISE" | `dbo.RegistrarSeguimiento` → INSERT en `dbo.Seguimiento` |
-| POST | `/seguimiento/estatus` | Sí | Cambio de estatus del expediente | Base local (SQLite) — no toca SQL Server |
-| GET/POST/DELETE | `/configuracion/cuentas` | Sí | Grid de Configuración Cuentas | Base local (SQLite) |
-| POST | `/configuracion/cuentas/limpiar` | Sí | Botón "Cancelar" del grid | Base local (SQLite) |
+| Método | Ruta | Pantalla / uso | Origen del dato |
+|---|---|---|---|
+| POST | `/auth/rfc/estado` · `/auth/rfc/crear-password` · `/auth/rfc/login` | Inicio de sesión (sin token) | Base local |
+| GET | `/expedientes` | Expedientes: tabla + filtros | `dbo.ObtenerExpedientesSinProveedorMedico` + estatus local |
+| POST | `/expedientes/enviar-correo-proveedores` | "Enviar correo a proveedores" (Cabina) | Correo + estatus local |
+| POST / GET / POST | `/expedientes/corte` · `/expedientes/corte/{id}/descargar` · `/expedientes/corte/{id}/enviar` | Corte en Excel (Administrador) | Excel guardado en la base local + correo |
+| GET | `/catalogos/servicios` · `/catalogos/subservicios` · `/catalogos/cuentas` · `/catalogos/cuentas/buscar` | Combos y buscador de cuentas | `dbo.ObtenerCatalogoServicio`, `dbo.ObtenerServicioMedico`, `dbo.ObtenerCatalogoCuentas`, `dbo.sp_S2_BuscaCuenta` |
+| POST | `/seguimiento/actualizar` | "Actualizar Core" (Proveedor) | `dbo.RegistrarSeguimiento` + comentario y estatus locales |
+| POST | `/seguimiento/estatus` | Estado del caso (Cabina) | Estatus local; regresar/cita también escriben en Core |
+| GET | `/seguimiento/comentarios/{exp}` | Comentarios del Proveedor y del Coordinador | Base local |
+| GET / POST | `/seguimiento/pago-anticipado/{exp}` | Casilla de pago anticipado | Base local |
+| POST / GET | `/seguimiento/comprobante` · `/seguimiento/comprobante/{exp}` · `.../archivo` | Comprobante de pago | Base local |
+| GET / POST / DELETE | `/configuracion/cuentas` · `/configuracion/cuentas/limpiar` | Configuración Cuentas (Administrador) | Base local |
+| GET / POST | `/admin/accesos` · `/admin/accesos/entidades` · `/admin/accesos/{rfc}/inactivar` · `/reactivar` · `/resetear-password` · `/entidad` | Usuarios y Accesos (Administrador) | Base local |
+| GET | `/health` | Monitoreo (sin token) | — |
 
 Además, `jobs/validar_estatus_proveedor.py` corre por fuera del servidor
-web (programado con el Programador de tareas de Windows — ver
-`jobs/README.md`) y usa `dbo.ObtenerExpedientesSinRespuestaProveedor`
+web (ver `jobs/README.md`) y usa `dbo.ObtenerExpedientesSinRespuestaProveedor`
 para mandar alertas por correo.
 
 ## GraphQL (nuevo)
@@ -317,30 +323,21 @@ proyecto y no reemplaza el REST** (ambos siguen funcionando).
 - Pruebas automatizadas: `tests/test_graphql.py`.
 - El frontend (`frontend/index.html`) sigue usando el REST por ahora.
 
-## ⚠️ Pendientes / a confirmar contigo
+## ⚠️ Pendientes / a confirmar
 
-Ver el detalle completo en `sql/README.md` y `jobs/README.md`. Resumen:
+Ver el detalle en `sql/README.md` y `jobs/README.md`. Resumen:
 
-1. **Límite real de la contraseña** — la pantalla permite 20 caracteres
-   pero el SP solo soporta 10 (`@pContraseña varchar(10)`). Por ahora la
-   API rechaza explícitamente contraseñas de más de 10 caracteres en vez
-   de truncar en silencio.
-2. **Host del cliente** — un API web solo puede obtener confiablemente la
-   IP del usuario, no el nombre de su PC. Por ahora se manda el hostname
-   del *servidor* donde corre la API. Avísame si necesitas capturar el
-   hostname real del cliente desde el navegador.
-3. **Cuentas permitidas fijas** — confirmar si debe seguir siendo una
-   lista fija o depender de otro criterio.
-4. **Parámetro y columnas de `sp_GetSubServicios2`** — se asumió el
-   nombre del parámetro (`clServicio`) y de las columnas de salida
-   (`clSubServicio`, `dsSubservicio`); confirmar corriendo el SP manualmente.
-5. **Datos de SMTP y correo real del proveedor** — *pendiente a propósito
-   para esta sesión*. El botón "Enviar correo a proveedores" y el cron
-   funcionan de punta a punta, pero en "modo simulado" (solo registran en
-   el log) hasta tener host/usuario/contraseña de un servidor SMTP real,
-   y hasta saber de dónde sacar el correo del proveedor (el query solo
-   trae el correo del paciente).
-6. **Corte 8h/24h del cron** — se implementó como escalonado (8-24h
+1. **Datos de SMTP y correo real del proveedor** — el envío de correos
+   funciona de punta a punta, pero en "modo simulado" (solo se registra en
+   el log) hasta tener host, remitente y credenciales de un SMTP real, y
+   hasta saber de dónde sacar el correo del proveedor (el query solo trae
+   el del paciente). **Necesario antes de producción.**
+2. **Cuentas permitidas fijas** — confirmar si `CUENTAS_PERMITIDAS` sigue
+   siendo una lista fija y cuál es la de producción (el default del código
+   y el de `.env.example` no son la misma lista).
+3. **LEFT JOIN a `dbo.CitaxExpediente`** en el listado principal — quedó
+   sin columnas usadas; confirmar si se puede quitar.
+4. **Corte 8h/24h del cron** — se implementó como escalonado (8-24h
    naranja, 24h+ rojo); confirmar si la intención era otra.
 
 ## ✅ Ya confirmado
