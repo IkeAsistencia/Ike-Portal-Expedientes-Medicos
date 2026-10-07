@@ -1,10 +1,17 @@
 """
 Mutation root de GraphQL. Igual que query.py: reutiliza los mismos
-repositorios y servicios que ya usa el REST.
+repositorios y servicios que ya usa el REST -- en particular, las reglas
+de autorización/flujo de trabajo de app/services/seguimiento_service.py,
+app/services/estatus_service.py y accesos_repo.verificar_rol_administrador,
+para que GraphQL nunca sea una puerta trasera que se salte lo que el REST
+sí valida (ver PRs de seguridad: antes estas mutations solo exigían sesión
+iniciada, sin importar el perfil ni las reglas de negocio).
 """
 
 import strawberry
+from fastapi import HTTPException
 
+from app.core.rate_limit import verificar_limite
 from app.core.security import crear_token
 from app.graphql.inputs import (
     CuentaConfigInput,
@@ -14,13 +21,19 @@ from app.graphql.inputs import (
     SeguimientoInput,
 )
 from app.graphql.types import EnviarCorreoResultado, LoginResult, OperacionOk
-from app.repositories import auth_repo, cuentas_config_repo, estatus_repo, expedientes_repo, seguimiento_repo
+from app.repositories import accesos_repo, auth_repo, cuentas_config_repo, estatus_repo, expedientes_repo
+from app.routers.auth import MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS
 from app.schemas.auth import LoginResponse
 from app.schemas.correo import EnviarCorreoProveedoresResponse
 from app.schemas.expediente import EstatusExpediente, ExpedienteFiltro
-from app.schemas.seguimiento import EstatusInput as EstatusInputPydantic
-from app.schemas.seguimiento import SeguimientoInput as SeguimientoInputPydantic
-from app.services import email_service
+from app.services import email_service, estatus_service, seguimiento_service
+
+
+def _elevar_error_graphql(e: HTTPException) -> Exception:
+    """Las reglas compartidas con el REST lanzan HTTPException (status +
+    detail); GraphQL no tiene ese concepto, así que se traduce al mismo
+    patrón que ya usa este archivo para errores de negocio."""
+    return Exception(e.detail)
 
 
 @strawberry.type
@@ -29,6 +42,12 @@ class Mutation:
     def login(self, info: strawberry.Info, datos: LoginInput) -> LoginResult:
         ctx = info.context
         try:
+            # Mismo límite que /auth/login (ver app/routers/auth.py): sin esto,
+            # GraphQL era una puerta sin freno a fuerza bruta/credential
+            # stuffing contra cuentas SISE.
+            verificar_limite(
+                f"login:{ctx.ip_cliente()}:{datos.usuario}", MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS
+            )
             resultado = auth_repo.autenticar(
                 datos.usuario, datos.password, ctx.host_servidor(), ctx.ip_cliente()
             )
@@ -36,6 +55,8 @@ class Mutation:
             raise Exception(str(e))
         except auth_repo.CredencialesInvalidas as e:
             raise Exception(str(e))
+        except HTTPException as e:
+            raise _elevar_error_graphql(e)
 
         token = crear_token(resultado["cl_usr_app"], resultado["usuario"], resultado["nombre"])
         return LoginResult.from_pydantic(
@@ -50,21 +71,22 @@ class Mutation:
     @strawberry.mutation(description="Botón 'Actualizar en SISE'. Requiere sesión.")
     def actualizar_seguimiento(self, info: strawberry.Info, datos: SeguimientoInput) -> OperacionOk:
         usuario = info.context.requerir_usuario()
-        if not datos.comentario.strip():
-            raise Exception("El comentario no puede estar vacío.")
-        seguimiento_repo.registrar_seguimiento(
-            SeguimientoInputPydantic(cl_expediente=datos.cl_expediente, comentario=datos.comentario),
-            cl_usr_app=usuario["cl_usr_app"],
-        )
+        try:
+            seguimiento_service.actualizar_seguimiento(datos.cl_expediente, datos.comentario, usuario)
+        except HTTPException as e:
+            raise _elevar_error_graphql(e)
         return OperacionOk(ok=True, mensaje="Seguimiento registrado.")
 
     @strawberry.mutation(description="Cambia el estatus del expediente (solo en la app). Requiere sesión.")
     def actualizar_estatus(self, info: strawberry.Info, datos: EstatusInput) -> OperacionOk:
         usuario = info.context.requerir_usuario()
-        estatus = EstatusExpediente(datos.estatus.value)
-        identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
-        estatus_repo.actualizar_estatus(datos.cl_expediente, estatus, identificador)
-        return OperacionOk(ok=True, mensaje=f"Estado actualizado a {estatus.value}.")
+        try:
+            resultado = estatus_service.actualizar_estatus(
+                datos.cl_expediente, datos.estatus.value, usuario, datos.comentario
+            )
+        except HTTPException as e:
+            raise _elevar_error_graphql(e)
+        return OperacionOk(ok=True, mensaje=f"Estado actualizado a {resultado['estatus']}.")
 
     @strawberry.mutation(description="Botón 'Enviar correo a proveedores'. Requiere sesión.")
     def enviar_correo_proveedores(self, info: strawberry.Info, datos: EnviarCorreoProveedoresInput) -> EnviarCorreoResultado:
@@ -96,25 +118,34 @@ class Mutation:
             EnviarCorreoProveedoresResponse(enviados=resultado.enviados, expedientes=[r.expediente for r in registros])
         )
 
-    @strawberry.mutation(description="Configuración Cuentas: agregar. Requiere sesión.")
+    @strawberry.mutation(description="Configuración Cuentas: agregar. Requiere sesión de Administrador.")
     def agregar_cuenta(self, info: strawberry.Info, datos: CuentaConfigInput) -> OperacionOk:
-        info.context.requerir_usuario()
+        usuario = info.context.requerir_usuario()
         try:
+            accesos_repo.verificar_rol_administrador(usuario)
             cuentas_config_repo.agregar_cuenta_configurada(datos.cl_cuenta, datos.nombre)
         except ValueError as e:
             raise Exception(str(e))
         return OperacionOk(ok=True)
 
-    @strawberry.mutation(description="Configuración Cuentas: eliminar una fila. Requiere sesión.")
+    @strawberry.mutation(description="Configuración Cuentas: eliminar una fila. Requiere sesión de Administrador.")
     def eliminar_cuenta(self, info: strawberry.Info, cl_cuenta: int) -> OperacionOk:
-        info.context.requerir_usuario()
+        usuario = info.context.requerir_usuario()
+        try:
+            accesos_repo.verificar_rol_administrador(usuario)
+        except ValueError as e:
+            raise Exception(str(e))
         eliminado = cuentas_config_repo.eliminar_cuenta_configurada(cl_cuenta)
         if not eliminado:
             raise Exception("Cuenta no encontrada en la configuración.")
         return OperacionOk(ok=True)
 
-    @strawberry.mutation(description="Configuración Cuentas: botón 'Cancelar' (vacía el grid). Requiere sesión.")
+    @strawberry.mutation(description="Configuración Cuentas: botón 'Cancelar' (vacía el grid). Requiere sesión de Administrador.")
     def limpiar_cuentas_configuradas(self, info: strawberry.Info) -> OperacionOk:
-        info.context.requerir_usuario()
+        usuario = info.context.requerir_usuario()
+        try:
+            accesos_repo.verificar_rol_administrador(usuario)
+        except ValueError as e:
+            raise Exception(str(e))
         cuentas_config_repo.limpiar_cuentas_configuradas()
         return OperacionOk(ok=True, mensaje="Grid limpiado.")

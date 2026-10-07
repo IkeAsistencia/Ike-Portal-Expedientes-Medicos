@@ -5,7 +5,6 @@ from app.core.security import usuario_actual
 from app.repositories import (
     accesos_repo,
     comprobantes_repo,
-    estatus_repo,
     expedientes_repo,
     pago_anticipado_repo,
     seguimiento_repo,
@@ -19,34 +18,9 @@ from app.schemas.seguimiento import (
     PagoAnticipadoResponse,
     SeguimientoInput,
 )
-from app.services import email_service
-
-# Cabina puede regresar el expediente a Proveedor en cualquiera de estos dos
-# estatus -- ambos exigen comentario obligatorio, se escriben en Core y
-# disparan una notificación por correo (ver /estatus más abajo).
-ESTATUS_DE_REGRESO = (EstatusExpediente.EN_ESPERA_RESPUESTA, EstatusExpediente.SEGUIMIENTO_CITA)
+from app.services import estatus_service, seguimiento_service
 
 router = APIRouter(prefix="/seguimiento", tags=["Seguimiento"])
-
-LONGITUD_MINIMA_COMENTARIO_PROVEEDOR = 50
-
-
-def _observaciones_core(etiqueta: str, usuario: dict, comentario: str) -> str:
-    """Arma el texto que se inserta en Core con el encabezado de quién lo
-    escribió (ver seguimiento_repo.observaciones_para_core) y valida que
-    quepa en @Observaciones: si no, se rechaza en vez de que SQL Server lo
-    corte en silencio."""
-    nombre = usuario.get("nombre") or usuario.get("rfc") or usuario.get("usuario") or "desconocido"
-    observaciones = seguimiento_repo.observaciones_para_core(etiqueta, nombre, comentario)
-    sobran = len(observaciones) - seguimiento_repo.LONGITUD_MAXIMA_OBSERVACIONES_CORE
-    if sobran > 0:
-        raise HTTPException(
-            400,
-            f"El comentario es demasiado largo para Core: quítale {sobran} caracter(es). "
-            f"El registro admite {seguimiento_repo.LONGITUD_MAXIMA_OBSERVACIONES_CORE} caracteres "
-            "contando el encabezado con tu nombre.",
-        )
-    return observaciones
 
 # Proveedor solo debe poder leer comprobante/comentarios/pago-anticipado de
 # expedientes que le corresponde atender -- igual que ESTATUS_VISIBLES_PROVEEDOR
@@ -81,77 +55,11 @@ def actualizar_seguimiento(data: SeguimientoInput, usuario: dict = Depends(usuar
     lo ya existente) puede usar esto — Cabina lo tiene bloqueado.
     Al completarse, si quien lo hizo es Proveedor, el estatus del
     expediente pasa automáticamente a "Seguimiento Proveedor" — nunca antes.
+
+    Reglas en app/services/seguimiento_service.py (compartidas con la
+    mutation equivalente de GraphQL).
     """
-    if usuario.get("perfil") == accesos_repo.PERFIL_CABINA:
-        raise HTTPException(403, "El perfil Cabina no tiene acceso a Registrar seguimiento.")
-    comentario_limpio = data.comentario.strip()
-    if not comentario_limpio:
-        raise HTTPException(400, "El comentario no puede estar vacío.")
-    if len(comentario_limpio) < LONGITUD_MINIMA_COMENTARIO_PROVEEDOR:
-        raise HTTPException(
-            400,
-            f"El comentario debe tener al menos {LONGITUD_MINIMA_COMENTARIO_PROVEEDOR} caracteres "
-            "para poder actualizar.",
-        )
-
-    # Proveedor solo puede registrar seguimiento mientras el expediente está
-    # "En Espera de Respuesta" (primer envío) o "Seguimiento de Cita" (ya con
-    # la cita aceptada, segundo envío con el comprobante) -- en cualquier
-    # otro estatus no le corresponde, aunque se llame al endpoint directo.
-    es_proveedor = usuario.get("perfil") == accesos_repo.PERFIL_PROVEEDOR
-    estatus_actual = None
-    if es_proveedor:
-        encontrados = expedientes_repo.listar_expedientes(ExpedienteFiltro(cl_expediente=data.cl_expediente))
-        if not encontrados:
-            raise HTTPException(404, "No se encontró el expediente.")
-        estatus_actual = encontrados[0].estatus
-        if estatus_actual not in (EstatusExpediente.EN_ESPERA_RESPUESTA, EstatusExpediente.SEGUIMIENTO_CITA):
-            raise HTTPException(
-                400, "Este expediente ya no está en espera de respuesta, no puedes actualizarlo."
-            )
-
-    # Pago Anticipado: el comprobante se vuelve obligatorio hasta la segunda
-    # vuelta, cuando Cabina ya regresó el expediente como "Seguimiento de
-    # Cita" (cita aceptada) -- no en el primer envío.
-    if (
-        es_proveedor
-        and estatus_actual == EstatusExpediente.SEGUIMIENTO_CITA
-        and pago_anticipado_repo.es_anticipado(data.cl_expediente)
-        and not comprobantes_repo.existe_comprobante(data.cl_expediente)
-    ):
-        raise HTTPException(400, "Debes subir el comprobante de pago antes de continuar.")
-
-    cl_usr_app = usuario.get("cl_usr_app")
-    if cl_usr_app is None:
-        # Ver nota en accesos_repo.CL_USR_APP_PLACEHOLDER_RFC.
-        cl_usr_app = accesos_repo.CL_USR_APP_PLACEHOLDER_RFC
-
-    # Pago anticipado: el comentario del Proveedor debe empezar con "PA-"
-    # (así lo identifican en Core). El portal ya lo pone al marcar la
-    # casilla; esto lo garantiza aunque lo borren a mano.
-    if pago_anticipado_repo.es_anticipado(data.cl_expediente) and not comentario_limpio.startswith(
-        seguimiento_repo.PREFIJO_PAGO_ANTICIPADO
-    ):
-        comentario_limpio = seguimiento_repo.PREFIJO_PAGO_ANTICIPADO + comentario_limpio
-
-    observaciones = _observaciones_core(seguimiento_repo.ETIQUETA_CORE_PROVEEDOR, usuario, comentario_limpio)
-    resultado = seguimiento_repo.registrar_seguimiento(
-        SeguimientoInput(cl_expediente=data.cl_expediente, comentario=observaciones),
-        cl_usr_app=cl_usr_app,
-    )
-
-    # Copia local (sin el encabezado: el portal ya muestra quién lo escribió).
-    # Cabina no puede escribir aquí, pero sí necesita poder leerlo.
-    identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
-    seguimiento_repo.guardar_comentario_local(data.cl_expediente, identificador, comentario_limpio, origen="proveedor")
-
-    if es_proveedor:
-        estatus_repo.actualizar_estatus(data.cl_expediente, EstatusExpediente.SEGUIMIENTO_PROVEEDOR, identificador)
-        # A partir del primer envío, si marcó (o no) la casilla de pago
-        # anticipado, ya no se puede volver a cambiar.
-        pago_anticipado_repo.bloquear(data.cl_expediente)
-
-    return resultado
+    return seguimiento_service.actualizar_seguimiento(data.cl_expediente, data.comentario, usuario)
 
 
 @router.get("/comentarios/{cl_expediente}", response_model=list[ComentarioSeguimiento])
@@ -253,55 +161,10 @@ def descargar_comprobante(cl_expediente: int, usuario: dict = Depends(usuario_ac
 
 @router.post("/estatus")
 def actualizar_estatus(data: EstatusInput, usuario: dict = Depends(usuario_actual)):
-    """Cambia el estatus del expediente a mano. Solo vive en la app (no en SQL Server)."""
-    if usuario.get("perfil") == accesos_repo.PERFIL_PROVEEDOR:
-        raise HTTPException(403, "El perfil Proveedor no puede cambiar el estado manualmente.")
-    try:
-        estatus = EstatusExpediente(data.estatus)
-    except ValueError:
-        opciones = ", ".join(e.value for e in EstatusExpediente)
-        raise HTTPException(400, f"Estado inválido: '{data.estatus}'. Opciones: {opciones}")
-    # Regla de negocio: "En Espera de Respuesta" y "Seguimiento de Cita" se
-    # activan solo cuando Cabina regresa el expediente a mano (corrección, o
-    # cita aceptada en pago anticipado). Nadie más los puede asignar.
-    if estatus in ESTATUS_DE_REGRESO and usuario.get("perfil") != accesos_repo.PERFIL_CABINA:
-        raise HTTPException(400, f"'{estatus.value}' no se puede asignar a mano desde este perfil.")
-    # "Seguimiento Proveedor" solo se activa automático desde "Actualizar Core"
-    # (ver arriba). Cabina no puede ponerlo a mano — no le corresponde esa etapa.
-    if estatus == EstatusExpediente.SEGUIMIENTO_PROVEEDOR and usuario.get("perfil") == accesos_repo.PERFIL_CABINA:
-        raise HTTPException(400, "'Seguimiento Proveedor' es automático, Cabina no puede asignarlo a mano.")
-    # "Seguimiento de Cita" es exclusivo de expedientes que el Proveedor marcó
-    # como pago anticipado -- no tiene sentido en cualquier otro caso.
-    if estatus == EstatusExpediente.SEGUIMIENTO_CITA and not pago_anticipado_repo.es_anticipado(data.cl_expediente):
-        raise HTTPException(400, "Este expediente no está marcado como pago anticipado.")
+    """
+    Cambia el estatus del expediente a mano. Solo vive en la app (no en SQL Server).
 
-    identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
-
-    if estatus in ESTATUS_DE_REGRESO:
-        # Cabina está regresando el expediente a Proveedor: exige el motivo,
-        # lo escribe en Core (igual que el comentario del Proveedor) y avisa
-        # por correo. No es un simple cambio de estatus como los demás.
-        comentario = (data.comentario or "").strip()
-        if not comentario:
-            raise HTTPException(400, "Debes indicar un comentario para regresar el expediente.")
-
-        cl_usr_app = usuario.get("cl_usr_app")
-        if cl_usr_app is None:
-            cl_usr_app = accesos_repo.CL_USR_APP_PLACEHOLDER_RFC
-        observaciones = _observaciones_core(seguimiento_repo.ETIQUETA_CORE_CABINA, usuario, comentario)
-        seguimiento_repo.registrar_seguimiento(
-            SeguimientoInput(cl_expediente=data.cl_expediente, comentario=observaciones),
-            cl_usr_app=cl_usr_app,
-        )
-        seguimiento_repo.guardar_comentario_local(data.cl_expediente, identificador, comentario, origen="cabina")
-
-        encontrados = expedientes_repo.listar_expedientes(ExpedienteFiltro(cl_expediente=data.cl_expediente))
-        if encontrados:
-            registro = encontrados[0]
-            email_service.enviar_notificacion_regreso(
-                data.cl_expediente, registro.cuenta, registro.nombre_paciente or "N/A", comentario, identificador,
-                nuevo_estatus=estatus.value,
-            )
-
-    estatus_repo.actualizar_estatus(data.cl_expediente, estatus, identificador)
-    return {"cl_expediente": data.cl_expediente, "estatus": estatus.value}
+    Reglas en app/services/estatus_service.py (compartidas con la mutation
+    equivalente de GraphQL).
+    """
+    return estatus_service.actualizar_estatus(data.cl_expediente, data.estatus, usuario, data.comentario)

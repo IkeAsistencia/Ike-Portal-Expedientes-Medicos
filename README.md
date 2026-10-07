@@ -16,7 +16,9 @@ app/
 │   ├── connection.py           # conexión a SQL Server (pyodbc) + ejecución de SPs (soporta TVP)
 │   └── local_store.py          # SQLite local (estatus, config. cuentas, alertas de proveedor enviadas)
 ├── services/
-│   └── email_service.py        # envío de correo (real si hay SMTP en .env, simulado/log si no)
+│   ├── email_service.py        # envío de correo (real si hay SMTP en .env, simulado/log si no)
+│   ├── seguimiento_service.py  # reglas de 'Actualizar Core' (rol, longitud, flujo), compartidas por REST y GraphQL
+│   └── estatus_service.py      # reglas del cambio manual de estatus (rol, flujo de regreso), compartidas por REST y GraphQL
 ├── schemas/                    # modelos Pydantic (request/response)
 ├── repositories/                # una función por cada operación de datos
 ├── routers/                     # endpoints HTTP (FastAPI routers)

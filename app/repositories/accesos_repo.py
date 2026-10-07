@@ -59,6 +59,20 @@ CL_USR_APP_PLACEHOLDER_RFC = 0
 _PBKDF2_ITERACIONES = 200_000
 
 
+def verificar_rol_administrador(usuario: dict) -> None:
+    """
+    Configuración Cuentas es exclusiva de Administrador (Cabina y Proveedor
+    ya no la ven). Una sesión SISE legada (sin 'perfil' en el token) se
+    deja pasar para no romper lo ya existente (pruebas/GraphQL).
+
+    Lanza ValueError si el usuario no tiene el rol permitido. Centralizado
+    aquí para que REST (app/routers/configuracion_cuentas.py) y GraphQL
+    (app/graphql/mutation.py) exijan exactamente la misma regla.
+    """
+    if usuario.get("perfil") in (PERFIL_CABINA, PERFIL_PROVEEDOR):
+        raise ValueError("Configuración Cuentas es exclusiva del perfil Administrador.")
+
+
 class RfcNoAutorizado(Exception):
     pass
 

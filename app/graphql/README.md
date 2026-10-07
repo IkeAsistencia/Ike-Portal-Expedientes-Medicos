@@ -6,6 +6,20 @@ repositorios (`app/repositories/`) que el REST — es decir, los mismos
 Stored Procedures, la misma base local, la misma lógica de negocio.
 Solo cambia **cómo se piden los datos** desde afuera.
 
+**Importante (seguridad):** las mutations que cambian datos
+(`actualizarSeguimiento`, `actualizarEstatus`, `agregarCuenta`,
+`eliminarCuenta`, `limpiarCuentasConfiguradas`) delegan sus reglas de
+rol/flujo de trabajo en `app/services/seguimiento_service.py`,
+`app/services/estatus_service.py` y
+`accesos_repo.verificar_rol_administrador` — los mismos módulos que usa
+el REST (`app/routers/seguimiento.py`,
+`app/routers/configuracion_cuentas.py`). Si agregas una mutation nueva
+que modifique datos, reutiliza esas reglas en vez de llamar al
+repositorio directo: de lo contrario GraphQL vuelve a ser una puerta
+trasera que se salta los permisos por perfil. La mutation `login`
+también aplica el mismo límite de intentos que `/auth/login` (ver
+`app/core/rate_limit.py`).
+
 ## ¿Qué es GraphQL, en corto?
 
 En vez de tener una URL distinta por cada cosa que quieres hacer (como

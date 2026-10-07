@@ -74,6 +74,14 @@ def _patch_sql_server(monkeypatch):
 
     monkeypatch.setattr(main_module, "calentar_pool", lambda: None)
 
+    # El rate limiter (app/core/rate_limit.py, usado también por la mutation
+    # login -- ver app/graphql/mutation.py) guarda su conteo en memoria del
+    # proceso -- sin esto, pruebas que hacen login varias veces chocarían
+    # entre sí.
+    from app.core.rate_limit import limpiar_todo
+
+    limpiar_todo()
+
 
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
@@ -106,6 +114,37 @@ def _login_headers(client):
     r = _graphql(client, m)
     token = r.json()["data"]["login"]["accessToken"]
     return {"Authorization": f"Bearer {token}"}
+
+
+def _headers_con_perfil(client, rfc, nombre, perfil, password):
+    """Sesión RFC real (no SISE) con un perfil específico -- mismo patrón
+    que tests/test_smoke.py, para probar que GraphQL respeta los mismos
+    roles que el REST."""
+    import app.repositories.accesos_repo as accesos_repo_module
+
+    accesos_repo_module.alta_acceso(rfc, nombre, perfil, "Ciudad de México")
+    accesos_repo_module.crear_password(rfc, password)
+    r = client.post("/auth/rfc/login", json={"rfc": rfc, "password": password})
+    token = r.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def _headers_proveedor(client):
+    import app.repositories.accesos_repo as accesos_repo_module
+
+    return _headers_con_perfil(client, "RFCPROVGQL", "Proveedor GraphQL", accesos_repo_module.PERFIL_PROVEEDOR, "Proveedor2024")
+
+
+def _headers_cabina(client):
+    import app.repositories.accesos_repo as accesos_repo_module
+
+    return _headers_con_perfil(client, "RFCCABGQL", "Cabina GraphQL", accesos_repo_module.PERFIL_CABINA, "Cabina2024xx")
+
+
+def _headers_admin(client):
+    import app.repositories.accesos_repo as accesos_repo_module
+
+    return _headers_con_perfil(client, "RFCADMGQL", "Admin GraphQL", accesos_repo_module.PERFIL_ADMINISTRADOR, "Admin2024xx")
 
 
 def test_query_sin_sesion_da_error(client):
@@ -166,7 +205,10 @@ def test_catalogo_servicios_y_subservicios(client):
 
 def test_actualizar_seguimiento_usa_usr_app_del_token(client):
     headers = _login_headers(client)
-    m = 'mutation { actualizarSeguimiento(datos: {clExpediente: 1001, comentario: "Prueba"}) { ok mensaje } }'
+    # >= 50 caracteres: misma regla que el REST (ver
+    # app/services/seguimiento_service.py:LONGITUD_MINIMA_COMENTARIO_PROVEEDOR).
+    comentario = "Prueba de actualización de seguimiento con suficiente longitud."
+    m = f'mutation {{ actualizarSeguimiento(datos: {{clExpediente: 1001, comentario: "{comentario}"}}) {{ ok mensaje }} }}'
     r = _graphql(client, m, headers)
     assert r.json()["data"]["actualizarSeguimiento"]["ok"] is True
 
@@ -222,3 +264,77 @@ def test_enviar_correo_proveedores(client):
     data = r.json()["data"]["enviarCorreoProveedores"]
     assert data["enviados"] == 1
     assert data["expedientes"] == [1001]
+
+
+# --- Regresión: control de acceso roto en mutations (ver SECURITY-REVIEW.md) ---
+# Antes, estas mutations solo exigían una sesión iniciada (cualquier perfil),
+# sin aplicar las reglas de rol que sí tiene el REST -- lo siguiente prueba
+# que GraphQL ahora las respeta exactamente igual.
+
+
+def test_actualizar_estatus_proveedor_no_puede_cambiar_estatus(client):
+    headers = _headers_proveedor(client)
+    m = "mutation { actualizarEstatus(datos: {clExpediente: 1001, estatus: SEGUIMIENTO_PROVEEDOR}) { ok } }"
+    r = _graphql(client, m, headers)
+    body = r.json()
+    assert body["data"] is None
+    assert "no puede cambiar el estado manualmente" in body["errors"][0]["message"]
+
+
+def test_actualizar_estatus_regreso_requiere_perfil_cabina(client):
+    headers = _headers_admin(client)
+    m = 'mutation { actualizarEstatus(datos: {clExpediente: 1001, estatus: EN_ESPERA_RESPUESTA, comentario: "Corrección necesaria"}) { ok } }'
+    r = _graphql(client, m, headers)
+    body = r.json()
+    assert body["data"] is None
+    assert "no se puede asignar a mano desde este perfil" in body["errors"][0]["message"]
+
+
+def test_actualizar_seguimiento_cabina_bloqueado(client):
+    headers = _headers_cabina(client)
+    comentario = "Comentario de prueba con la longitud suficiente para pasar la validación."
+    m = f'mutation {{ actualizarSeguimiento(datos: {{clExpediente: 1001, comentario: "{comentario}"}}) {{ ok }} }}'
+    r = _graphql(client, m, headers)
+    body = r.json()
+    assert body["data"] is None
+    assert "no tiene acceso a Registrar seguimiento" in body["errors"][0]["message"]
+
+
+def test_configuracion_cuentas_rechaza_proveedor_y_cabina(client):
+    headers_proveedor = _headers_proveedor(client)
+    headers_cabina = _headers_cabina(client)
+    m = 'mutation { agregarCuenta(datos: {clCuenta: 2819, nombre: "Cuenta Demo"}) { ok } }'
+
+    for headers in (headers_proveedor, headers_cabina):
+        r = _graphql(client, m, headers)
+        body = r.json()
+        assert body["data"] is None
+        assert "exclusiva del perfil Administrador" in body["errors"][0]["message"]
+
+    r = _graphql(client, "mutation { limpiarCuentasConfiguradas { ok } }", headers_cabina)
+    assert r.json()["data"] is None
+
+    r = _graphql(client, "mutation { eliminarCuenta(clCuenta: 2819) { ok } }", headers_proveedor)
+    assert r.json()["data"] is None
+
+
+def test_configuracion_cuentas_permite_administrador(client):
+    headers = _headers_admin(client)
+    m = 'mutation { agregarCuenta(datos: {clCuenta: 2819, nombre: "Cuenta Demo"}) { ok } }'
+    r = _graphql(client, m, headers)
+    assert r.json()["data"]["agregarCuenta"]["ok"] is True
+
+
+def test_login_graphql_aplica_limite_de_intentos(client):
+    m = 'mutation {{ login(datos: {{usuario: "ijimenez", password: "mala-{i}"}}) {{ accessToken }} }}'
+    for i in range(10):
+        r = _graphql(client, m.format(i=i))
+        assert "errors" in r.json()
+
+    # Intento número 11: ya no debe ni intentar validar la contraseña --
+    # el rate limiter (app/core/rate_limit.py) lo detiene antes, igual que
+    # en /auth/login (ver tests/test_smoke.py).
+    r = _graphql(client, m.format(i=10))
+    body = r.json()
+    assert body["data"] is None
+    assert "Demasiados intentos" in body["errors"][0]["message"]

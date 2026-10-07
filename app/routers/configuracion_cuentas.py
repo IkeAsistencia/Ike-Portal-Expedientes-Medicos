@@ -6,13 +6,12 @@ from app.repositories import accesos_repo, cuentas_config_repo
 
 
 def _requerir_no_cabina_ni_proveedor(usuario: dict = Depends(usuario_actual)) -> dict:
-    """
-    Configuración Cuentas es exclusiva de Administrador (Cabina y Proveedor
-    ya no la ven). Una sesión SISE legada (sin 'perfil' en el token) se
-    deja pasar para no romper lo ya existente (pruebas/GraphQL).
-    """
-    if usuario.get("perfil") in (accesos_repo.PERFIL_CABINA, accesos_repo.PERFIL_PROVEEDOR):
-        raise HTTPException(403, "Configuración Cuentas es exclusiva del perfil Administrador.")
+    """Ver app.repositories.accesos_repo.verificar_rol_administrador: la regla
+    vive ahí para que REST y GraphQL la compartan."""
+    try:
+        accesos_repo.verificar_rol_administrador(usuario)
+    except ValueError as e:
+        raise HTTPException(403, str(e))
     return usuario
 
 

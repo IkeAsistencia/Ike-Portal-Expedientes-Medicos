@@ -36,6 +36,9 @@ class SeguimientoInput:
 class EstatusInput:
     cl_expediente: int
     estatus: EstatusExpedienteGQL
+    # Obligatorio cuando Cabina regresa el expediente a Proveedor (ver
+    # app/services/estatus_service.py: ESTATUS_DE_REGRESO).
+    comentario: Optional[str] = None
 
 
 @strawberry.input
