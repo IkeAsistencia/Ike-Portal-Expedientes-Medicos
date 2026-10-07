@@ -37,6 +37,8 @@ frontend/                        # portal (HTML + CSS + JS puro, sin build), ser
     ├── componentes/             # piezas reutilizables: tabla, filtros, multiselect, paginador, KPI, modal
     └── pantallas/               # un módulo por pantalla (su HTML + su lógica)
 dev_server_datos_prueba.py       # API con datos de ejemplo, para probar el frontend sin SQL Server
+prompts/
+└── prompt-portal-expedientes-desde-cero.md  # el pedido completo del proyecto, redactado desde cero
 ```
 
 ## 🔒 Sobre las credenciales de la base de datos
@@ -49,6 +51,23 @@ dev_server_datos_prueba.py       # API con datos de ejemplo, para probar el fron
     se sube a control de versiones (ver `.gitignore`). Coloca ese `.env`
     en el ambiente restringido que definas, con permisos de lectura
     limitados a la cuenta que ejecuta el proceso.
+
+## Prompt del proyecto
+
+En [`prompts/prompt-portal-expedientes-desde-cero.md`](prompts/prompt-portal-expedientes-desde-cero.md)
+está el pedido completo de este portal redactado como si se hiciera por
+primera vez: contexto, perfiles, flujo de negocio, pantallas, integración
+con Core, Stored Procedures, API, seguridad, frontend, pruebas, despliegue
+y forma de trabajo. Sirve para dos cosas:
+
+- **Entender el proyecto de un vistazo**, sin leer todo el historial.
+- **Plantilla para proyectos nuevos:** se conserva la estructura de
+  secciones y se cambia el contenido. Las secciones de arquitectura del
+  frontend, calidad, despliegue y forma de trabajo casi no cambian entre
+  proyectos con este mismo stack.
+
+Si cambia una regla de negocio importante, actualiza también el prompt
+para que siga describiendo el portal tal como es.
 
 ## Requisitos
 
