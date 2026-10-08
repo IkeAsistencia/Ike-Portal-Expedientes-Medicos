@@ -19,6 +19,48 @@ from app.services.seguimiento_service import construir_observaciones_core
 # disparan una notificación por correo.
 ESTATUS_DE_REGRESO = (EstatusExpediente.EN_ESPERA_RESPUESTA, EstatusExpediente.SEGUIMIENTO_CITA)
 
+# Botón "Enviar correo a proveedores" (routers/expedientes.py y
+# graphql/mutation.py): solo tiene sentido mandarlo si el expediente todavía
+# no se le notificó al proveedor ("Abierto") o si ya se le notificó y se le
+# quiere recordar porque no ha respondido ("En Espera de Respuesta"). Los
+# demás estados ya están en otra etapa del flujo (el proveedor ya respondió,
+# o el caso ya cerró) -- mandarle este correo ahí solo confundiría al proveedor.
+ESTATUS_PERMITIDOS_ENVIO_CORREO = (EstatusExpediente.ABIERTO, EstatusExpediente.EN_ESPERA_RESPUESTA)
+
+
+def validar_seleccion_para_correo(registros: list) -> bool:
+    """
+    Valida la selección de "Enviar correo a proveedores", compartida entre
+    REST (routers/expedientes.py) y GraphQL (graphql/mutation.py) para que
+    nunca queden las dos reglas desincronizadas:
+
+      - Todos los expedientes deben estar en ESTATUS_PERMITIDOS_ENVIO_CORREO.
+      - Y deben estar TODOS en el mismo estatus (no se vale mezclar "Abierto"
+        con "En Espera de Respuesta" en un mismo envío).
+
+    Levanta ValueError con el mensaje ya listo para mostrarle al usuario si
+    no cumple (quien llama decide cómo convertirlo: HTTPException en REST,
+    Exception en GraphQL). Regresa True si es un recordatorio (la selección
+    ya estaba en "En Espera de Respuesta"), False si es una notificación
+    nueva (estaba en "Abierto").
+    """
+    no_permitidos = [r for r in registros if r.estatus not in ESTATUS_PERMITIDOS_ENVIO_CORREO]
+    if no_permitidos:
+        detalle = ", ".join(f"{r.expediente} ({r.estatus.value})" for r in no_permitidos)
+        raise ValueError(
+            "Solo se pueden enviar expedientes en estado 'Abierto' o 'En Espera de Respuesta'. "
+            f"Quita de tu selección: {detalle}."
+        )
+
+    estados_seleccionados = {r.estatus for r in registros}
+    if len(estados_seleccionados) > 1:
+        raise ValueError(
+            "No puedes mezclar expedientes 'Abierto' con 'En Espera de Respuesta' en el mismo envío. "
+            "Selecciona solo un tipo a la vez."
+        )
+
+    return registros[0].estatus == EstatusExpediente.EN_ESPERA_RESPUESTA
+
 
 def actualizar_estatus(cl_expediente: int, estatus_valor: str, usuario: dict, comentario: str | None = None) -> dict:
     """Cambia el estatus del expediente a mano. Solo vive en la app (no en SQL Server)."""
@@ -64,13 +106,19 @@ def actualizar_estatus(cl_expediente: int, estatus_valor: str, usuario: dict, co
         )
         seguimiento_repo.guardar_comentario_local(cl_expediente, identificador, comentario_limpio, origen="cabina")
 
-        encontrados = expedientes_repo.listar_expedientes(ExpedienteFiltro(cl_expediente=cl_expediente))
-        if encontrados:
-            registro = encontrados[0]
-            email_service.enviar_notificacion_regreso(
-                cl_expediente, registro.cuenta, registro.nombre_paciente or "N/A", comentario_limpio, identificador,
-                nuevo_estatus=estatus.value,
-            )
+        # Pausado a propósito (decisión 2026-10-08): por ahora solo se manda
+        # correo en los 2 escenarios confirmados -- "Enviar correo a
+        # proveedores" (enviar_correo_proveedores) y "Generar corte"
+        # (enviar_corte_proveedores). Este aviso de regreso se retoma cuando
+        # se pida su plantilla; mientras tanto, el cambio de estatus, el
+        # registro en Core y el comentario local siguen funcionando igual.
+        # encontrados = expedientes_repo.listar_expedientes(ExpedienteFiltro(cl_expediente=cl_expediente))
+        # if encontrados:
+        #     registro = encontrados[0]
+        #     email_service.enviar_notificacion_regreso(
+        #         cl_expediente, registro.cuenta, registro.nombre_paciente or "N/A", comentario_limpio, identificador,
+        #         nuevo_estatus=estatus.value,
+        #     )
 
     estatus_repo.actualizar_estatus(cl_expediente, estatus, identificador)
     return {"cl_expediente": cl_expediente, "estatus": estatus.value}

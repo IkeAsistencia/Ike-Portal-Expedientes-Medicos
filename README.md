@@ -1,6 +1,6 @@
-# Portal Expedientes Médicos (Python + FastAPI + SQL Server)
+# Portal Promédico (Python + FastAPI + SQL Server)
 
-Backend REST del sistema de gestión de Expedientes Médicos, sucesor formal
+Backend REST del Portal Promédico (gestión de Expedientes Médicos), sucesor formal
 del prototipo HTML. Lee y escribe contra SQL Server **exclusivamente por
 Stored Procedures**. Compatible con **SQL Server 2012 Standard Edition**.
 

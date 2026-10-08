@@ -10,7 +10,15 @@ from app.config import get_arranque_settings, get_settings, validar_jwt_secret
 from app.db.connection import calentar_pool
 from app.db.local_store import init_local_db
 from app.graphql.schema import graphql_router
-from app.routers import admin_accesos, auth, catalogos, configuracion_cuentas, expedientes, seguimiento
+from app.routers import (
+    admin_accesos,
+    auth,
+    catalogos,
+    configuracion_cuentas,
+    correos_enviados,
+    expedientes,
+    seguimiento,
+)
 
 
 @asynccontextmanager
@@ -27,10 +35,10 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(
-    title="Portal Expedientes Médicos",
+    title="Portal Promédico",
     version="1.0.0",
     description=(
-        "Backend para el sistema de gestión de Expedientes Médicos, expuesto "
+        "Backend del Portal Promédico (gestión de Expedientes Médicos), expuesto "
         "tanto por REST como por GraphQL (/graphql). Lectura/escritura contra "
         "SQL Server vía Stored Procedures; el estatus de negocio y la "
         "configuración de cuentas se manejan en una base local propia de esta app."
@@ -51,6 +59,9 @@ app.add_middleware(
 )
 
 
+_RUTAS_FRONTEND_SIN_CACHE = ("/js/", "/css/", "/img/")
+
+
 @app.middleware("http")
 async def agregar_headers_seguridad(request, call_next):
     """X-Content-Type-Options: nosniff en toda respuesta -- evita que el
@@ -59,6 +70,15 @@ async def agregar_headers_seguridad(request, call_next):
     contenido) en vez de respetar el que manda el servidor."""
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
+    # El portal (frontend/) cambia seguido durante el desarrollo -- sin un
+    # Cache-Control explícito, el navegador a veces se queda con una copia
+    # vieja del JS/CSS/HTML y los cambios "no se ven" aunque el servidor ya
+    # los tenga. no-cache obliga a revalidar siempre (barato: StaticFiles ya
+    # manda ETag/Last-Modified, así que si no cambió responde 304 sin volver
+    # a mandar el archivo completo).
+    path = request.url.path
+    if path == "/" or path == "/index.html" or path.startswith(_RUTAS_FRONTEND_SIN_CACHE):
+        response.headers["Cache-Control"] = "no-cache"
     return response
 
 
@@ -68,6 +88,7 @@ app.include_router(catalogos.router)
 app.include_router(seguimiento.router)
 app.include_router(configuracion_cuentas.router)
 app.include_router(admin_accesos.router)
+app.include_router(correos_enviados.router)
 app.include_router(graphql_router, prefix="/graphql", tags=["GraphQL"])
 
 

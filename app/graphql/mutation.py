@@ -22,7 +22,14 @@ from app.graphql.inputs import (
     SeguimientoInput,
 )
 from app.graphql.types import EnviarCorreoResultado, LoginResult, OperacionOk
-from app.repositories import accesos_repo, auth_repo, cuentas_config_repo, estatus_repo, expedientes_repo
+from app.repositories import (
+    accesos_repo,
+    auth_repo,
+    correos_enviados_repo,
+    cuentas_config_repo,
+    estatus_repo,
+    expedientes_repo,
+)
 from app.routers.auth import MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS
 from app.schemas.auth import LoginResponse
 from app.schemas.correo import EnviarCorreoProveedoresResponse
@@ -109,14 +116,31 @@ class Mutation:
         if not registros:
             raise Exception("No se encontró información de los expedientes seleccionados.")
 
+        # Paridad con el REST (ver routers/expedientes.py): la validación de
+        # la selección vive en un solo lugar compartido, para que REST y
+        # GraphQL nunca queden con reglas distintas.
+        try:
+            es_recordatorio = estatus_service.validar_seleccion_para_correo(registros)
+        except ValueError as e:
+            raise Exception(str(e))
+
         resultado = email_service.enviar_correo_proveedores(
             [r.model_dump() for r in registros],
             usuario_nombre=usuario.get("nombre") or usuario["usuario"],
+            es_recordatorio=es_recordatorio,
+        )
+
+        identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
+        correos_enviados_repo.registrar_envio(
+            tipo="recordatorio" if es_recordatorio else "nuevo",
+            destinatario=resultado.destinatarios[0] if resultado.destinatarios else "",
+            expedientes=[r.expediente for r in registros],
+            rfc_envio=identificador,
+            simulado=resultado.simulado,
         )
 
         # Paridad con el REST (ver routers/expedientes.py): mandar el correo
         # pasa el expediente a "En Espera de Respuesta" en automático.
-        identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
         for r in registros:
             estatus_repo.actualizar_estatus(r.expediente, EstatusExpediente.EN_ESPERA_RESPUESTA, identificador)
 

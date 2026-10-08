@@ -1,4 +1,4 @@
-# Prompt — Portal Expedientes Médicos (desde cero)
+# Prompt — Portal Promédico (desde cero)
 
 > **Cómo reutilizar este prompt en otro proyecto:** conserva la estructura
 > de secciones (contexto, usuarios, flujo, pantallas, datos, API,
@@ -10,7 +10,7 @@
 
 ## 1. Contexto y objetivo
 
-Necesito construir el **Portal Expedientes Médicos** de IKE Asistencia: una
+Necesito construir el **Portal Promédico** de IKE Asistencia: una
 aplicación web interna donde **Cabina Médica** da seguimiento a los
 expedientes médicos que llevan 8 horas o más sin proveedor asignado en el
 sistema core (SISE), los manda a los **proveedores médicos**, y estos

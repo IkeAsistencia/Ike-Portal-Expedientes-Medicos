@@ -1,4 +1,4 @@
-# Scripts SQL — Portal Expedientes Médicos
+# Scripts SQL — Portal Promédico
 
 Compatible con **SQL Server 2012 Standard Edition (64-bit)**. Notas de
 compatibilidad aplicadas en todos los scripts:

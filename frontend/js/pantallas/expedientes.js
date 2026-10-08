@@ -82,10 +82,18 @@ let ultimaBusquedaParams = null;
 let pollingId = null;
 
 // Qué expedientes estaban visibles en pantalla la última vez que se revisó,
-// y con qué estatus (ver notificarExpedientesNuevos / notificarRespuestaProveedor)
-// -- null = todavía no hay una base con qué comparar (primera carga), para no
-// avisar "nuevos" de algo que en realidad el usuario está viendo por primera vez.
+// y con qué estatus (ver notificarExpedientesNuevos) -- null = todavía no
+// hay una base con qué comparar (primera carga), para no avisar "nuevos" de
+// algo que en realidad el usuario está viendo por primera vez.
 let estatusVisiblesAnteriores = null;
+
+// Para "el proveedor respondió" (ver notificarRespuestaProveedor) hace falta
+// una base APARTE, sin el filtro de "Estado" aplicado: Cabina normalmente
+// tiene la tabla filtrada en "Abierto", y un expediente que ya le mandó al
+// proveedor vive en "En Espera de Respuesta" -> "Seguimiento Proveedor" --
+// ninguno de los dos aparece en "Abierto", así que si solo se comparara
+// contra lo filtrado (estatusVisiblesAnteriores), ese cambio nunca se vería.
+let estatusTodosAnteriores = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -298,6 +306,10 @@ function actualizarBaselineVisibles(filtrados) {
   estatusVisiblesAnteriores = new Map(filtrados.map(r => [r.expediente, r.estatus]));
 }
 
+function actualizarBaselineTodos(data) {
+  estatusTodosAnteriores = new Map(data.map(r => [r.expediente, r.estatus]));
+}
+
 function notificarExpedientesNuevos(nuevos) {
   const numeros = nuevos.map(r => r.expediente);
   const mensaje = numeros.length === 1
@@ -341,17 +353,22 @@ async function ejecutarBusqueda(params, { silencioso }) {
     if (silencioso && estatusVisiblesAnteriores) {
       const nuevos = filtrados.filter(r => !estatusVisiblesAnteriores.has(r.expediente));
       if (nuevos.length > 0) notificarExpedientesNuevos(nuevos);
+    }
 
-      if (esPerfilCabina() || esPerfilAdministrador()) {
-        const respondidos = filtrados.filter(r =>
-          r.estatus === "Seguimiento Proveedor" &&
-          estatusVisiblesAnteriores.has(r.expediente) &&
-          estatusVisiblesAnteriores.get(r.expediente) !== "Seguimiento Proveedor"
-        );
-        if (respondidos.length > 0) notificarRespuestaProveedor(respondidos);
-      }
+    // Aparte del filtro de Estado: Cabina normalmente ve la tabla en
+    // "Abierto", pero el expediente ya vive en otro estado para cuando el
+    // proveedor responde -- hay que buscar el cambio en TODO lo que trajo la
+    // búsqueda (data), no solo en lo que está filtrado en pantalla (filtrados).
+    if (silencioso && estatusTodosAnteriores && (esPerfilCabina() || esPerfilAdministrador())) {
+      const respondidos = data.filter(r =>
+        r.estatus === "Seguimiento Proveedor" &&
+        estatusTodosAnteriores.has(r.expediente) &&
+        estatusTodosAnteriores.get(r.expediente) !== "Seguimiento Proveedor"
+      );
+      if (respondidos.length > 0) notificarRespuestaProveedor(respondidos);
     }
     actualizarBaselineVisibles(filtrados);
+    actualizarBaselineTodos(data);
 
     renderTabla(filtrados);
     renderKPIs();
@@ -542,6 +559,7 @@ export function reiniciar() {
   paginaActual = 1;
   filtroEstatusKPI = null;
   estatusVisiblesAnteriores = null;
+  estatusTodosAnteriores = null;
   limpiarFiltros();
   $("f-estatus").value = "";
   $("tabla-expedientes-body").innerHTML = "";

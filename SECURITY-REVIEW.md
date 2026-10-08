@@ -1,4 +1,4 @@
-# Revisión de seguridad — Portal Expedientes Médicos
+# Revisión de seguridad — Portal Promédico
 
 Fecha: 2026-10-07
 Alcance: barrido completo del repositorio (backend FastAPI + GraphQL,

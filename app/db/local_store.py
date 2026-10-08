@@ -125,6 +125,20 @@ CREATE TABLE IF NOT EXISTS expediente_pago_anticipado (
     rfc           TEXT,
     fecha         TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
+
+-- Historial de "Enviar correo a proveedores" -- para comprobar después qué
+-- se mandó, a quién, cuándo y quién le dio clic (ej. si un proveedor dice
+-- que nunca se le notificó). "simulado"=1 cuando no había SMTP configurado
+-- (no se mandó un correo real, solo quedó registrado en el log de la app).
+CREATE TABLE IF NOT EXISTS correos_enviados (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    tipo          TEXT NOT NULL,     -- 'nuevo' | 'recordatorio'
+    destinatario  TEXT NOT NULL,
+    expedientes   TEXT NOT NULL,     -- JSON: lista de cl_expediente incluidos
+    rfc_envio     TEXT NOT NULL,
+    simulado      INTEGER NOT NULL DEFAULT 0,
+    fecha         TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
 """
 
 

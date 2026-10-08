@@ -17,6 +17,7 @@ import * as pagoAnticipado from "./pantallas/pago-anticipado.js";
 import * as seguimiento from "./pantallas/seguimiento.js";
 import * as configuracionCuentas from "./pantallas/configuracion-cuentas.js";
 import * as usuariosAccesos from "./pantallas/usuarios-accesos.js";
+import * as historialCorreos from "./pantallas/historial-correos.js";
 import * as corte from "./pantallas/corte.js";
 
 const PANTALLAS = {
@@ -25,6 +26,7 @@ const PANTALLAS = {
   "seguimiento": { modulo: seguimiento, titulo: "Seguimiento de expedientes", alClicMenu: seguimiento.abrirDesdeMenu },
   "configuracion": { modulo: configuracionCuentas, titulo: "Configuración Cuentas" },
   "accesos": { modulo: usuariosAccesos, titulo: "Usuarios y Accesos" },
+  "historial-correos": { modulo: historialCorreos, titulo: "Historial de Correos" },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -43,9 +45,11 @@ function pantallaPermitida(nombre) {
     // "Seguimiento de Cita"). El código sigue en pantallas/pago-anticipado.js
     // por si se vuelve a necesitar, pero nadie debe poder llegar a esta pantalla.
     case "pago-anticipado": return false;
-    // Configuración Cuentas y Usuarios y Accesos son exclusivos de Administrador.
+    // Configuración Cuentas, Usuarios y Accesos, e Historial de Correos son
+    // exclusivos de Administrador.
     case "configuracion":
-    case "accesos": return admin;
+    case "accesos":
+    case "historial-correos": return admin;
     default: return false;
   }
 }
