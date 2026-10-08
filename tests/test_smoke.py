@@ -171,6 +171,14 @@ def client(tmp_path, monkeypatch):
     # Las pruebas usan el login legado (usuario SISE) para obtener tokens;
     # en la app real está apagado por default (ver app/config.py).
     monkeypatch.setenv("LOGIN_LEGADO_HABILITADO", "true")
+    # Las pruebas deben quedar "simuladas" sin importar lo que tenga el .env
+    # local de quien las corre -- si no, correr pytest puede mandar correos
+    # reales (con las credenciales SMTP reales del .env) sin que nadie lo pida.
+    monkeypatch.setenv("SMTP_HOST", "")
+    monkeypatch.setenv("SMTP_USER", "")
+    monkeypatch.setenv("SMTP_PASSWORD", "")
+    monkeypatch.setenv("SMTP_REMITENTE", "")
+    monkeypatch.setenv("SMTP_DESTINATARIO_PRUEBA", "")
 
     from app.config import get_settings
 
@@ -608,6 +616,100 @@ def test_enviar_correo_proveedores_ok(client):
     data = r.json()
     assert data["enviados"] == 1
     assert data["expedientes"] == [1001]
+
+
+def test_enviar_correo_proveedores_deja_historial(client):
+    """Queda registro de quién mandó el correo, a quién y de qué expedientes."""
+    import app.repositories.correos_enviados_repo as correos_enviados_repo_module
+
+    headers = _auth_headers(client)
+    r = client.post(
+        "/expedientes/enviar-correo-proveedores", json={"expedientes": [1001]}, headers=headers
+    )
+    assert r.status_code == 200, r.text
+
+    historial = correos_enviados_repo_module.listar_por_expediente(1001)
+    assert len(historial) == 1
+    assert historial[0]["tipo"] == "nuevo"
+    assert historial[0]["expedientes"] == [1001]
+    assert historial[0]["rfc_envio"]
+    assert historial[0]["destinatario"]
+
+
+def test_correos_enviados_solo_administrador(client):
+    headers = _auth_headers(client)  # Cabina
+    r = client.get("/correos-enviados", headers=headers)
+    assert r.status_code == 403
+
+
+def test_correos_enviados_lista_para_administrador(client):
+    headers_cabina = _auth_headers(client)
+    client.post("/expedientes/enviar-correo-proveedores", json={"expedientes": [1001]}, headers=headers_cabina)
+
+    headers_admin = _auth_headers_admin(client)
+    r = client.get("/correos-enviados", headers=headers_admin)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert len(data) == 1
+    assert data[0]["expedientes"] == [1001]
+    assert data[0]["tipo"] == "nuevo"
+
+
+def test_correos_enviados_filtra_por_expediente(client):
+    headers_cabina = _auth_headers(client)
+    client.post("/expedientes/enviar-correo-proveedores", json={"expedientes": [1001]}, headers=headers_cabina)
+
+    headers_admin = _auth_headers_admin(client)
+    r = client.get("/correos-enviados", params={"cl_expediente": 9999}, headers=headers_admin)
+    assert r.status_code == 200, r.text
+    assert r.json() == []
+
+
+def test_enviar_correo_proveedores_rechaza_estatus_no_permitido(client):
+    """Solo se puede mandar correo en 'Abierto' o 'En Espera de Respuesta'."""
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.SEGUIMIENTO_COORDINADOR, "RFCCABINATEST")
+
+    headers = _auth_headers(client)
+    r = client.post(
+        "/expedientes/enviar-correo-proveedores", json={"expedientes": [1001]}, headers=headers
+    )
+    assert r.status_code == 400, r.text
+    assert "1001" in r.json()["detail"]
+
+
+def test_enviar_correo_proveedores_rechaza_mezcla_de_estatus(client):
+    """No se puede mandar un correo mezclando 'Abierto' con 'En Espera de Respuesta'."""
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    estatus_repo_module.actualizar_estatus(1002, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    # 1001 se queda en "Abierto" (default).
+
+    headers = _auth_headers(client)
+    r = client.post(
+        "/expedientes/enviar-correo-proveedores", json={"expedientes": [1001, 1002]}, headers=headers
+    )
+    assert r.status_code == 400, r.text
+    assert "mezclar" in r.json()["detail"]
+
+
+def test_enviar_correo_proveedores_recordatorio_ok(client):
+    """Una selección pareja de 'En Espera de Respuesta' sí se puede mandar (recordatorio)."""
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1002, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+
+    headers = _auth_headers(client)
+    r = client.post(
+        "/expedientes/enviar-correo-proveedores", json={"expedientes": [1001, 1002]}, headers=headers
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["enviados"] == 2
 
 
 def test_generar_corte_requiere_seleccion(client):

@@ -32,3 +32,15 @@ class EnviarCorteResponse(BaseModel):
     enviados: int
     simulado: bool
     destinatario: str
+
+
+class CorreoEnviadoRegistro(BaseModel):
+    """Una fila del historial de 'Enviar correo a proveedores' (panel de Administrador)."""
+
+    id: int
+    tipo: Literal["nuevo", "recordatorio"]
+    destinatario: str
+    expedientes: list[int]
+    rfc_envio: str
+    simulado: bool
+    fecha: str

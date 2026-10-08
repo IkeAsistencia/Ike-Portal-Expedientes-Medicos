@@ -7,7 +7,7 @@ import { ICONOS } from "../componentes/iconos.js";
 const PLANTILLA = `
   <div class="login-card">
     <img src="img/logo-ike-lema.png" alt="IKE · Mejoramos la vida de las personas" class="login-logo">
-    <h1>Portal Expedientes Médicos</h1>
+    <h1>Portal Promédico</h1>
     <p class="subtitle">Inicia sesión para continuar</p>
     <form id="login-form">
       <div class="field">

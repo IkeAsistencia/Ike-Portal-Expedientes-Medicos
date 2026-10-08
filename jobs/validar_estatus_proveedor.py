@@ -51,6 +51,14 @@ def _nivel_para(horas_sin_respuesta: int) -> str:
 
 
 def ejecutar() -> None:
+    # Pausado a propósito (decisión 2026-10-08): por ahora solo se manda
+    # correo en 2 escenarios confirmados -- "Enviar correo a proveedores" y
+    # "Generar corte" (ver app/services/email_service.py). Esta alerta
+    # automática se retoma cuando se pida su plantilla. No se marca nada
+    # como "ya enviado" mientras tanto, para no perder alertas pendientes.
+    logger.info("Job en pausa (decisión 2026-10-08): no se manda ninguna alerta por ahora.")
+    return
+
     init_local_db()
     logger.info("Consultando expedientes sin respuesta del proveedor (>= %sh)...", UMBRAL_NARANJA_HORAS)
 

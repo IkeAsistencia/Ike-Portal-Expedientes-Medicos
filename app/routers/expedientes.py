@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from app.core.security import usuario_actual
-from app.repositories import accesos_repo, cortes_repo, estatus_repo, expedientes_repo
+from app.repositories import accesos_repo, correos_enviados_repo, cortes_repo, estatus_repo, expedientes_repo
 from app.schemas.correo import (
     EnviarCorreoProveedoresInput,
     EnviarCorreoProveedoresResponse,
@@ -14,7 +14,7 @@ from app.schemas.correo import (
     GenerarCorteResponse,
 )
 from app.schemas.expediente import Expediente, EstatusExpediente, ExpedienteFiltro
-from app.services import email_service, excel_service
+from app.services import email_service, estatus_service, excel_service
 
 router = APIRouter(
     prefix="/expedientes",
@@ -57,6 +57,11 @@ def enviar_correo_proveedores(data: EnviarCorreoProveedoresInput, usuario: dict 
     Valida que venga al menos un expediente seleccionado (ya lo exige el
     esquema con min_length=1, esto es una segunda validación explícita por
     claridad) y arma el correo con los datos de cada expediente seleccionado.
+
+    La selección debe quedar "pareja": todos en "Abierto" (notificación
+    nueva) o todos en "En Espera de Respuesta" (recordatorio) -- nunca
+    mezclados, y ningún otro estado. Si no cumple, se cancela el envío
+    completo (no se manda nada, ni a los que sí cumplían).
     """
     if usuario.get("perfil") == accesos_repo.PERFIL_ADMINISTRADOR:
         raise HTTPException(403, "El perfil Administrador no tiene acceso a esta acción.")
@@ -72,15 +77,29 @@ def enviar_correo_proveedores(data: EnviarCorreoProveedoresInput, usuario: dict 
     if not registros:
         raise HTTPException(404, "No se encontró información de los expedientes seleccionados.")
 
+    try:
+        es_recordatorio = estatus_service.validar_seleccion_para_correo(registros)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
     resultado = email_service.enviar_correo_proveedores(
         [r.model_dump() for r in registros],
         usuario_nombre=usuario.get("nombre") or usuario["usuario"],
+        es_recordatorio=es_recordatorio,
+    )
+
+    identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
+    correos_enviados_repo.registrar_envio(
+        tipo="recordatorio" if es_recordatorio else "nuevo",
+        destinatario=resultado.destinatarios[0] if resultado.destinatarios else "",
+        expedientes=[r.expediente for r in registros],
+        rfc_envio=identificador,
+        simulado=resultado.simulado,
     )
 
     # Regla de negocio: mandar el correo pasa el expediente a "En Espera de
     # Respuesta" en automático (nadie lo selecciona a mano). Se guarda quién
     # lo mandó -- el corte lo muestra como "RFC Coordinador".
-    identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
     for r in registros:
         estatus_repo.actualizar_estatus(r.expediente, EstatusExpediente.EN_ESPERA_RESPUESTA, identificador)
 
@@ -199,6 +218,7 @@ def enviar_corte(corte_id: int, usuario: dict = Depends(usuario_actual)):
         archivo_nombre=corte["nombre_archivo"],
         archivo_bytes=corte["contenido"],
         usuario_nombre=usuario_nombre,
+        fecha_generado=corte["fecha_generado"],
     )
     cortes_repo.marcar_enviado(corte_id, resultado.destinatarios[0])
 

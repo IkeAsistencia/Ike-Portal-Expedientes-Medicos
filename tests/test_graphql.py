@@ -95,6 +95,14 @@ def client(tmp_path, monkeypatch):
     # Las pruebas usan el login legado (usuario SISE) para obtener tokens;
     # en la app real está apagado por default (ver app/config.py).
     monkeypatch.setenv("LOGIN_LEGADO_HABILITADO", "true")
+    # Las pruebas deben quedar "simuladas" sin importar lo que tenga el .env
+    # local de quien las corre -- si no, correr pytest puede mandar correos
+    # reales (con las credenciales SMTP reales del .env) sin que nadie lo pida.
+    monkeypatch.setenv("SMTP_HOST", "")
+    monkeypatch.setenv("SMTP_USER", "")
+    monkeypatch.setenv("SMTP_PASSWORD", "")
+    monkeypatch.setenv("SMTP_REMITENTE", "")
+    monkeypatch.setenv("SMTP_DESTINATARIO_PRUEBA", "")
 
     from app.config import get_settings
 

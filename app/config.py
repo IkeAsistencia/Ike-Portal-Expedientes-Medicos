@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     smtp_password: Optional[str] = None
     smtp_remitente: Optional[str] = None
     smtp_usar_tls: bool = True
+    # Mientras no se confirme de dónde sale el correo real de cada proveedor
+    # (ver email_service.py), todo se manda aquí en vez de al proveedor real
+    # -- útil para probar en un ambiente de desarrollo sin mandarle correos
+    # a nadie más. Vacío = se manda a smtp_remitente, como antes.
+    smtp_destinatario_prueba: Optional[str] = None
 
     # --- OpenRouter (ver app/services/openrouter_service.py) ---
     # Puerta de entrada a modelos de IA (OpenRouter normaliza el API de
