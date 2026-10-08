@@ -161,7 +161,7 @@ def enviar_notificacion_regreso(
         nuevo_estatus, MENSAJES_REGRESO_POR_ESTATUS["En Espera de Respuesta"]
     )
     # nombre_paciente puede venir None -- ver nota en app/schemas/expediente.py
-    # (LEFT JOIN en dbo.ObtenerExpedientesSinProveedorMedico); html.escape(None)
+    # (LEFT JOIN en dbo.ST_CP_ObtenerExpedientesSinProveedorMedico); html.escape(None)
     # truena, así que se cubre aquí también (no solo en quien llama a esta función).
     cuerpo_html = f"""
     <p>El expediente <b>{cl_expediente}</b> (cuenta: {html.escape(cuenta)}, paciente: {html.escape(nombre_paciente or "N/A")})

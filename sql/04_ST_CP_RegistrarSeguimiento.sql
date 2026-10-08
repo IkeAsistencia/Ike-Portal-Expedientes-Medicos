@@ -1,5 +1,5 @@
 -- =====================================================================
--- SP: dbo.RegistrarSeguimiento
+-- SP: dbo.ST_CP_RegistrarSeguimiento
 -- Pantalla: Seguimiento Expediente -> botón "Actualizar en SISE"
 -- Compatible con SQL Server 2012.
 --
@@ -22,11 +22,11 @@
 -- Fecha), y si hay alguna otra columna NOT NULL no mencionada que
 -- también deba poblarse.
 -- =====================================================================
-IF OBJECT_ID('dbo.RegistrarSeguimiento', 'P') IS NOT NULL
-    DROP PROCEDURE dbo.RegistrarSeguimiento;
+IF OBJECT_ID('dbo.ST_CP_RegistrarSeguimiento', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.ST_CP_RegistrarSeguimiento;
 GO
 
-CREATE PROCEDURE dbo.RegistrarSeguimiento
+CREATE PROCEDURE dbo.ST_CP_RegistrarSeguimiento
     @clExpediente  INT,
     @Observaciones NVARCHAR(1500),
     @clUsrApp      INT

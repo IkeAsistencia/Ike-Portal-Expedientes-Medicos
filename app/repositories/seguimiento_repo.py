@@ -11,7 +11,7 @@ from app.schemas.seguimiento import SeguimientoInput
 ETIQUETA_CORE_CABINA = "Cabina Médica"
 ETIQUETA_CORE_PROVEEDOR = "Proveedores"
 PREFIJO_PAGO_ANTICIPADO = "PA-"
-# Tamaño de @Observaciones en dbo.RegistrarSeguimiento (NVARCHAR(1500)):
+# Tamaño de @Observaciones en dbo.ST_CP_RegistrarSeguimiento (NVARCHAR(1500)):
 # lo que pase de ahí SQL Server lo cortaría sin avisar.
 LONGITUD_MAXIMA_OBSERVACIONES_CORE = 1500
 
@@ -27,7 +27,7 @@ def registrar_seguimiento(data: SeguimientoInput, cl_usr_app: int) -> dict:
     nunca de un campo libre del formulario.
     """
     rows = call_procedure_write(
-        "dbo.RegistrarSeguimiento",
+        "dbo.ST_CP_RegistrarSeguimiento",
         {
             "clExpediente": data.cl_expediente,
             "Observaciones": data.comentario,

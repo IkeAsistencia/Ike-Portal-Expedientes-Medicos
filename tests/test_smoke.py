@@ -73,7 +73,7 @@ EXPEDIENTES_DEMO = [
 
 
 def fake_call_procedure(sp_name, params=None):
-    if sp_name == "dbo.ObtenerExpedientesSinProveedorMedico":
+    if sp_name == "dbo.ST_CP_ObtenerExpedientesSinProveedorMedico":
         if params and params.get("clExpediente"):
             # Búsqueda puntual por clave: nunca debe ir acotada por fecha,
             # servicio/subservicio ni cuenta.
@@ -84,16 +84,16 @@ def fake_call_procedure(sp_name, params=None):
             assert params.get("Cuenta") == []
             return [e for e in EXPEDIENTES_DEMO if e["Expediente"] == params["clExpediente"]]
         return EXPEDIENTES_DEMO
-    if sp_name == "dbo.ObtenerCatalogoServicio":
+    if sp_name == "dbo.ST_CP_ObtenerCatalogoServicio":
         return [{"clServicio": 4, "dsServicio": "Servicio Médico"}]
-    if sp_name == "dbo.ObtenerServicioMedico":
+    if sp_name == "dbo.ST_CP_ObtenerServicioMedico":
         assert params.get("clServicio") == 4
         return [{"clSubServicio": 377, "dsSubServicio": "Consulta Externa"}]
-    if sp_name == "dbo.ObtenerCatalogoCuentas":
+    if sp_name == "dbo.ST_CP_ObtenerCatalogoCuentas":
         return [{"clCuenta": 2819, "Nombre": "Cuenta Demo"}]
     if sp_name == "dbo.sp_S2_BuscaCuenta":
         return [{"clCuenta": 2819, "Nombre": "Cuenta Demo"}]
-    if sp_name == "dbo.ObtenerExpedientesSinRespuestaProveedor":
+    if sp_name == "dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor":
         horas = params.get("horasMinimas")
         assert horas == 8
         return [
@@ -123,12 +123,12 @@ def fake_call_procedure(sp_name, params=None):
     raise AssertionError(f"SP inesperado: {sp_name} / params={params}")
 
 
-# Lo que cada prueba mandó a dbo.RegistrarSeguimiento (se limpia en el fixture).
+# Lo que cada prueba mandó a dbo.ST_CP_RegistrarSeguimiento (se limpia en el fixture).
 OBSERVACIONES_ENVIADAS_A_CORE: list[str] = []
 
 
 def fake_call_procedure_write(sp_name, params=None):
-    if sp_name == "dbo.RegistrarSeguimiento":
+    if sp_name == "dbo.ST_CP_RegistrarSeguimiento":
         OBSERVACIONES_ENVIADAS_A_CORE.append(params["Observaciones"])
         # 42 = viene de una sesión SISE legada (clUsrApp real del token);
         # 0 = placeholder para sesiones RFC (ver CL_USR_APP_PLACEHOLDER_RFC).
@@ -339,7 +339,7 @@ def test_listar_expedientes_autenticado(client):
 def test_listar_expedientes_nombre_paciente_nulo_no_truena(client):
     """
     Desde que S2_ReferciasMedicas / s2_cPuntoVision / Check_Up pasaron a LEFT
-    JOIN en dbo.ObtenerExpedientesSinProveedorMedico, un expediente sin fila
+    JOIN en dbo.ST_CP_ObtenerExpedientesSinProveedorMedico, un expediente sin fila
     en ninguna de esas fuentes llega con NombrePaciente en NULL -- antes
     tronaba con un ValidationError de Pydantic porque el campo era obligatorio.
     """

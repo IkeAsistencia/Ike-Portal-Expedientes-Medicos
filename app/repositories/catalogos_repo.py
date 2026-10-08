@@ -4,19 +4,19 @@ from app.schemas.catalogo import CatalogoItem
 
 
 def listar_servicios(cl_servicio: int = 4) -> list[CatalogoItem]:
-    rows = call_procedure("dbo.ObtenerCatalogoServicio", {"clServicio": cl_servicio})
+    rows = call_procedure("dbo.ST_CP_ObtenerCatalogoServicio", {"clServicio": cl_servicio})
     return [CatalogoItem(clave=r["clServicio"], descripcion=r["dsServicio"]) for r in rows]
 
 
 def listar_subservicios(cl_servicio: int = 4) -> list[CatalogoItem]:
     """
-    Combo Subservicio. Usa dbo.ObtenerServicioMedico (sql/07_...sql),
+    Combo Subservicio. Usa dbo.ST_CP_ObtenerServicioMedico (sql/07_...sql),
     que reemplaza al SP legado dbo.sp_GetSubServicios2 — ese requería
     @clCuenta (filtra por cobertura de una sola cuenta), lo cual no
     encaja con el filtro Cuenta de la pantalla Expedientes (permite
     varias a la vez).
     """
-    rows = call_procedure("dbo.ObtenerServicioMedico", {"clServicio": cl_servicio})
+    rows = call_procedure("dbo.ST_CP_ObtenerServicioMedico", {"clServicio": cl_servicio})
     return [CatalogoItem(clave=r["clSubServicio"], descripcion=r["dsSubServicio"]) for r in rows]
 
 
@@ -24,7 +24,7 @@ def listar_cuentas() -> list[CatalogoItem]:
     settings = get_settings()
     permitidos = as_tvp_rows(settings.parse_int_list(settings.cuentas_permitidas))
     rows = call_procedure(
-        "dbo.ObtenerCatalogoCuentas",
+        "dbo.ST_CP_ObtenerCatalogoCuentas",
         {"CuentasPermitidas": permitidos},
     )
     return [CatalogoItem(clave=r["clCuenta"], descripcion=r["Nombre"]) for r in rows]

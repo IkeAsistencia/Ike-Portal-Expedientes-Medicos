@@ -19,7 +19,7 @@ from app.main import app
 
 
 def fake_call_procedure(sp_name, params=None):
-    if sp_name == "dbo.ObtenerExpedientesSinProveedorMedico":
+    if sp_name == "dbo.ST_CP_ObtenerExpedientesSinProveedorMedico":
         return [
             {
                 "Expediente": 1001,
@@ -38,11 +38,11 @@ def fake_call_procedure(sp_name, params=None):
                 "Email": "demo@example.com",
             }
         ]
-    if sp_name == "dbo.ObtenerCatalogoServicio":
+    if sp_name == "dbo.ST_CP_ObtenerCatalogoServicio":
         return [{"clServicio": 4, "dsServicio": "Servicio Médico"}]
-    if sp_name == "dbo.ObtenerServicioMedico":
+    if sp_name == "dbo.ST_CP_ObtenerServicioMedico":
         return [{"clSubServicio": 377, "dsSubServicio": "Consulta Externa"}]
-    if sp_name == "dbo.ObtenerCatalogoCuentas":
+    if sp_name == "dbo.ST_CP_ObtenerCatalogoCuentas":
         return [{"clCuenta": 2819, "Nombre": "Cuenta Demo"}]
     if sp_name == "dbo.sp_S2_BuscaCuenta":
         return [{"clCuenta": 2819, "Nombre": "Cuenta Demo"}]
@@ -54,7 +54,7 @@ def fake_call_procedure(sp_name, params=None):
 
 
 def fake_call_procedure_write(sp_name, params=None):
-    if sp_name == "dbo.RegistrarSeguimiento":
+    if sp_name == "dbo.ST_CP_RegistrarSeguimiento":
         assert params["clUsrApp"] == 42  # debe venir del token, no del input
         return [{"clSeguimiento": 1, "FechaRegistro": datetime.datetime.now()}]
     raise AssertionError(f"SP inesperado: {sp_name} / params={params}")

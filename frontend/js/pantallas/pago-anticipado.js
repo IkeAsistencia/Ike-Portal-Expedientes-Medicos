@@ -1,6 +1,6 @@
 /* Pantalla: Expedientes PA (pago anticipado).
    TEMPORAL: jala los mismos datos que "Expedientes" (mismo
-   dbo.ObtenerExpedientesSinProveedorMedico) -- todavía no existe en SISE un
+   dbo.ST_CP_ObtenerExpedientesSinProveedorMedico) -- todavía no existe en SISE un
    campo/consulta que distinga cuáles son de pago anticipado.
    Hoy está oculta para todos los perfiles (ver pantallaPermitida en app.js):
    el flujo de pago anticipado ya vive dentro de Expedientes. */

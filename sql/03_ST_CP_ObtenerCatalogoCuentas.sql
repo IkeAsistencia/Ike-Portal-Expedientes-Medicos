@@ -1,5 +1,5 @@
 -- =====================================================================
--- SP: dbo.ObtenerCatalogoCuentas
+-- SP: dbo.ST_CP_ObtenerCatalogoCuentas
 -- Pantalla: Expedientes (combo Cuenta / Cuenta Específica en Filtros)
 -- Compatible con SQL Server 2012. Requiere 00_create_types.sql.
 --
@@ -9,11 +9,11 @@
 -- CONFIRMAR si esta restricción debe depender del usuario en vez de
 -- ser una lista fija.
 -- =====================================================================
-IF OBJECT_ID('dbo.ObtenerCatalogoCuentas', 'P') IS NOT NULL
-    DROP PROCEDURE dbo.ObtenerCatalogoCuentas;
+IF OBJECT_ID('dbo.ST_CP_ObtenerCatalogoCuentas', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.ST_CP_ObtenerCatalogoCuentas;
 GO
 
-CREATE PROCEDURE dbo.ObtenerCatalogoCuentas
+CREATE PROCEDURE dbo.ST_CP_ObtenerCatalogoCuentas
     @CuentasPermitidas dbo.IntList READONLY
 AS
 BEGIN

@@ -20,7 +20,7 @@ Este script NO corre solo ni se queda "vivo": está pensado para
 ejecutarse periódicamente vía un programador externo (ver jobs/README.md
 para configurarlo con el Programador de tareas de Windows). Cada
 corrida:
-  1. Consulta dbo.ObtenerExpedientesSinRespuestaProveedor.
+  1. Consulta dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor.
   2. Separa los resultados en nivel "naranja" (8-24h) y "rojo" (24h+).
   3. Evita reenviar una alerta ya mandada para el mismo expediente y
      nivel (tabla local alertas_proveedor_enviadas) — si un expediente

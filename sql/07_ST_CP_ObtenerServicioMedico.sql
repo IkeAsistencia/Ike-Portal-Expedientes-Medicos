@@ -1,5 +1,5 @@
 -- =====================================================================
--- SP: dbo.ObtenerServicioMedico
+-- SP: dbo.ST_CP_ObtenerServicioMedico
 -- Pantalla: Expedientes (combo Subservicio en Filtros)
 --
 -- Reemplaza el uso del SP legado dbo.sp_GetSubServicios2 -- DEPRECADO
@@ -13,7 +13,7 @@
 --   select clSubServicio, dsSubServicio from dbo.cSubServicio
 --     where clServicio = 4 and clSubServicio in (226,377,420,383)
 --
--- Igual que dbo.ObtenerCatalogoServicio, el Servicio siempre es el
+-- Igual que dbo.ST_CP_ObtenerCatalogoServicio, el Servicio siempre es el
 -- mismo (clServicio = 4, "Asistencia Médica"), así que se deja fijo
 -- como default. La lista de Subservicios permitidos (226,377,420,383)
 -- también se deja fija — confirmar si debe salir de configuración en
@@ -24,13 +24,13 @@
 -- los 4 subservicios de esta pantalla con expedientes reales hoy en
 -- IKE_TEST; sin él en esta lista, el combo Subservicio (y el filtro
 -- local del frontend) lo escondían aunque el SP de expedientes ya lo
--- trajera bien. Ver sql/01_sp_ObtenerExpedientesSinProveedorMedico.sql.
+-- trajera bien. Ver sql/01_ST_CP_ObtenerExpedientesSinProveedorMedico.sql.
 -- =====================================================================
-IF OBJECT_ID('dbo.ObtenerServicioMedico', 'P') IS NOT NULL
-    DROP PROCEDURE dbo.ObtenerServicioMedico;
+IF OBJECT_ID('dbo.ST_CP_ObtenerServicioMedico', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.ST_CP_ObtenerServicioMedico;
 GO
 
-CREATE PROCEDURE dbo.ObtenerServicioMedico
+CREATE PROCEDURE dbo.ST_CP_ObtenerServicioMedico
     @clServicio INT = 4
 AS
 BEGIN

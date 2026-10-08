@@ -11,14 +11,19 @@ compatibilidad aplicadas en todos los scripts:
 ## Orden de ejecución (en tu base de desarrollo)
 
 1. `00_create_types.sql` — crea el tipo `dbo.IntList` (requerido por 01 y 03)
-2. `01_sp_ObtenerExpedientesSinProveedorMedico.sql` — listado principal (Servicio, titular, teléfono, correo, fecha de asignación de proveedor; regla de 8h de gracia antes de considerarlo "sin proveedor")
-3. `02_sp_ObtenerCatalogoServicio.sql` — combo Servicio
-4. `03_sp_ObtenerCatalogoCuentas.sql` — catálogo de cuentas
-5. `04_sp_RegistrarSeguimiento.sql` — inserta en `dbo.Seguimiento` (tabla ya existente)
-6. `05_sp_ObtenerExpedientesSinRespuestaProveedor.sql` — usado por el cron de validación de proveedor
-7. `07_sp_ObtenerServicioMedico.sql` — combo Subservicio
+2. `01_ST_CP_ObtenerExpedientesSinProveedorMedico.sql` — listado principal (Servicio, titular, teléfono, correo, fecha de asignación de proveedor; regla de 8h de gracia antes de considerarlo "sin proveedor")
+3. `02_ST_CP_ObtenerCatalogoServicio.sql` — combo Servicio
+4. `03_ST_CP_ObtenerCatalogoCuentas.sql` — catálogo de cuentas
+5. `04_ST_CP_RegistrarSeguimiento.sql` — inserta en `dbo.Seguimiento` (tabla ya existente)
+6. `05_ST_CP_ObtenerExpedientesSinRespuestaProveedor.sql` — usado por el cron de validación de proveedor
+7. `07_ST_CP_ObtenerServicioMedico.sql` — combo Subservicio
 
-`06_sp_ObtenerCatalogoSubServicio_DEPRECADO.sql` **NO se ejecuta**.
+`06_ST_CP_ObtenerCatalogoSubServicio_DEPRECADO.sql` **NO se ejecuta**.
+
+**Nomenclatura:** los SPs de este proyecto llevan el prefijo `ST_CP_`. En
+una base donde ya existían con el nombre anterior (sin prefijo), después
+de crear los nuevos y confirmar que el portal funciona se puede correr
+`98_borrar_nombres_anteriores.sql` para quitar los viejos.
 
 ## Para quien corre los scripts en QA o producción
 
@@ -47,12 +52,12 @@ borran y recrean su SP.
 solo ejecución, sin acceso directo a tablas):
 
 ```sql
-GRANT EXECUTE ON dbo.ObtenerExpedientesSinProveedorMedico   TO [usuario_app];
-GRANT EXECUTE ON dbo.ObtenerCatalogoServicio                TO [usuario_app];
-GRANT EXECUTE ON dbo.ObtenerCatalogoCuentas                 TO [usuario_app];
-GRANT EXECUTE ON dbo.RegistrarSeguimiento                   TO [usuario_app];
-GRANT EXECUTE ON dbo.ObtenerExpedientesSinRespuestaProveedor TO [usuario_app];
-GRANT EXECUTE ON dbo.ObtenerServicioMedico                  TO [usuario_app];
+GRANT EXECUTE ON dbo.ST_CP_ObtenerExpedientesSinProveedorMedico   TO [usuario_app];
+GRANT EXECUTE ON dbo.ST_CP_ObtenerCatalogoServicio                TO [usuario_app];
+GRANT EXECUTE ON dbo.ST_CP_ObtenerCatalogoCuentas                 TO [usuario_app];
+GRANT EXECUTE ON dbo.ST_CP_RegistrarSeguimiento                   TO [usuario_app];
+GRANT EXECUTE ON dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor TO [usuario_app];
+GRANT EXECUTE ON dbo.ST_CP_ObtenerServicioMedico                  TO [usuario_app];
 GRANT EXECUTE ON dbo.sp_S2_BuscaCuenta                      TO [usuario_app];
 GRANT EXECUTE ON TYPE::dbo.IntList                          TO [usuario_app];  -- listas de cuentas (TVP)
 ```
@@ -61,9 +66,9 @@ GRANT EXECUTE ON TYPE::dbo.IntList                          TO [usuario_app];  -
 
 ```sql
 SELECT name, create_date FROM sys.procedures
-WHERE name IN ('ObtenerExpedientesSinProveedorMedico', 'ObtenerCatalogoServicio',
-               'ObtenerCatalogoCuentas', 'RegistrarSeguimiento',
-               'ObtenerExpedientesSinRespuestaProveedor', 'ObtenerServicioMedico');  -- deben salir los 6
+WHERE name IN ('ST_CP_ObtenerExpedientesSinProveedorMedico', 'ST_CP_ObtenerCatalogoServicio',
+               'ST_CP_ObtenerCatalogoCuentas', 'ST_CP_RegistrarSeguimiento',
+               'ST_CP_ObtenerExpedientesSinRespuestaProveedor', 'ST_CP_ObtenerServicioMedico');  -- deben salir los 6
 SELECT name FROM sys.table_types WHERE name = 'IntList';                             -- debe salir 1
 ```
 

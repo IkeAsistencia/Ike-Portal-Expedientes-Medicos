@@ -1,5 +1,5 @@
 -- =====================================================================
--- SP: dbo.ObtenerExpedientesSinRespuestaProveedor
+-- SP: dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor
 -- Uso: cron/timer (jobs/validar_estatus_proveedor.py)
 --
 -- Regresa los expedientes cuyo proveedor sigue "asignado, sin
@@ -10,13 +10,13 @@
 -- "Asignación de Proveedor" — es el estatus que el sistema core le da
 -- al expediente cuando se le asigna un proveedor. Por eso este mismo
 -- valor se usa para obtener FechaAsignacion (fecha en que se asignó el
--- proveedor), tanto aquí como en dbo.ObtenerExpedientesSinProveedorMedico.
+-- proveedor), tanto aquí como en dbo.ST_CP_ObtenerExpedientesSinProveedorMedico.
 -- =====================================================================
-IF OBJECT_ID('dbo.ObtenerExpedientesSinRespuestaProveedor', 'P') IS NOT NULL
-    DROP PROCEDURE dbo.ObtenerExpedientesSinRespuestaProveedor;
+IF OBJECT_ID('dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor;
 GO
 
-CREATE PROCEDURE dbo.ObtenerExpedientesSinRespuestaProveedor
+CREATE PROCEDURE dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor
     @horasMinimas INT
 AS
 BEGIN

@@ -1,5 +1,5 @@
 -- =====================================================================
--- SP: dbo.ObtenerExpedientesSinProveedorMedico
+-- SP: dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
 -- Pantalla: Expedientes (listado + filtros)
 -- Compatible con SQL Server 2012 (sin CREATE OR ALTER, sin STRING_SPLIT).
 -- Requiere haber corrido antes 00_create_types.sql.
@@ -58,11 +58,11 @@
 -- aquí desde el segundo 1 de abierto -- antes de darle chance a la
 -- asignación automática de Core.
 -- =====================================================================
-IF OBJECT_ID('dbo.ObtenerExpedientesSinProveedorMedico', 'P') IS NOT NULL
-    DROP PROCEDURE dbo.ObtenerExpedientesSinProveedorMedico;
+IF OBJECT_ID('dbo.ST_CP_ObtenerExpedientesSinProveedorMedico', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.ST_CP_ObtenerExpedientesSinProveedorMedico;
 GO
 
-CREATE PROCEDURE dbo.ObtenerExpedientesSinProveedorMedico
+CREATE PROCEDURE dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
     @clExpediente  INT           = NULL,
     @fechaInicio   DATE          = NULL,
     @fechaFin      DATE          = NULL,

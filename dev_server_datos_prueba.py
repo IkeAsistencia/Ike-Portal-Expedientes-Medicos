@@ -78,7 +78,7 @@ EXPEDIENTES_DEMO = [
 
 
 def fake_call_procedure(sp_name, params=None):
-    if sp_name == "dbo.ObtenerExpedientesSinProveedorMedico":
+    if sp_name == "dbo.ST_CP_ObtenerExpedientesSinProveedorMedico":
         # Igual que el SP real: si se pide un expediente puntual, regresa solo
         # ése (sin esto, el backend tomaba siempre el primero de la lista, ej.
         # "Enviar correo" sobre el 1002 terminaba marcando el 1001).
@@ -86,18 +86,18 @@ def fake_call_procedure(sp_name, params=None):
         if cl_expediente is not None:
             return [e for e in EXPEDIENTES_DEMO if e["Expediente"] == int(cl_expediente)]
         return EXPEDIENTES_DEMO
-    if sp_name == "dbo.ObtenerCatalogoServicio":
+    if sp_name == "dbo.ST_CP_ObtenerCatalogoServicio":
         return [{"clServicio": 4, "dsServicio": "Servicio Médico"}]
-    if sp_name == "dbo.ObtenerServicioMedico":
+    if sp_name == "dbo.ST_CP_ObtenerServicioMedico":
         return [
             {"clSubServicio": 377, "dsSubServicio": "Consulta Externa"},
             {"clSubServicio": 420, "dsSubServicio": "Hospitalización"},
         ]
-    if sp_name == "dbo.ObtenerCatalogoCuentas":
+    if sp_name == "dbo.ST_CP_ObtenerCatalogoCuentas":
         return [{"clCuenta": 2819, "Nombre": "Cuenta Demo"}]
     if sp_name == "dbo.sp_S2_BuscaCuenta":
         return [{"clCuenta": 2819, "Nombre": "Cuenta Demo"}]
-    if sp_name == "dbo.ObtenerExpedientesSinRespuestaProveedor":
+    if sp_name == "dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor":
         return [
             {
                 "Expediente": 1003,
@@ -116,7 +116,7 @@ def fake_call_procedure(sp_name, params=None):
 
 
 def fake_call_procedure_write(sp_name, params=None):
-    if sp_name == "dbo.RegistrarSeguimiento":
+    if sp_name == "dbo.ST_CP_RegistrarSeguimiento":
         return [{"clSeguimiento": 1, "FechaRegistro": datetime.datetime.now()}]
     raise AssertionError(f"SP inesperado: {sp_name}")
 

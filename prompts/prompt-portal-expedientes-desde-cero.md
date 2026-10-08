@@ -169,7 +169,7 @@ no se puede cambiar.
 
 ## 6. Integración con Core (SISE)
 
-- Lo que se inserta con `dbo.RegistrarSeguimiento` en
+- Lo que se inserta con `dbo.ST_CP_RegistrarSeguimiento` en
   `dbo.Seguimiento.Observaciones` lleva este formato, con el nombre de
   quien inició sesión (tomado del token, nunca del formulario):
   ```
@@ -194,17 +194,17 @@ no se puede cambiar.
 **Se crean** (scripts numerados en `sql/`, con un `sql/README.md` que
 indique el orden):
 1. `00_create_types.sql` — tipo `dbo.IntList`.
-2. `dbo.ObtenerExpedientesSinProveedorMedico` — listado principal, con la
+2. `dbo.ST_CP_ObtenerExpedientesSinProveedorMedico` — listado principal, con la
    regla de 8 horas de gracia (`@horasMinimas`), filtros por expediente,
    fechas, servicio, subservicio y cuentas (TVP).
-3. `dbo.ObtenerCatalogoServicio` — combo Servicio.
-4. `dbo.ObtenerCatalogoCuentas` — catálogo de cuentas, con lista fija
+3. `dbo.ST_CP_ObtenerCatalogoServicio` — combo Servicio.
+4. `dbo.ST_CP_ObtenerCatalogoCuentas` — catálogo de cuentas, con lista fija
    opcional (`CUENTAS_PERMITIDAS` en `.env`).
-5. `dbo.RegistrarSeguimiento` — inserta en `dbo.Seguimiento`
+5. `dbo.ST_CP_RegistrarSeguimiento` — inserta en `dbo.Seguimiento`
    (clExpediente, clEstatus=9, Observaciones, clUsrApp, Fecha).
-6. `dbo.ObtenerExpedientesSinRespuestaProveedor` — para el job de alertas
+6. `dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor` — para el job de alertas
    (`ProveedorxExpediente.clEstatus = 3` = asignación de proveedor).
-7. `dbo.ObtenerServicioMedico` — combo Subservicio en cascada.
+7. `dbo.ST_CP_ObtenerServicioMedico` — combo Subservicio en cascada.
 
 **Ya existen** en la base: `dbo.sp_S2_BuscaCuenta` (buscador de cuentas).
 

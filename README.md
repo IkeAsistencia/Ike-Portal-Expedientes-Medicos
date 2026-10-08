@@ -294,11 +294,11 @@ pytest tests/ -v
 | Método | Ruta | Pantalla / uso | Origen del dato |
 |---|---|---|---|
 | POST | `/auth/rfc/estado` · `/auth/rfc/crear-password` · `/auth/rfc/login` | Inicio de sesión (sin token) | Base local |
-| GET | `/expedientes` | Expedientes: tabla + filtros | `dbo.ObtenerExpedientesSinProveedorMedico` + estatus local |
+| GET | `/expedientes` | Expedientes: tabla + filtros | `dbo.ST_CP_ObtenerExpedientesSinProveedorMedico` + estatus local |
 | POST | `/expedientes/enviar-correo-proveedores` | "Enviar correo a proveedores" (Cabina) | Correo + estatus local |
 | POST / GET / POST | `/expedientes/corte` · `/expedientes/corte/{id}/descargar` · `/expedientes/corte/{id}/enviar` | Corte en Excel (Administrador) | Excel guardado en la base local + correo |
-| GET | `/catalogos/servicios` · `/catalogos/subservicios` · `/catalogos/cuentas` · `/catalogos/cuentas/buscar` | Combos y buscador de cuentas | `dbo.ObtenerCatalogoServicio`, `dbo.ObtenerServicioMedico`, `dbo.ObtenerCatalogoCuentas`, `dbo.sp_S2_BuscaCuenta` |
-| POST | `/seguimiento/actualizar` | "Actualizar Core" (Proveedor) | `dbo.RegistrarSeguimiento` + comentario y estatus locales |
+| GET | `/catalogos/servicios` · `/catalogos/subservicios` · `/catalogos/cuentas` · `/catalogos/cuentas/buscar` | Combos y buscador de cuentas | `dbo.ST_CP_ObtenerCatalogoServicio`, `dbo.ST_CP_ObtenerServicioMedico`, `dbo.ST_CP_ObtenerCatalogoCuentas`, `dbo.sp_S2_BuscaCuenta` |
+| POST | `/seguimiento/actualizar` | "Actualizar Core" (Proveedor) | `dbo.ST_CP_RegistrarSeguimiento` + comentario y estatus locales |
 | POST | `/seguimiento/estatus` | Estado del caso (Cabina) | Estatus local; regresar/cita también escriben en Core |
 | GET | `/seguimiento/comentarios/{exp}` | Comentarios del Proveedor y del Coordinador | Base local |
 | GET / POST | `/seguimiento/pago-anticipado/{exp}` | Casilla de pago anticipado | Base local |
@@ -308,7 +308,7 @@ pytest tests/ -v
 | GET | `/health` | Monitoreo (sin token) | — |
 
 Además, `jobs/validar_estatus_proveedor.py` corre por fuera del servidor
-web (ver `jobs/README.md`) y usa `dbo.ObtenerExpedientesSinRespuestaProveedor`
+web (ver `jobs/README.md`) y usa `dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor`
 para mandar alertas por correo.
 
 ## GraphQL (nuevo)

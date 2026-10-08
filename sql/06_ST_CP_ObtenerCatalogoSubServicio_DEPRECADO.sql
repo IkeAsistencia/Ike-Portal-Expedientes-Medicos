@@ -5,12 +5,12 @@
 -- subservicios se obtenía con el SP legado dbo.sp_GetSubServicios2
 -- (recibe @clServicio). Se conserva este archivo solo como referencia
 -- histórica. El combo Subservicio de la pantalla Expedientes ya no usa
--- ninguno de los dos -- ahora usa dbo.ObtenerServicioMedico (ver
--- 07_sp_ObtenerServicioMedico.sql), que tampoco depende de la cuenta.
+-- ninguno de los dos -- ahora usa dbo.ST_CP_ObtenerServicioMedico (ver
+-- 07_ST_CP_ObtenerServicioMedico.sql), que tampoco depende de la cuenta.
 -- =====================================================================
 
 -- =====================================================================
--- SP: dbo.ObtenerCatalogoSubServicio
+-- SP: dbo.ST_CP_ObtenerCatalogoSubServicio
 -- Pantalla: Expedientes (combo Subservicio en Filtros)
 -- Compatible con SQL Server 2012. Requiere 00_create_types.sql.
 --
@@ -20,11 +20,11 @@
 -- todos los del @clServicio indicado). CONFIRMAR si esta restricción
 -- debe depender del usuario/cuenta en vez de ser una lista fija.
 -- =====================================================================
-IF OBJECT_ID('dbo.ObtenerCatalogoSubServicio', 'P') IS NOT NULL
-    DROP PROCEDURE dbo.ObtenerCatalogoSubServicio;
+IF OBJECT_ID('dbo.ST_CP_ObtenerCatalogoSubServicio', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.ST_CP_ObtenerCatalogoSubServicio;
 GO
 
-CREATE PROCEDURE dbo.ObtenerCatalogoSubServicio
+CREATE PROCEDURE dbo.ST_CP_ObtenerCatalogoSubServicio
     @clServicio             INT         = 4,
     @SubServiciosPermitidos dbo.IntList READONLY
 AS

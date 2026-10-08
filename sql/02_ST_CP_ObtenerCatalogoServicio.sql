@@ -1,5 +1,5 @@
 -- =====================================================================
--- SP: dbo.ObtenerCatalogoServicio
+-- SP: dbo.ST_CP_ObtenerCatalogoServicio
 -- Pantalla: Expedientes (combo Servicio en Filtros)
 --
 -- Basado en:
@@ -11,11 +11,11 @@
 -- futuro se necesita traer más de un servicio; con el valor por
 -- default, el combo Servicio en pantalla mostrará una sola opción.
 -- =====================================================================
-IF OBJECT_ID('dbo.ObtenerCatalogoServicio', 'P') IS NOT NULL
-    DROP PROCEDURE dbo.ObtenerCatalogoServicio;
+IF OBJECT_ID('dbo.ST_CP_ObtenerCatalogoServicio', 'P') IS NOT NULL
+    DROP PROCEDURE dbo.ST_CP_ObtenerCatalogoServicio;
 GO
 
-CREATE PROCEDURE dbo.ObtenerCatalogoServicio
+CREATE PROCEDURE dbo.ST_CP_ObtenerCatalogoServicio
     @clServicio INT = 4
 AS
 BEGIN

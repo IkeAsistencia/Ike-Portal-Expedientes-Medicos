@@ -89,7 +89,7 @@ def listar_expedientes(filtro: ExpedienteFiltro) -> list[Expediente]:
         cuentas_tvp = as_tvp_rows(filtro.cuentas or [])
 
     rows = call_procedure(
-        "dbo.ObtenerExpedientesSinProveedorMedico",
+        "dbo.ST_CP_ObtenerExpedientesSinProveedorMedico",
         {
             "clExpediente": filtro.cl_expediente,
             "fechaInicio": fecha_inicio_efectiva,
@@ -133,6 +133,6 @@ def listar_sin_respuesta_proveedor(horas_minimas: int) -> list[dict]:
     de estatus desde hace @horas_minimas horas o más.
     """
     return call_procedure(
-        "dbo.ObtenerExpedientesSinRespuestaProveedor",
+        "dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor",
         {"horasMinimas": horas_minimas},
     )

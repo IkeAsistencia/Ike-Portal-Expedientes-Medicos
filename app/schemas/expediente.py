@@ -16,7 +16,7 @@ class EstatusExpediente(str, Enum):
 class Expediente(BaseModel):
     """
     Representa una fila del listado de la pantalla Expedientes.
-    Refleja el query actualizado de dbo.ObtenerExpedientesSinProveedorMedico.
+    Refleja el query actualizado de dbo.ST_CP_ObtenerExpedientesSinProveedorMedico.
     """
 
     model_config = ConfigDict(populate_by_name=True)
@@ -26,7 +26,7 @@ class Expediente(BaseModel):
     tipo_servicio: str
     tipo_subservicio: str
     nombre_titular: Optional[str] = None
-    # Optional: dbo.ObtenerExpedientesSinProveedorMedico ahora hace LEFT JOIN
+    # Optional: dbo.ST_CP_ObtenerExpedientesSinProveedorMedico ahora hace LEFT JOIN
     # (antes INNER) a S2_ReferciasMedicas / s2_cPuntoVision / Check_Up según
     # el clSubServicio del expediente -- si no hay fila en la fuente que le
     # toca, estos 4 campos llegan en NULL (ver sql/01_..._Medico.sql).
