@@ -45,7 +45,7 @@ const PLANTILLA = `
 
   <div class="card tono-verdeazul">
     <div class="card-header">
-      <h2>Resultados</h2>
+      <h2>Resultados de la búsqueda</h2>
       <div style="display:flex;gap:8px;">
         <button class="btn btn-secondary" id="btn-generar-corte">Generar corte</button>
         <button class="btn btn-primary" id="btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
