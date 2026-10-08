@@ -63,6 +63,21 @@ class Settings(BaseSettings):
     smtp_remitente: Optional[str] = None
     smtp_usar_tls: bool = True
 
+    # --- OpenRouter (ver app/services/openrouter_service.py) ---
+    # Puerta de entrada a modelos de IA (OpenRouter normaliza el API de
+    # varios proveedores). Cada llamada queda registrada en la base local
+    # (tabla openrouter_iteraciones) con sus tokens y costo reales -- el
+    # costo lo regresa OpenRouter mismo en cada respuesta (usage.cost), no
+    # se calcula ni se estima aquí. Sin OPENROUTER_API_KEY, el endpoint
+    # /openrouter rechaza la petición en vez de fallar a medias.
+    openrouter_api_key: Optional[str] = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    openrouter_modelo_default: str = "openai/gpt-4o-mini"
+    # Recomendados por OpenRouter para identificar la app en su ranking
+    # (openrouter.ai/docs: headers HTTP-Referer / X-Title) -- opcionales.
+    openrouter_site_url: Optional[str] = None
+    openrouter_app_name: str = "Portal Expedientes Médicos"
+
     # --- Sesión / JWT emitido por esta app tras el login ---
     # Genera uno propio por ambiente, ej: python -c "import secrets; print(secrets.token_hex(32))"
     jwt_secret_key: str = JWT_SECRET_KEY_DEFAULT
@@ -106,6 +121,10 @@ class Settings(BaseSettings):
     @property
     def smtp_configurado(self) -> bool:
         return bool(self.smtp_host and self.smtp_remitente)
+
+    @property
+    def openrouter_configurado(self) -> bool:
+        return bool(self.openrouter_api_key)
 
 
 @lru_cache

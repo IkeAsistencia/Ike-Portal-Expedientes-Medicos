@@ -18,7 +18,8 @@ app/
 ├── services/
 │   ├── email_service.py        # envío de correo (real si hay SMTP en .env, simulado/log si no)
 │   ├── seguimiento_service.py  # reglas de 'Actualizar Core' (rol, longitud, flujo), compartidas por REST y GraphQL
-│   └── estatus_service.py      # reglas del cambio manual de estatus (rol, flujo de regreso), compartidas por REST y GraphQL
+│   ├── estatus_service.py      # reglas del cambio manual de estatus (rol, flujo de regreso), compartidas por REST y GraphQL
+│   └── openrouter_service.py   # cliente de OpenRouter (IA) + bitácora de tokens/costo reales
 ├── schemas/                    # modelos Pydantic (request/response)
 ├── repositories/                # una función por cada operación de datos
 ├── routers/                     # endpoints HTTP (FastAPI routers)
@@ -305,11 +306,43 @@ pytest tests/ -v
 | POST / GET | `/seguimiento/comprobante` · `/seguimiento/comprobante/{exp}` · `.../archivo` | Comprobante de pago | Base local |
 | GET / POST / DELETE | `/configuracion/cuentas` · `/configuracion/cuentas/limpiar` | Configuración Cuentas (Administrador) | Base local |
 | GET / POST | `/admin/accesos` · `/admin/accesos/entidades` · `/admin/accesos/{rfc}/inactivar` · `/reactivar` · `/resetear-password` · `/entidad` | Usuarios y Accesos (Administrador) | Base local |
+| POST / GET | `/openrouter` · `/openrouter/iteraciones` · `/openrouter/reporte` | IA vía OpenRouter + bitácora de consumo/costo (Administrador) | `app/services/openrouter_service.py` + base local |
 | GET | `/health` | Monitoreo (sin token) | — |
 
 Además, `jobs/validar_estatus_proveedor.py` corre por fuera del servidor
 web (ver `jobs/README.md`) y usa `dbo.ST_CP_ObtenerExpedientesSinRespuestaProveedor`
 para mandar alertas por correo.
+
+## OpenRouter (IA) — consumo y costo
+
+Integración con [OpenRouter](https://openrouter.ai) (puerta de entrada a
+modelos de IA de varios proveedores bajo un solo API) exclusiva del perfil
+**Administrador** — mismo criterio que `/admin/accesos`, sin excepción
+para sesiones SISE legadas. No tiene equivalente en GraphQL a propósito,
+igual que `/admin/accesos`.
+
+1. Crea tu API key en <https://openrouter.ai/keys> y ponla en tu `.env`
+   como `OPENROUTER_API_KEY` (ver `.env.example`). Sin esto, `POST
+   /openrouter` responde 400 — no hay "modo simulado" como en el correo,
+   porque el costo real es justo el dato que se quiere medir.
+2. `POST /openrouter` — manda `{"mensaje": "...", "modelo": "...",
+   "descripcion": "..."}` a OpenRouter (modelo opcional, usa
+   `OPENROUTER_MODELO_DEFAULT` si se omite) y regresa el contenido
+   generado junto con tokens y costo **reales** (los que OpenRouter
+   regresa en `usage`, ver su
+   [Usage Accounting](https://openrouter.ai/docs/use-cases/usage-accounting)).
+   Cada llamada queda guardada en la base local (tabla
+   `openrouter_iteraciones`).
+3. `GET /openrouter/iteraciones?desde=&hasta=` — la bitácora cruda,
+   petición por petición.
+4. `GET /openrouter/reporte?desde=&hasta=` — resumen: total de
+   peticiones, tokens de entrada/salida/totales, costo total y
+   promedio, desglose por modelo, desglose por día, y las peticiones
+   de mayor consumo de tokens y de mayor costo.
+
+Lógica en `app/services/openrouter_service.py` (cliente HTTP) y
+`app/repositories/openrouter_repo.py` (bitácora y agregados). Pruebas:
+`tests/test_openrouter.py` (sin llamar a OpenRouter real).
 
 ## GraphQL (nuevo)
 

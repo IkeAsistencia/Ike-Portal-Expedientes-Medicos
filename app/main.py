@@ -10,7 +10,7 @@ from app.config import get_arranque_settings, get_settings, validar_jwt_secret
 from app.db.connection import calentar_pool
 from app.db.local_store import init_local_db
 from app.graphql.schema import graphql_router
-from app.routers import admin_accesos, auth, catalogos, configuracion_cuentas, expedientes, seguimiento
+from app.routers import admin_accesos, auth, catalogos, configuracion_cuentas, expedientes, openrouter, seguimiento
 
 
 @asynccontextmanager
@@ -68,6 +68,7 @@ app.include_router(catalogos.router)
 app.include_router(seguimiento.router)
 app.include_router(configuracion_cuentas.router)
 app.include_router(admin_accesos.router)
+app.include_router(openrouter.router)
 app.include_router(graphql_router, prefix="/graphql", tags=["GraphQL"])
 
 

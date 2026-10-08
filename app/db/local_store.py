@@ -12,6 +12,9 @@ se persisten en SQL Server:
   - usuarios_acceso: accesos por RFC (perfiles Administrador/Cabina/Proveedor).
   - comentarios_seguimiento: copia local de los comentarios de Proveedor.
   - comprobantes_pago: archivo de comprobante (expedientes Pago Anticipado).
+  - openrouter_iteraciones: bitácora de cada llamada a OpenRouter (ver
+    app/services/openrouter_service.py), con los tokens y el costo reales
+    que OpenRouter regresó en su respuesta -- para poder reportar consumo.
 
 Este archivo vive junto al API (ver LOCAL_DB_PATH en .env) y no requiere
 ningún permiso especial en SQL Server.
@@ -111,6 +114,22 @@ CREATE TABLE IF NOT EXISTS cortes_generados (
     enviado         INTEGER NOT NULL DEFAULT 0,
     destinatario    TEXT,
     fecha_enviado   TEXT
+);
+
+-- Bitácora de cada llamada a OpenRouter (ver app/services/openrouter_service.py).
+-- tokens_* y costo_usd vienen TAL CUAL de la respuesta de OpenRouter
+-- (usage.prompt_tokens/completion_tokens/total_tokens/cost) -- no se
+-- calculan ni se estiman aquí, para que el reporte de consumo sea exacto.
+CREATE TABLE IF NOT EXISTS openrouter_iteraciones (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    modelo         TEXT NOT NULL,
+    descripcion    TEXT,
+    identificador  TEXT,              -- RFC/usuario de quién la disparó (o NULL)
+    tokens_entrada INTEGER NOT NULL DEFAULT 0,
+    tokens_salida  INTEGER NOT NULL DEFAULT 0,
+    tokens_totales INTEGER NOT NULL DEFAULT 0,
+    costo_usd      REAL NOT NULL DEFAULT 0,
+    fecha          TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
 -- Si un expediente es de "pago anticipado" -- solo el Proveedor lo sabe, por
