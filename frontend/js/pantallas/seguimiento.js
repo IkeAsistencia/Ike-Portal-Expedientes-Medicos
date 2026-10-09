@@ -1,7 +1,7 @@
 /* Pantalla: Seguimiento de expedientes (detalle de un expediente,
    comentarios, estatus y registro de seguimiento del Proveedor). */
 import { api, apiArchivo } from "../core/api.js";
-import { escapeHtml, formatDate, formatDateTime } from "../core/formato.js";
+import { escapeHtml, formatDate, formatDateTime, sanitizarHtmlSeguimiento } from "../core/formato.js";
 import { toast } from "../core/toast.js";
 import { navegar } from "../core/router.js";
 import { esPerfilCabina, esPerfilProveedor, nombreUsuario } from "../core/sesion.js";
@@ -45,6 +45,26 @@ const PLANTILLA = `
         </label>
         <div class="hint" id="ig-pago-anticipado-hint">Solo el Proveedor puede marcar esta casilla.</div>
       </div>
+    </div>
+  </div>
+
+  <div class="card tono-verdeazul hidden" id="sg-historial-sise-card">
+    <div class="card-header"><h2>Seguimiento</h2></div>
+    <div class="table-wrap table-wrap-listado">
+      <table class="mini-table" id="sg-historial-sise-tabla">
+        <thead>
+          <tr>
+            <th style="width:120px;">Fecha</th>
+            <th style="width:150px;">Estatus</th>
+            <th style="width:150px;">Proveedor</th>
+            <th style="width:150px;">Nombre</th>
+            <th>Observaciones</th>
+          </tr>
+        </thead>
+        <tbody id="sg-historial-sise-body">
+          <tr><td colspan="5" class="empty">—</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -168,7 +188,7 @@ export function abrirDesdeMenu() {
 }
 
 function ocultarPaneles() {
-  ["sg-info-card", "sg-estatus-card", "sg-seguimiento-card", "sg-solo-lectura-card",
+  ["sg-info-card", "sg-historial-sise-card", "sg-estatus-card", "sg-seguimiento-card", "sg-solo-lectura-card",
     "sg-comentarios-proveedor-card", "sg-comentarios-coordinador-card", "sg-regresar-card",
   ].forEach(id => $(id).classList.add("hidden"));
   registroActual = null;
@@ -212,8 +232,10 @@ export async function abrirSeguimiento(record, source) {
   actualizarContador();
 
   $("sg-info-card").classList.remove("hidden");
+  $("sg-historial-sise-card").classList.remove("hidden");
   $("sg-estatus-card").classList.remove("hidden");
   $("sg-regresar-card").classList.remove("hidden");
+  cargarHistorialSise(record.expediente);
 
   // Proveedor solo puede registrar seguimiento mientras el expediente está
   // "En Espera de Respuesta" -- si ya lo mandó (quedó "Seguimiento
@@ -345,6 +367,39 @@ async function verComprobante(clExpediente) {
     window.open(URL.createObjectURL(blob), "_blank");
   } catch (err) {
     toast(err.message, "error");
+  }
+}
+
+/* ---------- Seguimiento (historial de Core/SISE, dbo.sp_S2_Seguimiento) ---------- */
+function renderHistorialSise(registros) {
+  const tbody = $("sg-historial-sise-body");
+  if (!registros.length) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">No hay registros de seguimiento para este expediente.</td></tr>`;
+    return;
+  }
+  // Estatus/Observaciones: Core a veces los llena con HTML de puro formato
+  // (íconos, encabezados, negritas -- ver nota en sanitizarHtmlSeguimiento),
+  // por eso van sanitizados y no escapados (si no, se vería el HTML tal
+  // cual en vez del ícono/encabezado que Core sí renderiza).
+  tbody.innerHTML = registros.map(r => `
+    <tr>
+      <td>${formatDateTime(r.fecha)}</td>
+      <td>${sanitizarHtmlSeguimiento(r.estatus)}</td>
+      <td>${escapeHtml(r.proveedor || "")}</td>
+      <td>${r.nombre ? escapeHtml(r.nombre) : ""}</td>
+      <td>${sanitizarHtmlSeguimiento(r.observaciones)}</td>
+    </tr>
+  `).join("");
+}
+
+async function cargarHistorialSise(clExpediente) {
+  const tbody = $("sg-historial-sise-body");
+  tbody.innerHTML = `<tr><td colspan="5" class="empty">Cargando…</td></tr>`;
+  try {
+    const registros = await api("/seguimiento/historial-sise/" + clExpediente);
+    renderHistorialSise(registros);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="empty">${escapeHtml(err.message)}</td></tr>`;
   }
 }
 

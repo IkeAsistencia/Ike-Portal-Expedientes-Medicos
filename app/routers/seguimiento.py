@@ -9,6 +9,7 @@ from app.repositories import (
     pago_anticipado_repo,
     seguimiento_repo,
 )
+from app.routers.admin_accesos import requerir_administrador
 from app.schemas.expediente import EstatusExpediente, ExpedienteFiltro
 from app.schemas.seguimiento import (
     ComentarioSeguimiento,
@@ -16,7 +17,9 @@ from app.schemas.seguimiento import (
     EstatusInput,
     PagoAnticipadoInput,
     PagoAnticipadoResponse,
+    SeguimientoFalloLocal,
     SeguimientoInput,
+    SeguimientoSiseItem,
 )
 from app.services import estatus_service, seguimiento_service
 
@@ -71,6 +74,28 @@ def obtener_comentarios(cl_expediente: int, usuario: dict = Depends(usuario_actu
     """
     _verificar_proveedor_puede_ver(cl_expediente, usuario)
     return seguimiento_repo.listar_comentarios_local(cl_expediente)
+
+
+@router.get("/historial-sise/{cl_expediente}", response_model=list[SeguimientoSiseItem])
+def obtener_historial_sise(cl_expediente: int, usuario: dict = Depends(usuario_actual)):
+    """
+    Bitácora de Core/SISE para este expediente (dbo.sp_S2_Seguimiento, SP
+    legado ya existente). Apartado "Seguimiento" de la pantalla Seguimiento
+    de expedientes.
+    """
+    _verificar_proveedor_puede_ver(cl_expediente, usuario)
+    return seguimiento_repo.listar_historial_sise(cl_expediente)
+
+
+@router.get("/fallidos", response_model=list[SeguimientoFalloLocal])
+def listar_fallidos(_: dict = Depends(requerir_administrador)):
+    """
+    Bitácora PROPIA del portal: intentos de "Actualizar Core" / "Regresar a
+    Proveedor" que no se pudieron insertar en dbo.Seguimiento por un error
+    de base de datos (ver app/repositories/seguimiento_repo.py). Exclusivo
+    de Administrador, para revisarlos/reintentarlos manualmente después.
+    """
+    return seguimiento_repo.listar_fallos_locales()
 
 
 @router.post("/comprobante")

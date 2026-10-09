@@ -17,7 +17,6 @@ from app.routers import (
     configuracion_cuentas,
     correos_enviados,
     expedientes,
-    openrouter,
     seguimiento,
 )
 
@@ -89,7 +88,6 @@ app.include_router(catalogos.router)
 app.include_router(seguimiento.router)
 app.include_router(configuracion_cuentas.router)
 app.include_router(admin_accesos.router)
-app.include_router(openrouter.router)
 app.include_router(correos_enviados.router)
 app.include_router(graphql_router, prefix="/graphql", tags=["GraphQL"])
 

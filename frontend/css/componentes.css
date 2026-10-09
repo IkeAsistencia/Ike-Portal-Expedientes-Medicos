@@ -223,6 +223,12 @@ tbody tr:hover{background:#FAFAFA;}
 .mini-table{width:100%;border-collapse:collapse;font-size:12.5px;}
 .mini-table thead th{text-align:left;padding:8px 10px;background:var(--gray-bg);color:var(--navy);border-bottom:1px solid var(--gray-border);}
 .mini-table tbody td{padding:8px 10px;border-bottom:1px solid var(--gray-border);}
+/* Franjas alternadas (zebra) en el apartado "Seguimiento" (historial de
+   Core/SISE), mismo color/criterio que .tabla-expedientes (renglones
+   pares con --blue-light) -- va ANTES del hover para que este último
+   siga ganando (igual que en .tabla-expedientes). Solo esta tabla, no
+   todo .mini-table (historial de correos, etc. no lo pidieron). */
+#sg-historial-sise-tabla tbody tr:nth-child(even){background:var(--blue-light);}
 .mini-table tbody tr:hover{background:#FAFAFA;}
 .mini-empty{padding:20px;text-align:center;color:var(--text-secondary);}
 

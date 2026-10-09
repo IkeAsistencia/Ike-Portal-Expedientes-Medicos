@@ -5,6 +5,16 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Portal Promédico</title>
 <link rel="icon" type="image/png" href="img/favicon.png">
+<!-- Font Awesome (vía CDN, con Subresource Integrity): algunos textos que
+     trae Core (ej. dbo.sp_S2_Seguimiento, apartado "Seguimiento" de
+     Seguimiento de expedientes) incluyen íconos con clases como
+     "far fa-address-card" -- sin esta librería esos íconos saldrían vacíos.
+     Se sanitizan antes de insertarse (ver frontend/js/core/formato.js:
+     sanitizarHtmlSeguimiento), así que solo se renderiza HTML de puro
+     formato visual, nunca scripts ni atributos de evento. -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"
+      integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A=="
+      crossorigin="anonymous" referrerpolicy="no-referrer">
 <link rel="stylesheet" href="css/base.css">
 <link rel="stylesheet" href="css/layout.css">
 <link rel="stylesheet" href="css/componentes.css">

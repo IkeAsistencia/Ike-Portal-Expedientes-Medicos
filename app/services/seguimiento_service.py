@@ -99,10 +99,15 @@ def actualizar_seguimiento(cl_expediente: int, comentario: str, usuario: dict) -
         comentario_limpio = seguimiento_repo.PREFIJO_PAGO_ANTICIPADO + comentario_limpio
 
     observaciones = construir_observaciones_core(seguimiento_repo.ETIQUETA_CORE_PROVEEDOR, usuario, comentario_limpio)
-    resultado = seguimiento_repo.registrar_seguimiento(
-        SeguimientoInputPydantic(cl_expediente=cl_expediente, comentario=observaciones),
-        cl_usr_app=cl_usr_app,
-    )
+    nombre_usuario = usuario.get("nombre") or usuario.get("rfc") or usuario.get("usuario") or "desconocido"
+    try:
+        resultado = seguimiento_repo.registrar_seguimiento(
+            SeguimientoInputPydantic(cl_expediente=cl_expediente, comentario=observaciones),
+            cl_usr_app=cl_usr_app,
+            nombre=nombre_usuario,
+        )
+    except seguimiento_repo.ErrorRegistroSeguimiento as e:
+        raise HTTPException(503, str(e))
 
     # Copia local (sin el encabezado: el portal ya muestra quién lo escribió).
     # Cabina no puede escribir aquí, pero sí necesita poder leerlo.

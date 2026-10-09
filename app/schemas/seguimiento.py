@@ -61,3 +61,35 @@ class PagoAnticipadoInput(BaseModel):
 class PagoAnticipadoResponse(BaseModel):
     es_anticipado: bool
     bloqueado: bool
+
+
+class SeguimientoFalloLocal(BaseModel):
+    """
+    Bitácora PROPIA del portal (tabla seguimiento_core_fallidos): intentos
+    de 'Actualizar Core' / 'Regresar a Proveedor' que no se pudieron
+    insertar en dbo.Seguimiento por un error de base de datos -- ver
+    app/repositories/seguimiento_repo.py:registrar_fallo_local.
+    """
+
+    id: int
+    cl_expediente: int
+    observaciones: str
+    cl_usr_app: Optional[int] = None
+    nombre: Optional[str] = None
+    error: Optional[str] = None
+    fecha: str
+
+
+class SeguimientoSiseItem(BaseModel):
+    """
+    Una fila del resultado de dbo.sp_S2_Seguimiento (bitácora de Core/SISE
+    para el expediente). El SP también regresa 'Accion' y 'CSSRow' (usados
+    por la pantalla original de SISE para botones/estilo de fila) -- no se
+    exponen aquí, no aplican al portal.
+    """
+
+    fecha: Optional[str] = None
+    estatus: Optional[str] = None
+    proveedor: Optional[str] = None
+    nombre: Optional[str] = None
+    observaciones: Optional[str] = None

@@ -100,10 +100,15 @@ def actualizar_estatus(cl_expediente: int, estatus_valor: str, usuario: dict, co
         if cl_usr_app is None:
             cl_usr_app = accesos_repo.CL_USR_APP_PLACEHOLDER_RFC
         observaciones = construir_observaciones_core(seguimiento_repo.ETIQUETA_CORE_CABINA, usuario, comentario_limpio)
-        seguimiento_repo.registrar_seguimiento(
-            SeguimientoInputPydantic(cl_expediente=cl_expediente, comentario=observaciones),
-            cl_usr_app=cl_usr_app,
-        )
+        nombre_usuario = usuario.get("nombre") or usuario.get("rfc") or usuario.get("usuario") or "desconocido"
+        try:
+            seguimiento_repo.registrar_seguimiento(
+                SeguimientoInputPydantic(cl_expediente=cl_expediente, comentario=observaciones),
+                cl_usr_app=cl_usr_app,
+                nombre=nombre_usuario,
+            )
+        except seguimiento_repo.ErrorRegistroSeguimiento as e:
+            raise HTTPException(503, str(e))
         seguimiento_repo.guardar_comentario_local(cl_expediente, identificador, comentario_limpio, origen="cabina")
 
         # Pausado a propósito (decisión 2026-10-08): por ahora solo se manda
