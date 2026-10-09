@@ -665,6 +665,22 @@ def test_correos_enviados_filtra_por_expediente(client):
     assert r.json() == []
 
 
+def test_correos_enviados_muestra_nombre_no_rfc(client):
+    """El historial debe mostrar el nombre de quien mandó el correo, no su RFC a secas."""
+    headers_cabina = _auth_headers_cabina(client)  # RFC "RFCCABINATEST" -> nombre "Cabina de Prueba"
+    r = client.post(
+        "/expedientes/enviar-correo-proveedores", json={"expedientes": [1001]}, headers=headers_cabina
+    )
+    assert r.status_code == 200, r.text
+
+    headers_admin = _auth_headers_admin(client)
+    r = client.get("/correos-enviados", headers=headers_admin)
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data[0]["rfc_envio"] == "RFCCABINATEST"
+    assert data[0]["nombre_envio"] == "Cabina de Prueba"
+
+
 def test_enviar_correo_proveedores_rechaza_estatus_no_permitido(client):
     """Solo se puede mandar correo en 'Abierto' o 'En Espera de Respuesta'."""
     import app.repositories.estatus_repo as estatus_repo_module

@@ -42,5 +42,6 @@ class CorreoEnviadoRegistro(BaseModel):
     destinatario: str
     expedientes: list[int]
     rfc_envio: str
+    nombre_envio: str
     simulado: bool
     fecha: str

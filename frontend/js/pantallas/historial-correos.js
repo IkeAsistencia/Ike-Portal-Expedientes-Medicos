@@ -37,7 +37,7 @@ const PLANTILLA = `
             <th style="width:110px;">Tipo</th>
             <th>Expediente(s)</th>
             <th>Destinatario</th>
-            <th style="width:140px;">Enviado por (RFC)</th>
+            <th style="width:160px;">Enviado por</th>
             <th style="width:100px;">Real / Prueba</th>
           </tr>
         </thead>
@@ -62,7 +62,7 @@ function renderFilas(registros) {
       <td>${ETIQUETA_TIPO[r.tipo] || escapeHtml(r.tipo)}</td>
       <td>${r.expedientes.join(", ")}</td>
       <td>${escapeHtml(r.destinatario)}</td>
-      <td>${escapeHtml(r.rfc_envio)}</td>
+      <td>${escapeHtml(r.nombre_envio)}</td>
       <td>${r.simulado ? "Prueba (sin SMTP)" : "Real"}</td>
     </tr>
   `).join("");

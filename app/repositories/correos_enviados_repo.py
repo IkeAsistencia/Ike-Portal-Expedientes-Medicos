@@ -8,6 +8,18 @@ le notificó un expediente.
 import json
 
 from app.db.local_store import ahora_local, get_local_connection
+from app.repositories import accesos_repo
+
+
+def _nombre_para(rfc_envio: str) -> str:
+    """
+    Nombre de quien mandó el correo, para mostrar en el historial en vez del
+    RFC a secas. rfc_envio no siempre es un RFC real -- puede ser un usuario
+    de la sesión legada de SISE (sin registro en usuarios_acceso), ahí se
+    deja tal cual porque no hay nombre que resolver.
+    """
+    acceso = accesos_repo.buscar_acceso(rfc_envio)
+    return acceso["nombre"] if acceso else rfc_envio
 
 
 def registrar_envio(
@@ -33,6 +45,7 @@ def listar_por_expediente(cl_expediente: int) -> list[dict]:
         if cl_expediente in expedientes:
             registro = dict(row)
             registro["expedientes"] = expedientes
+            registro["nombre_envio"] = _nombre_para(registro["rfc_envio"])
             resultado.append(registro)
     return resultado
 
@@ -55,5 +68,6 @@ def listar(cl_expediente: int | None = None, limite: int = 200) -> list[dict]:
     for row in rows:
         registro = dict(row)
         registro["expedientes"] = json.loads(registro["expedientes"])
+        registro["nombre_envio"] = _nombre_para(registro["rfc_envio"])
         resultado.append(registro)
     return resultado
