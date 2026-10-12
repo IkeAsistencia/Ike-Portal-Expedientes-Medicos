@@ -4,14 +4,21 @@
 -- Compatible con SQL Server 2012 (sin CREATE OR ALTER, sin STRING_SPLIT).
 -- Requiere haber corrido antes 00_create_types.sql.
 --
--- ACTUALIZADO: se reemplazó el SELECT por el query nuevo proporcionado
--- por el usuario (agrega Servicio, titular, teléfono, correo, fecha de
--- asignación de proveedor) y se agregaron los filtros @clServicio y
--- @clSubServicio.
+-- Esta pantalla solo trabaja 3 subservicios, cada uno con su propio
+-- subsistema de datos en Core:
+--   377 "Check Up"                      -> dbo.Check_Up / cPerfilCheckUp
+--   383 "CONSULTA MÉDICA EN CONSULTORIO" -> dbo.S2_ReferciasMedicas
+--   420 "Plan Visión"                    -> dbo.s2_cPuntoVision / s2_cPaqueteDescPuntoVision
+-- Un expediente solo se considera "sin proveedor médico" si, además de
+-- estar en dbo.Expediente con clEstatus=0, YA tiene su fila registrada
+-- en el subsistema que le corresponde según su subservicio -- si Core
+-- todavía no la creó, el expediente no está listo para escalarse aquí.
+-- Cualquier otro subservicio (Ambulancia, Consulta Médica Virtual,
+-- Médico a Domicilio, Referencias Médicas, etc.) queda fuera de esta
+-- pantalla por completo.
 --
 -- Los alias de columnas se limpiaron (sin espacios/acentos) para que
--- sean más fáciles de consumir desde Python; no cambia la lógica del
--- query, solo el nombre de salida de cada columna. Mapa:
+-- sean más fáciles de consumir desde Python. Mapa:
 --   'Fecha de apertura del servicio' -> FechaAperturaServicio
 --   'Tipo de servicio'               -> TipoServicio
 --   'Tipo de subservicio'            -> TipoSubservicio
@@ -19,62 +26,12 @@
 --   'Nombre de paciente'             -> NombrePaciente
 --   'Fecha asignacion cita'          -> FechaAsignacionProveedor  (OJO: es la fecha en que
 --                                        se asignó el proveedor -PE.FechaAsignacion-, no la
---                                        fecha de la cita médica; el nombre original del
---                                        alias podía confundirse con 'Fecha de Cita')
---   'Fecha de Cita'                  -> FechaCita  (ver ACTUALIZADO 4: ahora sale de RM.Cita o
---                                        CKP.FechaCita según subservicio, no de CitaxExpediente)
+--                                        fecha de la cita médica)
+--   'Fecha de Cita'                  -> FechaCita  (sale de S2_ReferciasMedicas.Cita para 383,
+--                                        de Check_Up.FechaCita para 377; Plan Visión -420- no
+--                                        tiene ese dato en s2_cPuntoVision, queda NULL)
 --   'Número telefonico del usuario'  -> Telefono
 --   'Correo del Usuario'             -> Email
---
--- ACTUALIZADO 2: NombrePaciente/Especialidad/Entidad/Municipio ya NO
--- salen siempre de dbo.S2_ReferciasMedicas (RM) -- esa tabla solo
--- aplica a los subservicios 226 "Referencias Médicas" y 383 "CONSULTA
--- MÉDICA EN CONSULTORIO" (se dejaron tal como estaba el query). Para
--- los otros dos subservicios del catálogo de esta pantalla, esos datos
--- viven en subsistemas distintos:
---   420 "Plan Visión" -> dbo.s2_cPuntoVision / s2_cPaqueteDescPuntoVision
---   377 "Check Up"     -> dbo.Check_Up / cPerfilCheckUp
--- El JOIN a RM pasó de INNER a LEFT (si no, los expedientes de Plan
--- Visión/Check Up -que no tienen fila en RM- desaparecían por completo
--- del listado); los JOIN nuevos a PV/PPV y CKP/PKU también son LEFT,
--- por la misma razón pero al revés (un expediente de Referencias
--- Médicas no tiene fila en esas tablas). Un CASE sobre E.clSubServicio
--- elige de cuál de las tres fuentes sale cada columna.
--- Confirmado contra la base real: 226=93, 377=289, 383=300, 420=3
--- expedientes abiertos (clEstatus=0) -- antes del INNER a RM, el
--- listado solo podía mostrar los 93 de Referencias Médicas.
---
--- ACTUALIZADO 3 (SUPERADO por ACTUALIZADO 5, ver abajo): regla de
--- negocio confirmada -- no todo expediente con clEstatus=0 debe
--- mostrarse en esta pantalla. El flujo normal es que Core puede asignar
--- proveedor de forma automática poco después de levantado el
--- expediente; esta pantalla era para escalar manualmente solo los que
--- YA llevaban @horasMinimas (default 8) desde FechaApertura sin que eso
--- haya pasado.
---
--- ACTUALIZADO 4: regla de negocio confirmada -- el expediente solo debe
--- considerarse si YA tiene su fila correspondiente en la tabla del
--- subsistema que le toca según su subservicio (antes, con el LEFT JOIN
--- a RM/PV/CKP, un expediente sin esa fila igual aparecía con esas
--- columnas en NULL). Se agregó el filtro de existencia al WHERE.
---
--- Se quitó el LEFT JOIN a dbo.CitaxExpediente (CE): no se usaba en
--- ninguna columna ni filtro (ver nota anterior), confirmado que se
--- puede quitar.
---
--- FechaCita ahora sale de 2 fuentes según el subservicio (antes salía
--- siempre de RM.Cita): dbo.S2_ReferciasMedicas.Cita (226/383, igual que
--- antes) y dbo.Check_Up.FechaCita (377). Plan Visión (420) no tiene un
--- campo de fecha de cita en dbo.s2_cPuntoVision -- queda NULL ahí.
---
--- ACTUALIZADO 5: se quitó @horasMinimas y su filtro -- confirmado que
--- ya no hace falta la "gracia" de horas desde FechaApertura: el filtro
--- de existencia del ACTUALIZADO 4 (el expediente debe tener ya su fila
--- en RM/PV/CKP según el subservicio) es ahora el que determina cuándo
--- un expediente "ya está listo" para mostrarse en esta pantalla, en vez
--- de un tiempo fijo de espera. No se usa en app/repositories/expedientes_repo.py
--- (la llamada desde Python nunca mandaba este parámetro, usaba el
--- default de 8).
 -- =====================================================================
 IF OBJECT_ID('dbo.ST_CP_ObtenerExpedientesSinProveedorMedico', 'P') IS NOT NULL
     DROP PROCEDURE dbo.ST_CP_ObtenerExpedientesSinProveedorMedico;
@@ -101,28 +58,28 @@ BEGIN
         CASE E.clSubServicio
             WHEN 420 THEN PV.Nombre
             WHEN 377 THEN CKP.NombreBene
-            ELSE RM.NombrePaciente
+            ELSE RM.NombrePaciente   -- 383
         END                                                                                     AS NombrePaciente,
         CASE E.clSubServicio
             WHEN 420 THEN PPV.dsPaqueteDesc
             WHEN 377 THEN PKU.dsPerfil
-            ELSE ESP.dsEspecialidad
+            ELSE ESP.dsEspecialidad   -- 383
         END                                                                                     AS Especialidad,
         CASE E.clSubServicio
             WHEN 420 THEN VE.dsEntFed
             WHEN 377 THEN KE.dsEntFed
-            ELSE EF.dsEntFed
+            ELSE EF.dsEntFed   -- 383
         END                                                                                     AS Entidad,
         CASE E.clSubServicio
             WHEN 420 THEN VMD.dsMunDel
             WHEN 377 THEN KMD.dsMunDel
-            ELSE MD.dsMunDel
+            ELSE MD.dsMunDel   -- 383
         END                                                                                     AS Municipio,
         CAST(PE.FechaAsignacion AS DATE)                                                        AS FechaAsignacionProveedor,
         CASE E.clSubServicio
             WHEN 420 THEN NULL                                                                  -- s2_cPuntoVision no tiene fecha de cita
             WHEN 377 THEN CAST(CKP.FechaCita AS DATE)
-            ELSE CAST(RM.Cita AS DATE)
+            ELSE CAST(RM.Cita AS DATE)   -- 383
         END                                                                                     AS FechaCita,
         E.Telefono1                                                                             AS Telefono,
         E.Email                                                                                 AS Email
@@ -131,7 +88,7 @@ BEGIN
     INNER JOIN dbo.cSubServicio SS           ON SS.clSubServicio = E.clSubServicio
     INNER JOIN dbo.cCuenta C                 ON C.clCuenta = E.clCuenta
     INNER JOIN dbo.cUsrApp U                 ON U.clUsrApp = E.clUsrApp
-    -- Referencias Médicas (226) / Consulta Médica en Consultorio (383): igual que antes.
+    -- Consulta Médica en Consultorio (383): subsistema dbo.S2_ReferciasMedicas.
     LEFT JOIN dbo.S2_ReferciasMedicas RM     ON RM.clExpediente = E.clExpediente
     LEFT JOIN dbo.cEntFed EF                 ON EF.CodEnt = RM.CodEnt
     LEFT JOIN dbo.cMunDel MD                 ON MD.CodEnt = RM.CodEnt AND MD.CodMD = RM.CodMD
@@ -147,7 +104,8 @@ BEGIN
     LEFT JOIN dbo.cEntFed KE                 ON KE.CodEnt = CKP.CodEnt
     LEFT JOIN dbo.cMunDel KMD                ON KMD.CodEnt = CKP.CodEnt AND KMD.CodMD = CKP.CodMD
     LEFT JOIN dbo.ProveedorxExpediente PE    ON PE.clExpediente = E.clExpediente AND PE.clEstatus = 3
-    WHERE E.clEstatus = 0   -- fijo: "sin proveedor médico asignado"
+    WHERE E.clEstatus = 0                          -- "sin proveedor médico asignado"
+        AND E.clSubServicio IN (377, 383, 420)     -- únicos subservicios que maneja esta pantalla
         AND (@clExpediente  IS NULL OR E.clExpediente = @clExpediente)
         AND (@fechaInicio   IS NULL OR CAST(E.FechaApertura AS DATE) >= @fechaInicio)
         AND (@fechaFin      IS NULL OR CAST(E.FechaApertura AS DATE) <= @fechaFin)
@@ -164,7 +122,7 @@ BEGIN
         AND (
               (E.clSubServicio = 420 AND PV.clExpediente IS NOT NULL)
               OR (E.clSubServicio = 377 AND CKP.clExpediente IS NOT NULL)
-              OR (E.clSubServicio NOT IN (420, 377) AND RM.clExpediente IS NOT NULL)
+              OR (E.clSubServicio = 383 AND RM.clExpediente IS NOT NULL)
             )
     ORDER BY E.clExpediente DESC;
 END

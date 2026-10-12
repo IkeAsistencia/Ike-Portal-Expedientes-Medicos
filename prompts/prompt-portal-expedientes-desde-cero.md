@@ -195,9 +195,10 @@ no se puede cambiar.
 indique el orden):
 1. `00_create_types.sql` — tipo `dbo.IntList`.
 2. `dbo.ST_CP_ObtenerExpedientesSinProveedorMedico` — listado principal; solo
-   considera expedientes que ya tienen su fila en la tabla del subsistema
-   que les toca según su subservicio, con filtros por expediente, fechas,
-   servicio, subservicio y cuentas (TVP).
+   trabaja los 3 subservicios con subsistema propio en Core (Check Up,
+   Consulta Médica en Consultorio, Plan Visión) y solo considera
+   expedientes que ya tienen su fila en ese subsistema, con filtros por
+   expediente, fechas, servicio, subservicio y cuentas (TVP).
 3. `dbo.ST_CP_ObtenerCatalogoServicio` — combo Servicio.
 4. `dbo.ST_CP_ObtenerCatalogoCuentas` — catálogo de cuentas, con lista fija
    opcional (`CUENTAS_PERMITIDAS` en `.env`).
