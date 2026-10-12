@@ -93,7 +93,7 @@ const PLANTILLA = `
         <div class="field">
           <label for="sg-estatus">Estado</label>
           <select id="sg-estatus">
-            <option value="Abierto">Abierto</option>
+            <option value="Abierto" hidden disabled>Abierto</option>
             <option value="Finalizado">Finalizado</option>
             <option value="En Espera de Respuesta">Regresar a Proveedor (corregir respuesta)</option>
             <option value="Seguimiento de Cita" id="sg-estatus-opcion-cita" class="hidden">Seguimiento de Cita (cita aceptada)</option>
@@ -153,6 +153,13 @@ const PLANTILLA = `
 const COMPROBANTE_TAMANO_MAXIMO = 5 * 1024 * 1024; // 5 MB
 const COMPROBANTE_TIPOS_PERMITIDOS = ["application/pdf", "image/jpeg", "image/png"];
 const COMENTARIO_PROVEEDOR_MINIMO = 50;
+// Excepción: al subir el comprobante (expediente regresado como "Seguimiento
+// de Cita") basta un comentario corto. Igual que en el backend.
+const COMENTARIO_COMPROBANTE_MINIMO = 20;
+
+function comentarioMinimo() {
+  return registroActual?.estatus === "Seguimiento de Cita" ? COMENTARIO_COMPROBANTE_MINIMO : COMENTARIO_PROVEEDOR_MINIMO;
+}
 
 // Igual que en el backend (app/repositories/seguimiento_repo.py): lo que se
 // inserta en Core lleva un encabezado con quién lo escribió
@@ -495,6 +502,10 @@ function actualizarTextoMotivoRegreso(estatus) {
 async function actualizarEstatus() {
   if (!registroActual) return;
   const nuevoEstatus = $("sg-estatus").value;
+  if (nuevoEstatus === "Abierto") {
+    toast("Selecciona un estado distinto: no se puede regresar un expediente a 'Abierto'.", "error");
+    return;
+  }
   const esRegreso = ESTATUS_DE_REGRESO.includes(nuevoEstatus);
   const motivoRegreso = $("sg-motivo-regreso").value.trim();
   if (esRegreso && !motivoRegreso) {
@@ -533,18 +544,20 @@ async function actualizarEstatus() {
 function actualizarContador() {
   const len = $("sg-observaciones").value.trim().length;
   const counter = $("sg-counter");
-  counter.textContent = len < COMENTARIO_PROVEEDOR_MINIMO
-    ? `${len} / ${maxObservaciones} (mínimo ${COMENTARIO_PROVEEDOR_MINIMO} caracteres)`
+  const minimo = comentarioMinimo();
+  counter.textContent = len < minimo
+    ? `${len} / ${maxObservaciones} (mínimo ${minimo} caracteres)`
     : `${len} / ${maxObservaciones}`;
-  counter.classList.toggle("limit", len < COMENTARIO_PROVEEDOR_MINIMO || len >= maxObservaciones);
+  counter.classList.toggle("limit", len < minimo || len >= maxObservaciones);
 }
 
 async function registrarSeguimiento() {
   if (!registroActual) return;
   const comentario = $("sg-observaciones").value.trim();
   if (!comentario) { toast("El seguimiento no puede estar vacío.", "error"); return; }
-  if (comentario.length < COMENTARIO_PROVEEDOR_MINIMO) {
-    toast(`Las observaciones deben tener al menos ${COMENTARIO_PROVEEDOR_MINIMO} caracteres (llevas ${comentario.length}).`, "error");
+  const minimo = comentarioMinimo();
+  if (comentario.length < minimo) {
+    toast(`Las observaciones deben tener al menos ${minimo} caracteres (llevas ${comentario.length}).`, "error");
     return;
   }
 

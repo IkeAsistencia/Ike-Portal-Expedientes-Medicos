@@ -71,6 +71,10 @@ def actualizar_estatus(cl_expediente: int, estatus_valor: str, usuario: dict, co
     except ValueError:
         opciones = ", ".join(e.value for e in EstatusExpediente)
         raise HTTPException(400, f"Estado inválido: '{estatus_valor}'. Opciones: {opciones}")
+    # "Abierto" es el estado inicial del expediente: nadie puede regresarlo a
+    # mano a ese estado desde 'Estado del Caso'.
+    if estatus == EstatusExpediente.ABIERTO:
+        raise HTTPException(400, "'Abierto' no se puede asignar a mano.")
     # Regla de negocio: "En Espera de Respuesta" y "Seguimiento de Cita" se
     # activan solo cuando Cabina regresa el expediente a mano (corrección, o
     # cita aceptada en pago anticipado). Nadie más los puede asignar.

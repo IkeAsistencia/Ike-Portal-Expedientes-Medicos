@@ -3,6 +3,13 @@ from app.db.connection import as_tvp_rows, call_procedure
 from app.schemas.catalogo import CatalogoItem
 
 
+# Subservicios que el portal ya no trabaja: salen del combo Subservicio y,
+# como el frontend solo muestra expedientes de los subservicios del
+# catálogo, también dejan de aparecer en la búsqueda.
+#   226 = "Referencias Médicas" (pausado, decisión 2026-10-12)
+SUBSERVICIOS_EXCLUIDOS = frozenset({226})
+
+
 def listar_servicios(cl_servicio: int = 4) -> list[CatalogoItem]:
     rows = call_procedure("dbo.ST_CP_ObtenerCatalogoServicio", {"clServicio": cl_servicio})
     return [CatalogoItem(clave=r["clServicio"], descripcion=r["dsServicio"]) for r in rows]
@@ -17,7 +24,11 @@ def listar_subservicios(cl_servicio: int = 4) -> list[CatalogoItem]:
     varias a la vez).
     """
     rows = call_procedure("dbo.ST_CP_ObtenerServicioMedico", {"clServicio": cl_servicio})
-    return [CatalogoItem(clave=r["clSubServicio"], descripcion=r["dsSubServicio"]) for r in rows]
+    return [
+        CatalogoItem(clave=r["clSubServicio"], descripcion=r["dsSubServicio"])
+        for r in rows
+        if r["clSubServicio"] not in SUBSERVICIOS_EXCLUIDOS
+    ]
 
 
 def listar_cuentas() -> list[CatalogoItem]:

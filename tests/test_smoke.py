@@ -1399,3 +1399,61 @@ def test_configuracion_cuentas_ciclo_completo(client):
 
     r = client.post("/configuracion/cuentas/limpiar", headers=headers)
     assert r.status_code == 200
+
+
+def test_estatus_abierto_no_se_puede_asignar_a_mano(client):
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    cabina_headers = _auth_headers_cabina(client)
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
+    r = client.post(
+        "/seguimiento/estatus",
+        json={"cl_expediente": 1001, "estatus": "Abierto"},
+        headers=cabina_headers,
+    )
+    assert r.status_code == 400
+    assert "abierto" in r.json()["detail"].lower()
+    r = client.get("/expedientes", params={"cl_expediente": 1001}, headers=cabina_headers)
+    assert r.json()[0]["estatus"] == "En Espera de Respuesta"  # no cambió
+
+
+def test_comprobante_acepta_comentario_de_20_caracteres_y_primer_envio_sigue_en_50(client):
+    import app.repositories.estatus_repo as estatus_repo_module
+    from app.schemas.expediente import EstatusExpediente
+
+    prov_headers = _auth_headers_proveedor(client)
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
+    corto = "x" * 20
+
+    # Primer envío (En Espera de Respuesta): 20 caracteres NO alcanzan.
+    r = client.post("/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": corto}, headers=prov_headers)
+    assert r.status_code == 400
+    assert "al menos 50" in r.json()["detail"]
+
+    # Regresó como Seguimiento de Cita: 19 siguen sin alcanzar, 20 pasan la
+    # validación de longitud (y topan con el siguiente requisito: el comprobante).
+    client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=prov_headers)
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.SEGUIMIENTO_CITA, "RFCCABTEST")
+    r = client.post(
+        "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": "x" * 19}, headers=prov_headers
+    )
+    assert r.status_code == 400
+    assert "al menos 20" in r.json()["detail"]
+    r = client.post("/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": corto}, headers=prov_headers)
+    assert r.status_code == 400
+    assert "comprobante" in r.json()["detail"].lower()
+
+
+def test_subservicio_referencias_medicas_sale_del_catalogo(monkeypatch):
+    import app.repositories.catalogos_repo as catalogos_repo
+
+    monkeypatch.setattr(
+        catalogos_repo,
+        "call_procedure",
+        lambda *a, **k: [
+            {"clSubServicio": 226, "dsSubServicio": "Referencias Médicas"},
+            {"clSubServicio": 377, "dsSubServicio": "Consulta Externa"},
+        ],
+    )
+    assert [s.clave for s in catalogos_repo.listar_subservicios(4)] == [377]

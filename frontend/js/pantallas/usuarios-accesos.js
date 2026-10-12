@@ -7,6 +7,7 @@ import { NOMBRES_PERFIL, PERFIL_PROVEEDOR } from "../core/sesion.js";
 import { cargarCatalogoEntidades, poblarSelectEntidades } from "../core/catalogos.js";
 import { ICONOS } from "../componentes/iconos.js";
 import { crearModal } from "../componentes/modal.js";
+import { confirmar } from "../componentes/confirmar.js";
 import { paginar, renderPaginador } from "../componentes/paginador.js";
 
 const PLANTILLA = `
@@ -225,8 +226,8 @@ async function darDeAlta() {
 }
 
 /* ---------- Acciones por fila ---------- */
-async function accionConConfirmacion(pregunta, ruta, mensajeExito, tipoToast) {
-  if (!confirm(pregunta)) return;
+async function accionConConfirmacion({ titulo, pregunta, textoConfirmar, peligro }, ruta, mensajeExito, tipoToast) {
+  if (!(await confirmar({ titulo, mensaje: pregunta, textoConfirmar, peligro }))) return;
   try {
     await api(ruta, { method: "POST" });
     toast(mensajeExito, tipoToast);
@@ -238,7 +239,12 @@ async function accionConConfirmacion(pregunta, ruta, mensajeExito, tipoToast) {
 
 function inactivar(rfc) {
   return accionConConfirmacion(
-    `¿Inactivar el acceso de ${rfc}? Ya no podrá iniciar sesión, pero el registro se conserva (puedes reactivarlo después).`,
+    {
+      titulo: "Inactivar acceso",
+      pregunta: `¿Inactivar el acceso de ${rfc}? Ya no podrá iniciar sesión, pero el registro se conserva (puedes reactivarlo después).`,
+      textoConfirmar: "Inactivar",
+      peligro: true,
+    },
     "/admin/accesos/" + encodeURIComponent(rfc) + "/inactivar",
     "Acceso inactivado."
   );
@@ -246,7 +252,7 @@ function inactivar(rfc) {
 
 function reactivar(rfc) {
   return accionConConfirmacion(
-    `¿Reactivar el acceso de ${rfc}?`,
+    { titulo: "Reactivar acceso", pregunta: `¿Reactivar el acceso de ${rfc}?`, textoConfirmar: "Reactivar" },
     "/admin/accesos/" + encodeURIComponent(rfc) + "/reactivar",
     "Acceso reactivado.", "success"
   );
@@ -254,7 +260,12 @@ function reactivar(rfc) {
 
 function resetearPassword(rfc) {
   return accionConConfirmacion(
-    `¿Resetear la contraseña de ${rfc}? Deberá crear una nueva la próxima vez que entre.`,
+    {
+      titulo: "Resetear contraseña",
+      pregunta: `¿Resetear la contraseña de ${rfc}? Deberá crear una nueva la próxima vez que entre.`,
+      textoConfirmar: "Resetear",
+      peligro: true,
+    },
     "/admin/accesos/" + encodeURIComponent(rfc) + "/resetear-password",
     "Contraseña reseteada."
   );

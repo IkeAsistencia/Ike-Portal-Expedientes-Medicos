@@ -18,6 +18,9 @@ from app.schemas.expediente import EstatusExpediente, ExpedienteFiltro
 from app.schemas.seguimiento import SeguimientoInput as SeguimientoInputPydantic
 
 LONGITUD_MINIMA_COMENTARIO_PROVEEDOR = 50
+# Excepción: cuando Cabina regresó el expediente como "Seguimiento de Cita"
+# y el Proveedor solo tiene que subir el comprobante, basta un comentario corto.
+LONGITUD_MINIMA_COMENTARIO_COMPROBANTE = 20
 
 
 def construir_observaciones_core(etiqueta: str, usuario: dict, comentario: str) -> str:
@@ -51,13 +54,6 @@ def actualizar_seguimiento(cl_expediente: int, comentario: str, usuario: dict) -
     comentario_limpio = comentario.strip()
     if not comentario_limpio:
         raise HTTPException(400, "El comentario no puede estar vacío.")
-    if len(comentario_limpio) < LONGITUD_MINIMA_COMENTARIO_PROVEEDOR:
-        raise HTTPException(
-            400,
-            f"El comentario debe tener al menos {LONGITUD_MINIMA_COMENTARIO_PROVEEDOR} caracteres "
-            "para poder actualizar.",
-        )
-
     # Proveedor solo puede registrar seguimiento mientras el expediente está
     # "En Espera de Respuesta" (primer envío) o "Seguimiento de Cita" (ya con
     # la cita aceptada, segundo envío con el comprobante) -- en cualquier
@@ -73,6 +69,17 @@ def actualizar_seguimiento(cl_expediente: int, comentario: str, usuario: dict) -
             raise HTTPException(
                 400, "Este expediente ya no está en espera de respuesta, no puedes actualizarlo."
             )
+
+    minimo = (
+        LONGITUD_MINIMA_COMENTARIO_COMPROBANTE
+        if estatus_actual == EstatusExpediente.SEGUIMIENTO_CITA
+        else LONGITUD_MINIMA_COMENTARIO_PROVEEDOR
+    )
+    if len(comentario_limpio) < minimo:
+        raise HTTPException(
+            400,
+            f"El comentario debe tener al menos {minimo} caracteres para poder actualizar.",
+        )
 
     # Pago Anticipado: el comprobante se vuelve obligatorio hasta la segunda
     # vuelta, cuando Cabina ya regresó el expediente como "Seguimiento de

@@ -10,6 +10,7 @@
 import { getToken, limpiarSesion, nombrePerfilActual, nombreUsuario, esPerfilAdministrador } from "./core/sesion.js";
 import { limpiarCatalogos } from "./core/catalogos.js";
 import { toast } from "./core/toast.js";
+import { confirmar } from "./componentes/confirmar.js";
 import { iniciarRouter, limpiarRuta, navegar, pantallaEnHash } from "./core/router.js";
 import * as login from "./pantallas/login.js";
 import * as expedientes from "./pantallas/expedientes.js";
@@ -45,9 +46,11 @@ function pantallaPermitida(nombre) {
     // "Seguimiento de Cita"). El código sigue en pantallas/pago-anticipado.js
     // por si se vuelve a necesitar, pero nadie debe poder llegar a esta pantalla.
     case "pago-anticipado": return false;
-    // Configuración Cuentas, Usuarios y Accesos, e Historial de Correos son
-    // exclusivos de Administrador.
-    case "configuracion":
+    // Configuración Cuentas (agregar cuentas) queda oculta por ahora, se
+    // trabaja en otra iteración. El código sigue en
+    // pantallas/configuracion-cuentas.js y en la API; solo nadie llega a ella.
+    case "configuracion": return false;
+    // Usuarios y Accesos e Historial de Correos son exclusivos de Administrador.
     case "accesos":
     case "historial-correos": return admin;
     default: return false;
@@ -125,7 +128,14 @@ function montarPantallas() {
     const { alClicMenu } = PANTALLAS[item.dataset.pantalla];
     item.addEventListener("click", () => (alClicMenu ? alClicMenu() : navegar(item.dataset.pantalla)));
   });
-  $("nav-salir").addEventListener("click", () => cerrarSesion(false));
+  $("nav-salir").addEventListener("click", async () => {
+    const ok = await confirmar({
+      titulo: "Cerrar sesión",
+      mensaje: "¿Seguro que quieres cerrar sesión?",
+      textoConfirmar: "Cerrar sesión",
+    });
+    if (ok) cerrarSesion(false);
+  });
 }
 
 login.montar($("view-login"), { alEntrar: mostrarApp });
