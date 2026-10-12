@@ -9,6 +9,32 @@ export function escapeHtml(str) {
     .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 }
 
+/* SQL Server regresa los nombres de entidad en MAYÚSCULAS y sin acentos
+   (ej. "CIUDAD DE MEXICO"), mientras que el catálogo fijo del combo usa
+   mayúsculas/minúsculas y acentos (ej. "Ciudad de México") -- normaliza
+   ambos lados antes de comparar, para no depender de que coincidan letra
+   por letra. */
+export function normalizarTexto(str) {
+  if (!str) return "";
+  return String(str)
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .trim();
+}
+
+// dbo.cEntFed llama al Estado de México simplemente "MEXICO" (CodEnt='MC'),
+// distinto de "Ciudad de México"/"CIUDAD DE MEXICO" (CodEnt='DF') -- ni
+// normalizando acentos/mayúsculas coincide con el nombre del catálogo fijo
+// ("Estado de México"), así que se mapea explícitamente.
+const ALIAS_ENTIDAD = {
+  "ESTADO DE MEXICO": "MEXICO",
+};
+
+export function normalizarEntidad(str) {
+  const base = normalizarTexto(str);
+  return ALIAS_ENTIDAD[base] || base;
+}
+
 const dosDigitos = (n) => String(n).padStart(2, "0");
 
 function aaaammdd(d) {

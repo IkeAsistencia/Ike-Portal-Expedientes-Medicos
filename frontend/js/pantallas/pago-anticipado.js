@@ -5,7 +5,7 @@
    Hoy está oculta para todos los perfiles (ver pantallaPermitida en app.js):
    el flujo de pago anticipado ya vive dentro de Expedientes. */
 import { api } from "../core/api.js";
-import { escapeHtml } from "../core/formato.js";
+import { escapeHtml, normalizarEntidad } from "../core/formato.js";
 import { toast } from "../core/toast.js";
 import { esPerfilAdministrador, esPerfilCabina, esPerfilProveedor } from "../core/sesion.js";
 import {
@@ -78,7 +78,9 @@ function aplicarFiltrosLocales(rows) {
   const entidad = $("pa-f-entidad").value;
   let filtrados = estatus ? rows.filter(r => r.estatus === estatus) : rows;
   filtrados = aplicarFiltroSubservicioLocal(filtrados);
-  return entidad ? filtrados.filter(r => (r.entidad || "") === entidad) : filtrados;
+  if (!entidad) return filtrados;
+  const entidadNormalizada = normalizarEntidad(entidad);
+  return filtrados.filter(r => normalizarEntidad(r.entidad) === entidadNormalizada);
 }
 
 function datosResumenPerfil() {

@@ -1,6 +1,6 @@
 /* Pantalla: Expedientes (bandeja principal de Cabina, Proveedor y Administrador). */
 import { api } from "../core/api.js";
-import { escapeHtml } from "../core/formato.js";
+import { escapeHtml, normalizarEntidad } from "../core/formato.js";
 import { toast } from "../core/toast.js";
 import { esPerfilAdministrador, esPerfilCabina, esPerfilProveedor } from "../core/sesion.js";
 import {
@@ -117,7 +117,8 @@ function aplicarFiltroEstatusLocal(rows) {
 function aplicarFiltroEntidadLocal(rows) {
   const val = $("f-entidad").value;
   if (!val) return rows;
-  return rows.filter(r => (r.entidad || "") === val);
+  const valNormalizado = normalizarEntidad(val);
+  return rows.filter(r => normalizarEntidad(r.entidad) === valNormalizado);
 }
 
 function aplicarFiltrosLocales(rows) {
