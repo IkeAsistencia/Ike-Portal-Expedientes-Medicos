@@ -21,15 +21,10 @@
 --                                        se asignó el proveedor -PE.FechaAsignacion-, no la
 --                                        fecha de la cita médica; el nombre original del
 --                                        alias podía confundirse con 'Fecha de Cita')
---   'Fecha de Cita'                  -> FechaCita  (ahora viene de RM.Cita, no de CitaxExpediente)
+--   'Fecha de Cita'                  -> FechaCita  (ver ACTUALIZADO 4: ahora sale de RM.Cita o
+--                                        CKP.FechaCita según subservicio, no de CitaxExpediente)
 --   'Número telefonico del usuario'  -> Telefono
 --   'Correo del Usuario'             -> Email
---
--- NOTA: el LEFT JOIN a dbo.CitaxExpediente (CE) se dejó tal como estaba
--- en el query proporcionado, pero ninguna de sus columnas se usa ya en
--- el SELECT ni en el WHERE — parece un join que quedó sin uso al
--- cambiar la fuente de la fecha de cita a RM.Cita. Lo dejamos por
--- fidelidad a lo que compartiste; avísame si se puede quitar.
 --
 -- ACTUALIZADO 2: NombrePaciente/Especialidad/Entidad/Municipio ya NO
 -- salen siempre de dbo.S2_ReferciasMedicas (RM) -- esa tabla solo
@@ -57,6 +52,23 @@
 -- sin que eso haya pasado. Antes de este cambio, un expediente aparecía
 -- aquí desde el segundo 1 de abierto -- antes de darle chance a la
 -- asignación automática de Core.
+--
+-- ACTUALIZADO 4: regla de negocio confirmada -- las @horasMinimas se
+-- cuentan desde que el expediente se registra en Core (E.FechaApertura,
+-- sin cambio ahí), pero además el expediente solo debe considerarse si
+-- YA tiene su fila correspondiente en la tabla del subsistema que le
+-- toca según su subservicio (antes, con el LEFT JOIN a RM/PV/CKP, un
+-- expediente sin esa fila igual aparecía con esas columnas en NULL).
+-- Se agregó el filtro de existencia al WHERE.
+--
+-- Se quitó el LEFT JOIN a dbo.CitaxExpediente (CE): no se usaba en
+-- ninguna columna ni filtro (ver nota anterior), confirmado que se
+-- puede quitar.
+--
+-- FechaCita ahora sale de 2 fuentes según el subservicio (antes salía
+-- siempre de RM.Cita): dbo.S2_ReferciasMedicas.Cita (226/383, igual que
+-- antes) y dbo.Check_Up.FechaCita (377). Plan Visión (420) no tiene un
+-- campo de fecha de cita en dbo.s2_cPuntoVision -- queda NULL ahí.
 -- =====================================================================
 IF OBJECT_ID('dbo.ST_CP_ObtenerExpedientesSinProveedorMedico', 'P') IS NOT NULL
     DROP PROCEDURE dbo.ST_CP_ObtenerExpedientesSinProveedorMedico;
@@ -102,7 +114,11 @@ BEGIN
             ELSE MD.dsMunDel
         END                                                                                     AS Municipio,
         CAST(PE.FechaAsignacion AS DATE)                                                        AS FechaAsignacionProveedor,
-        CAST(RM.Cita AS DATE)                                                                   AS FechaCita,
+        CASE E.clSubServicio
+            WHEN 420 THEN NULL                                                                  -- s2_cPuntoVision no tiene fecha de cita
+            WHEN 377 THEN CAST(CKP.FechaCita AS DATE)
+            ELSE CAST(RM.Cita AS DATE)
+        END                                                                                     AS FechaCita,
         E.Telefono1                                                                             AS Telefono,
         E.Email                                                                                 AS Email
     FROM dbo.Expediente E
@@ -126,7 +142,6 @@ BEGIN
     LEFT JOIN dbo.cEntFed KE                 ON KE.CodEnt = CKP.CodEnt
     LEFT JOIN dbo.cMunDel KMD                ON KMD.CodEnt = CKP.CodEnt AND KMD.CodMD = CKP.CodMD
     LEFT JOIN dbo.ProveedorxExpediente PE    ON PE.clExpediente = E.clExpediente AND PE.clEstatus = 3
-    LEFT JOIN dbo.CitaxExpediente CE         ON CE.clExpediente = E.clExpediente
     WHERE E.clEstatus = 0   -- fijo: "sin proveedor médico asignado"
         AND (@clExpediente  IS NULL OR E.clExpediente = @clExpediente)
         -- Le da chance a la asignación automática de Core: solo entra a esta
@@ -142,6 +157,67 @@ BEGIN
               NOT EXISTS (SELECT 1 FROM @Cuenta)
               OR E.clCuenta IN (SELECT Value FROM @Cuenta)
             )
+        -- El expediente solo cuenta si ya tiene su fila en la tabla del
+        -- subsistema que le corresponde según su subservicio (si no,
+        -- Core todavía no lo terminó de registrar del lado de ese
+        -- subsistema).
+        AND (
+              (E.clSubServicio = 420 AND PV.clExpediente IS NOT NULL)
+              OR (E.clSubServicio = 377 AND CKP.clExpediente IS NOT NULL)
+              OR (E.clSubServicio NOT IN (420, 377) AND RM.clExpediente IS NOT NULL)
+            )
     ORDER BY E.clExpediente DESC;
 END
 GO
+
+-- =====================================================================
+-- EJEMPLO DE EJECUCIÓN (para probar en prod)
+-- @Cuenta es un Table-Valued Parameter (tipo dbo.IntList, creado por
+-- 00_create_types.sql) -- no se puede pasar como un escalar normal, hay
+-- que declarar una variable de tabla y pasarla.
+--
+-- IMPORTANTE: el SP en sí no acota a 3 meses -- esa regla vive en el
+-- portal (Python, app/repositories/expedientes_repo.py:_piso_fecha_inicio),
+-- que calcula "hoy - 3 meses" y lo manda como @fechaInicio. Si se llama
+-- al SP con @fechaInicio = NULL, SÍ trae expedientes de cualquier
+-- antigüedad (no hay ningún tope de fecha dentro del SP).
+--
+-- Caso "entra un usuario por primera vez" (como lo hace el portal al
+-- abrir la pantalla Expedientes, sin filtros puestos todavía): sin
+-- expediente puntual, sin filtro de servicio/subservicio, @fechaInicio
+-- = hoy - 3 meses, @fechaFin = NULL (sin tope superior -- ya lo acota
+-- la regla de las 8 horas), y @Cuenta vacío -- vacío significa "sin
+-- filtro de cuenta" (el WHERE lo interpreta como "trae todas"), NO "no
+-- traer nada".
+-- =====================================================================
+DECLARE @CuentaVacio dbo.IntList;   -- sin filas = sin filtro de cuenta
+
+EXEC dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
+    @clExpediente  = NULL,
+    @fechaInicio   = '2026-07-12',   -- = hoy - 3 meses; calcúlalo en el momento de probar, ej. CAST(DATEADD(MONTH, -3, GETDATE()) AS DATE)
+    @fechaFin      = NULL,           -- sin tope superior
+    @clServicio    = NULL,
+    @clSubServicio = NULL,
+    @horasMinimas  = 8,
+    @Cuenta        = @CuentaVacio;
+
+-- Variante filtrando por 1 o más cuentas (ej. selección en el combo de Cuenta) --
+-- misma regla de @fechaInicio que arriba:
+DECLARE @CuentaFiltro dbo.IntList;
+INSERT INTO @CuentaFiltro (Value) VALUES (2819), (2868);
+
+EXEC dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
+    @clExpediente  = NULL,
+    @fechaInicio   = '2026-07-12',
+    @fechaFin      = NULL,
+    @clServicio    = NULL,
+    @clSubServicio = NULL,
+    @horasMinimas  = 8,
+    @Cuenta        = @CuentaFiltro;
+
+-- Variante búsqueda puntual por número de expediente (ignora fechas/cuenta):
+DECLARE @CuentaBusqueda dbo.IntList;
+
+EXEC dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
+    @clExpediente  = 18108081,
+    @Cuenta        = @CuentaBusqueda;
