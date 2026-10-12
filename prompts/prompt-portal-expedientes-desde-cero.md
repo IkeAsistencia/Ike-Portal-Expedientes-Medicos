@@ -194,9 +194,10 @@ no se puede cambiar.
 **Se crean** (scripts numerados en `sql/`, con un `sql/README.md` que
 indique el orden):
 1. `00_create_types.sql` — tipo `dbo.IntList`.
-2. `dbo.ST_CP_ObtenerExpedientesSinProveedorMedico` — listado principal, con la
-   regla de 8 horas de gracia (`@horasMinimas`), filtros por expediente,
-   fechas, servicio, subservicio y cuentas (TVP).
+2. `dbo.ST_CP_ObtenerExpedientesSinProveedorMedico` — listado principal; solo
+   considera expedientes que ya tienen su fila en la tabla del subsistema
+   que les toca según su subservicio, con filtros por expediente, fechas,
+   servicio, subservicio y cuentas (TVP).
 3. `dbo.ST_CP_ObtenerCatalogoServicio` — combo Servicio.
 4. `dbo.ST_CP_ObtenerCatalogoCuentas` — catálogo de cuentas, con lista fija
    opcional (`CUENTAS_PERMITIDAS` en `.env`).

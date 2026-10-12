@@ -44,22 +44,19 @@
 -- expedientes abiertos (clEstatus=0) -- antes del INNER a RM, el
 -- listado solo podía mostrar los 93 de Referencias Médicas.
 --
--- ACTUALIZADO 3: regla de negocio confirmada -- no todo expediente con
--- clEstatus=0 debe mostrarse en esta pantalla. El flujo normal es que
--- Core puede asignar proveedor de forma automática poco después de
--- levantado el expediente; esta pantalla es para escalar manualmente
--- solo los que YA llevan @horasMinimas (default 8) desde FechaApertura
--- sin que eso haya pasado. Antes de este cambio, un expediente aparecía
--- aquí desde el segundo 1 de abierto -- antes de darle chance a la
--- asignación automática de Core.
+-- ACTUALIZADO 3 (SUPERADO por ACTUALIZADO 5, ver abajo): regla de
+-- negocio confirmada -- no todo expediente con clEstatus=0 debe
+-- mostrarse en esta pantalla. El flujo normal es que Core puede asignar
+-- proveedor de forma automática poco después de levantado el
+-- expediente; esta pantalla era para escalar manualmente solo los que
+-- YA llevaban @horasMinimas (default 8) desde FechaApertura sin que eso
+-- haya pasado.
 --
--- ACTUALIZADO 4: regla de negocio confirmada -- las @horasMinimas se
--- cuentan desde que el expediente se registra en Core (E.FechaApertura,
--- sin cambio ahí), pero además el expediente solo debe considerarse si
--- YA tiene su fila correspondiente en la tabla del subsistema que le
--- toca según su subservicio (antes, con el LEFT JOIN a RM/PV/CKP, un
--- expediente sin esa fila igual aparecía con esas columnas en NULL).
--- Se agregó el filtro de existencia al WHERE.
+-- ACTUALIZADO 4: regla de negocio confirmada -- el expediente solo debe
+-- considerarse si YA tiene su fila correspondiente en la tabla del
+-- subsistema que le toca según su subservicio (antes, con el LEFT JOIN
+-- a RM/PV/CKP, un expediente sin esa fila igual aparecía con esas
+-- columnas en NULL). Se agregó el filtro de existencia al WHERE.
 --
 -- Se quitó el LEFT JOIN a dbo.CitaxExpediente (CE): no se usaba en
 -- ninguna columna ni filtro (ver nota anterior), confirmado que se
@@ -69,6 +66,15 @@
 -- siempre de RM.Cita): dbo.S2_ReferciasMedicas.Cita (226/383, igual que
 -- antes) y dbo.Check_Up.FechaCita (377). Plan Visión (420) no tiene un
 -- campo de fecha de cita en dbo.s2_cPuntoVision -- queda NULL ahí.
+--
+-- ACTUALIZADO 5: se quitó @horasMinimas y su filtro -- confirmado que
+-- ya no hace falta la "gracia" de horas desde FechaApertura: el filtro
+-- de existencia del ACTUALIZADO 4 (el expediente debe tener ya su fila
+-- en RM/PV/CKP según el subservicio) es ahora el que determina cuándo
+-- un expediente "ya está listo" para mostrarse en esta pantalla, en vez
+-- de un tiempo fijo de espera. No se usa en app/repositories/expedientes_repo.py
+-- (la llamada desde Python nunca mandaba este parámetro, usaba el
+-- default de 8).
 -- =====================================================================
 IF OBJECT_ID('dbo.ST_CP_ObtenerExpedientesSinProveedorMedico', 'P') IS NOT NULL
     DROP PROCEDURE dbo.ST_CP_ObtenerExpedientesSinProveedorMedico;
@@ -80,7 +86,6 @@ CREATE PROCEDURE dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
     @fechaFin      DATE          = NULL,
     @clServicio    INT           = NULL,
     @clSubServicio INT           = NULL,
-    @horasMinimas  INT           = 8,
     @Cuenta        dbo.IntList   READONLY
 AS
 BEGIN
@@ -144,11 +149,6 @@ BEGIN
     LEFT JOIN dbo.ProveedorxExpediente PE    ON PE.clExpediente = E.clExpediente AND PE.clEstatus = 3
     WHERE E.clEstatus = 0   -- fijo: "sin proveedor médico asignado"
         AND (@clExpediente  IS NULL OR E.clExpediente = @clExpediente)
-        -- Le da chance a la asignación automática de Core: solo entra a esta
-        -- pantalla si ya pasaron @horasMinimas desde que se abrió. Búsqueda
-        -- puntual por clave (@clExpediente) ignora esta regla -- es exacta,
-        -- no debe importar cuánto tiempo lleva abierto.
-        AND (@clExpediente  IS NOT NULL OR E.FechaApertura <= DATEADD(HOUR, -@horasMinimas, GETDATE()))
         AND (@fechaInicio   IS NULL OR CAST(E.FechaApertura AS DATE) >= @fechaInicio)
         AND (@fechaFin      IS NULL OR CAST(E.FechaApertura AS DATE) <= @fechaFin)
         AND (@clServicio    IS NULL OR E.clServicio = @clServicio)
@@ -185,10 +185,9 @@ GO
 -- Caso "entra un usuario por primera vez" (como lo hace el portal al
 -- abrir la pantalla Expedientes, sin filtros puestos todavía): sin
 -- expediente puntual, sin filtro de servicio/subservicio, @fechaInicio
--- = hoy - 3 meses, @fechaFin = NULL (sin tope superior -- ya lo acota
--- la regla de las 8 horas), y @Cuenta vacío -- vacío significa "sin
--- filtro de cuenta" (el WHERE lo interpreta como "trae todas"), NO "no
--- traer nada".
+-- = hoy - 3 meses, @fechaFin = NULL (sin tope superior), y @Cuenta
+-- vacío -- vacío significa "sin filtro de cuenta" (el WHERE lo
+-- interpreta como "trae todas"), NO "no traer nada".
 -- =====================================================================
 DECLARE @CuentaVacio dbo.IntList;   -- sin filas = sin filtro de cuenta
 
@@ -198,7 +197,6 @@ EXEC dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
     @fechaFin      = NULL,           -- sin tope superior
     @clServicio    = NULL,
     @clSubServicio = NULL,
-    @horasMinimas  = 8,
     @Cuenta        = @CuentaVacio;
 
 -- Variante filtrando por 1 o más cuentas (ej. selección en el combo de Cuenta) --
@@ -212,7 +210,6 @@ EXEC dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
     @fechaFin      = NULL,
     @clServicio    = NULL,
     @clSubServicio = NULL,
-    @horasMinimas  = 8,
     @Cuenta        = @CuentaFiltro;
 
 -- Variante búsqueda puntual por número de expediente (ignora fechas/cuenta):
