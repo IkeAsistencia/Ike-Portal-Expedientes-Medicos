@@ -50,8 +50,8 @@ const PLANTILLA = `
 
   <div class="card tono-verdeazul hidden" id="sg-historial-sise-card">
     <div class="card-header"><h2>Seguimiento</h2></div>
-    <div class="table-wrap table-wrap-listado">
-      <table class="mini-table" id="sg-historial-sise-tabla">
+    <div class="table-wrap sg-historial-wrap" id="sg-historial-sise-wrap">
+      <table class="mini-table sg-historial-tabla" id="sg-historial-sise-tabla">
         <thead>
           <tr>
             <th style="width:120px;">Fecha</th>
@@ -371,10 +371,42 @@ async function verComprobante(clExpediente) {
 }
 
 /* ---------- Seguimiento (historial de Core/SISE, dbo.sp_S2_Seguimiento) ---------- */
+/* Cuántos registros se ven de una vez; del 16 en adelante se alcanzan con la
+   barra lateral del propio apartado. */
+const MAX_FILAS_VISIBLES_SISE = 15;
+
+/* El alto de la caja se *mide* (no se calcula con un alto fijo por renglón)
+   porque Core manda celdas de alto variable: encabezados, saltos de línea e
+   íconos. Se toma del inicio de la primera fila al final de la fila
+   MAX_FILAS_VISIBLES_SISE, más el encabezado (que va fijo al hacer scroll),
+   así el corte cae justo en el límite de un renglón y se ve que hay más. */
+function ajustarAltoHistorialSise() {
+  const wrap = $("sg-historial-sise-wrap");
+  const filas = $("sg-historial-sise-body").rows;
+  if (filas.length <= MAX_FILAS_VISIBLES_SISE) {
+    wrap.style.maxHeight = "";
+    return;
+  }
+  const inicio = filas[0].getBoundingClientRect().top;
+  const fin = filas[MAX_FILAS_VISIBLES_SISE - 1].getBoundingClientRect().bottom;
+  const encabezado = $("sg-historial-sise-tabla").tHead.getBoundingClientRect().height;
+  const alto = fin - inicio + encabezado;
+  // Si el apartado aún no está visible todo mide 0: mejor dejarlo sin tope
+  // (se vuelve a ajustar en el siguiente render) que fijarlo en cero.
+  if (alto <= 0) { wrap.style.maxHeight = ""; return; }
+  wrap.style.maxHeight = `${Math.round(alto)}px`;
+
+  // La barra horizontal (si el contenido no cabe a lo ancho) se come parte
+  // del último renglón: se suma su alto para que los 15 queden completos.
+  const altoBarraHorizontal = wrap.offsetHeight - wrap.clientHeight;
+  if (altoBarraHorizontal > 0) wrap.style.maxHeight = `${Math.round(alto + altoBarraHorizontal)}px`;
+}
+
 function renderHistorialSise(registros) {
   const tbody = $("sg-historial-sise-body");
   if (!registros.length) {
     tbody.innerHTML = `<tr><td colspan="5" class="empty">No hay registros de seguimiento para este expediente.</td></tr>`;
+    ajustarAltoHistorialSise();
     return;
   }
   // Estatus/Observaciones: Core a veces los llena con HTML de puro formato
@@ -390,16 +422,19 @@ function renderHistorialSise(registros) {
       <td>${sanitizarHtmlSeguimiento(r.observaciones)}</td>
     </tr>
   `).join("");
+  ajustarAltoHistorialSise();
 }
 
 async function cargarHistorialSise(clExpediente) {
   const tbody = $("sg-historial-sise-body");
   tbody.innerHTML = `<tr><td colspan="5" class="empty">Cargando…</td></tr>`;
+  ajustarAltoHistorialSise();
   try {
     const registros = await api("/seguimiento/historial-sise/" + clExpediente);
     renderHistorialSise(registros);
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="5" class="empty">${escapeHtml(err.message)}</td></tr>`;
+    ajustarAltoHistorialSise();
   }
 }
 

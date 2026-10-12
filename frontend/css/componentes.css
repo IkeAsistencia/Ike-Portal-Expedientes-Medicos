@@ -232,6 +232,25 @@ tbody tr:hover{background:#FAFAFA;}
 .mini-table tbody tr:hover{background:#FAFAFA;}
 .mini-empty{padding:20px;text-align:center;color:var(--text-secondary);}
 
+/* Apartado "Seguimiento" (historial de Core/SISE): letra y espaciado más
+   compactos -- Core manda encabezados e íconos dentro de las celdas y con
+   el tamaño normal de .mini-table cada registro ocupaba demasiado alto.
+   La caja muestra 15 registros (el alto exacto lo fija
+   ajustarAltoHistorialSise, que mide las filas porque son de alto
+   variable) y del 16 en adelante se llega con la barra lateral; a lo ancho
+   hereda el overflow-x:auto de .table-wrap. El encabezado va fijo contra
+   esta misma caja para no perder los títulos al hacer scroll. */
+.sg-historial-wrap{overflow-y:auto;}
+.sg-historial-tabla{font-size:11.5px;}
+.sg-historial-tabla thead th{padding:6px 8px;position:sticky;top:0;z-index:2;}
+.sg-historial-tabla tbody td{padding:6px 8px;vertical-align:top;}
+/* Los encabezados y párrafos que Core manda como formato (ver
+   sanitizarHtmlSeguimiento) llegan con el tamaño y los márgenes por
+   defecto del navegador: se igualan a los de la tabla para que el renglón
+   no crezca de más. */
+.sg-historial-tabla :is(h1,h2,h3,h4,h5,h6){font-size:12px;margin:0;}
+.sg-historial-tabla p{margin:0;}
+
 .comentario-item{
   border:1px solid var(--gray-border);border-radius:6px;padding:12px 14px;margin-bottom:10px;background:var(--gray-bg);
 }
