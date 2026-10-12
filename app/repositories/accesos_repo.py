@@ -110,6 +110,16 @@ def buscar_acceso(rfc: str) -> dict | None:
         return dict(row) if row else None
 
 
+def nombre_o_rfc(rfc: str) -> str:
+    """
+    Nombre de la persona dueña de ese RFC, para mostrar en reportes/historial
+    en vez del RFC a secas. Si no hay registro (ej. una sesión legada de SISE
+    sin alta en usuarios_acceso), regresa el mismo RFC tal cual.
+    """
+    acceso = buscar_acceso(rfc)
+    return acceso["nombre"] if acceso else rfc
+
+
 def crear_password(rfc: str, password: str) -> dict:
     acceso = buscar_acceso(rfc)
     if not acceso or not acceso["activo"]:

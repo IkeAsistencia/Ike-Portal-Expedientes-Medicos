@@ -203,9 +203,9 @@ def _auth_headers_proveedor(client):
     """Sesión RFC real de perfil Proveedor (no SISE), para probar los 403 del corte."""
     import app.repositories.accesos_repo as accesos_repo_module
 
-    accesos_repo_module.alta_acceso("RFCPROVTEST", "Proveedor de Prueba", accesos_repo_module.PERFIL_PROVEEDOR, "Ciudad de México")
-    accesos_repo_module.crear_password("RFCPROVTEST", "Proveedor2024")
-    r = client.post("/auth/rfc/login", json={"rfc": "RFCPROVTEST", "password": "Proveedor2024"})
+    accesos_repo_module.alta_acceso("RFCPROTEST", "Proveedor de Prueba", accesos_repo_module.PERFIL_PROVEEDOR, "Ciudad de México")
+    accesos_repo_module.crear_password("RFCPROTEST", "Proveedor2024")
+    r = client.post("/auth/rfc/login", json={"rfc": "RFCPROTEST", "password": "Proveedor2024"})
     token = r.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -214,9 +214,9 @@ def _auth_headers_admin(client):
     """Sesión RFC real de perfil Administrador, para probar /admin/accesos."""
     import app.repositories.accesos_repo as accesos_repo_module
 
-    accesos_repo_module.alta_acceso("RFCADMINTEST", "Admin de Prueba", accesos_repo_module.PERFIL_ADMINISTRADOR)
-    accesos_repo_module.crear_password("RFCADMINTEST", "Admin2024xx")
-    r = client.post("/auth/rfc/login", json={"rfc": "RFCADMINTEST", "password": "Admin2024xx"})
+    accesos_repo_module.alta_acceso("RFCADMTEST", "Admin de Prueba", accesos_repo_module.PERFIL_ADMINISTRADOR)
+    accesos_repo_module.crear_password("RFCADMTEST", "Admin2024xx")
+    r = client.post("/auth/rfc/login", json={"rfc": "RFCADMTEST", "password": "Admin2024xx"})
     token = r.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -225,9 +225,9 @@ def _auth_headers_cabina(client):
     """Sesión RFC real de perfil Cabina (no SISE)."""
     import app.repositories.accesos_repo as accesos_repo_module
 
-    accesos_repo_module.alta_acceso("RFCCABINATEST", "Cabina de Prueba", accesos_repo_module.PERFIL_CABINA)
-    accesos_repo_module.crear_password("RFCCABINATEST", "Cabina2024xx")
-    r = client.post("/auth/rfc/login", json={"rfc": "RFCCABINATEST", "password": "Cabina2024xx"})
+    accesos_repo_module.alta_acceso("RFCCABTEST", "Cabina de Prueba", accesos_repo_module.PERFIL_CABINA)
+    accesos_repo_module.crear_password("RFCCABTEST", "Cabina2024xx")
+    r = client.post("/auth/rfc/login", json={"rfc": "RFCCABTEST", "password": "Cabina2024xx"})
     token = r.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
 
@@ -667,7 +667,7 @@ def test_correos_enviados_filtra_por_expediente(client):
 
 def test_correos_enviados_muestra_nombre_no_rfc(client):
     """El historial debe mostrar el nombre de quien mandó el correo, no su RFC a secas."""
-    headers_cabina = _auth_headers_cabina(client)  # RFC "RFCCABINATEST" -> nombre "Cabina de Prueba"
+    headers_cabina = _auth_headers_cabina(client)  # RFC "RFCCABTEST" -> nombre "Cabina de Prueba"
     r = client.post(
         "/expedientes/enviar-correo-proveedores", json={"expedientes": [1001]}, headers=headers_cabina
     )
@@ -677,7 +677,7 @@ def test_correos_enviados_muestra_nombre_no_rfc(client):
     r = client.get("/correos-enviados", headers=headers_admin)
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data[0]["rfc_envio"] == "RFCCABINATEST"
+    assert data[0]["rfc_envio"] == "RFCCABTEST"
     assert data[0]["nombre_envio"] == "Cabina de Prueba"
 
 
@@ -686,7 +686,7 @@ def test_enviar_correo_proveedores_rechaza_estatus_no_permitido(client):
     import app.repositories.estatus_repo as estatus_repo_module
     from app.schemas.expediente import EstatusExpediente
 
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.SEGUIMIENTO_COORDINADOR, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.SEGUIMIENTO_COORDINADOR, "RFCCABTEST")
 
     headers = _auth_headers(client)
     r = client.post(
@@ -701,7 +701,7 @@ def test_enviar_correo_proveedores_rechaza_mezcla_de_estatus(client):
     import app.repositories.estatus_repo as estatus_repo_module
     from app.schemas.expediente import EstatusExpediente
 
-    estatus_repo_module.actualizar_estatus(1002, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1002, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
     # 1001 se queda en "Abierto" (default).
 
     headers = _auth_headers(client)
@@ -717,8 +717,8 @@ def test_enviar_correo_proveedores_recordatorio_ok(client):
     import app.repositories.estatus_repo as estatus_repo_module
     from app.schemas.expediente import EstatusExpediente
 
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
-    estatus_repo_module.actualizar_estatus(1002, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
+    estatus_repo_module.actualizar_estatus(1002, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
 
     headers = _auth_headers(client)
     r = client.post(
@@ -778,8 +778,10 @@ def test_corte_descargar_devuelve_xlsx_valido(client):
     # del Enum de Python ("EstatusExpediente.ABIERTO").
     assert ws.cell(row=4, column=15).value == "Estado"
     assert ws.cell(row=5, column=15).value == "Abierto"
-    # 1001 está "Abierto" en este test -> RFC/fecha de envío no aplican.
-    assert ws.cell(row=4, column=16).value == "RFC Coordinador"
+    # 1001 está "Abierto" en este test -> todavía no se le manda a nadie, así
+    # que no hay coordinador/fecha de envío que mostrar (no es una regla por
+    # estatus, es que de verdad no existe el dato).
+    assert ws.cell(row=4, column=16).value == "Coordinador"
     assert ws.cell(row=5, column=16).value == "NA"
     assert ws.cell(row=4, column=17).value == "Fecha Envío a Proveedor"
     assert ws.cell(row=5, column=17).value == "NA"
@@ -874,7 +876,55 @@ def test_corte_en_espera_respuesta_incluye_rfc_y_fecha_envio(client):
     r = client.get(f"/expedientes/corte/{corte_id}/descargar", headers=admin_headers)
     wb = openpyxl.load_workbook(io.BytesIO(r.content))
     ws = wb.active
-    assert ws.cell(row=5, column=16).value == "RFCCABINATEST"
+    # Ya no es el RFC a secas -- se resuelve al nombre de la persona.
+    assert ws.cell(row=5, column=16).value == "Cabina de Prueba"
+    assert ws.cell(row=5, column=17).value is not None
+    assert ws.cell(row=5, column=17).value != "NA"
+
+
+def test_corte_mantiene_envio_original_aunque_el_estatus_avance(client):
+    """
+    El corte debe seguir mostrando quién y cuándo se mandó ORIGINALMENTE,
+    aunque el expediente ya haya avanzado a otro estatus (ej. el proveedor
+    ya respondió) -- no debe mostrar NA ni a quien hizo el cambio más
+    reciente (ver correos_enviados_repo.obtener_envio_original).
+    """
+    import io
+
+    import openpyxl
+
+    admin_headers = _auth_headers_admin(client)
+    cabina_headers = _auth_headers_cabina(client)
+    proveedor_headers = _auth_headers_proveedor(client)  # perfil Proveedor real -- dispara el cambio a "Seguimiento Proveedor"
+
+    r = client.post(
+        "/expedientes/enviar-correo-proveedores", json={"expedientes": [1001]}, headers=cabina_headers
+    )
+    assert r.status_code == 200, r.text
+
+    r = client.post(
+        "/seguimiento/actualizar",
+        json={
+            "cl_expediente": 1001,
+            "comentario": "Se contactó al proveedor y se confirmó la atención del paciente sin novedad.",
+        },
+        headers=proveedor_headers,
+    )
+    assert r.status_code == 200, r.text
+
+    r = client.get("/expedientes", params={"cl_expediente": 1001}, headers=admin_headers)
+    assert r.json()[0]["estatus"] == "Seguimiento Proveedor"
+
+    r = client.post("/expedientes/corte", json={"expedientes": [1001]}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    corte_id = r.json()["corte_id"]
+
+    r = client.get(f"/expedientes/corte/{corte_id}/descargar", headers=admin_headers)
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    ws = wb.active
+    # Sigue siendo quien lo mandó originalmente (Cabina), no quien hizo el
+    # último cambio de estatus (el proveedor, al responder).
+    assert ws.cell(row=5, column=16).value == "Cabina de Prueba"
     assert ws.cell(row=5, column=17).value is not None
     assert ws.cell(row=5, column=17).value != "NA"
 
@@ -1055,7 +1105,7 @@ def test_seguimiento_regresar_con_comentario_ok(client):
     r = client.get("/seguimiento/comentarios/1001", headers=headers)
     comentarios = r.json()
     encontrado = next(c for c in comentarios if "número de póliza" in c["comentario"])
-    assert encontrado["rfc"] == "RFCCABINATEST"
+    assert encontrado["rfc"] == "RFCCABTEST"
     assert encontrado["origen"] == "cabina"
 
 
@@ -1099,7 +1149,7 @@ def test_actualizar_seguimiento_proveedor_no_puede_reenviar_dos_veces(client):
     import app.repositories.estatus_repo as estatus_repo_module
     from app.schemas.expediente import EstatusExpediente
 
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
 
     headers = _auth_headers_proveedor(client)
     comentario = "Se atendió al paciente correctamente sin ninguna novedad que reportar hoy."
@@ -1137,7 +1187,7 @@ def test_pago_anticipado_proveedor_puede_marcar_y_desmarcar_antes_de_enviar(clie
 
     # Proveedor solo puede marcar pago anticipado en expedientes que le
     # corresponde atender (ver _verificar_proveedor_puede_ver).
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
 
     headers = _auth_headers_proveedor(client)
     r = client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=headers)
@@ -1155,7 +1205,7 @@ def test_pago_anticipado_se_bloquea_tras_primer_envio(client):
     import app.repositories.estatus_repo as estatus_repo_module
     from app.schemas.expediente import EstatusExpediente
 
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
 
     headers = _auth_headers_proveedor(client)
     client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=headers)
@@ -1194,7 +1244,7 @@ def test_seguimiento_de_cita_flujo_completo(client):
     cabina_headers = _auth_headers_cabina(client)
 
     # Proveedor marca el expediente como pago anticipado y manda su primer comentario.
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
     client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=prov_headers)
     comentario1 = "Se atendió al paciente correctamente sin ninguna novedad que reportar hoy."
     r = client.post(
@@ -1248,7 +1298,7 @@ def test_core_recibe_encabezado_del_proveedor(client):
     from app.schemas.expediente import EstatusExpediente
 
     prov_headers = _auth_headers_proveedor(client)
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
     r = client.post(
         "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": COMENTARIO_PROVEEDOR}, headers=prov_headers
     )
@@ -1260,7 +1310,7 @@ def test_core_recibe_encabezado_del_proveedor(client):
     r = client.get("/seguimiento/comentarios/1001", headers=prov_headers)
     comentario = next(c for c in r.json() if c["comentario"] == COMENTARIO_PROVEEDOR)
     assert comentario["nombre"] == "Proveedor de Prueba"
-    assert comentario["rfc"] == "RFCPROVTEST"
+    assert comentario["rfc"] == "RFCPROTEST"
 
 
 def test_core_pago_anticipado_lleva_prefijo_pa(client):
@@ -1268,7 +1318,7 @@ def test_core_pago_anticipado_lleva_prefijo_pa(client):
     from app.schemas.expediente import EstatusExpediente
 
     prov_headers = _auth_headers_proveedor(client)
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
     client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=prov_headers)
 
     # Aunque el comentario llegue sin "PA-" (ej. lo borraron a mano), se agrega.
@@ -1284,7 +1334,7 @@ def test_core_pago_anticipado_no_duplica_prefijo(client):
     from app.schemas.expediente import EstatusExpediente
 
     prov_headers = _auth_headers_proveedor(client)
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
     client.post("/seguimiento/pago-anticipado/1001", json={"es_anticipado": True}, headers=prov_headers)
     r = client.post(
         "/seguimiento/actualizar",
@@ -1300,7 +1350,7 @@ def test_core_recibe_encabezado_del_coordinador(client):
     from app.schemas.expediente import EstatusExpediente
 
     cabina_headers = _auth_headers_cabina(client)
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.SEGUIMIENTO_PROVEEDOR, "RFCPROVTEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.SEGUIMIENTO_PROVEEDOR, "RFCPROTEST")
     r = client.post(
         "/seguimiento/estatus",
         json={"cl_expediente": 1001, "estatus": "En Espera de Respuesta", "comentario": "Falta el número de póliza."},
@@ -1319,7 +1369,7 @@ def test_core_rechaza_comentario_que_no_cabe_con_encabezado(client):
     from app.schemas.expediente import EstatusExpediente
 
     prov_headers = _auth_headers_proveedor(client)
-    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABINATEST")
+    estatus_repo_module.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCABTEST")
     r = client.post(
         "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": "x" * 1500}, headers=prov_headers
     )

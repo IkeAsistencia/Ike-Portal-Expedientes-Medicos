@@ -33,10 +33,10 @@ COLUMNAS = [
     ("Teléfono", "telefono", 14),
     ("Correo", "email", 26),
     ("Estado", "estatus", 20),
-    # Evidencia de a qué hora se le mandó el expediente al proveedor (arranca
-    # el conteo de 48h en Pago Anticipado) -- "NA" cuando el corte es de un
-    # estatus distinto a "En Espera de Respuesta" (ver routers/expedientes.py).
-    ("RFC Coordinador", "rfc_envio", 18),
+    # Evidencia de quién y a qué hora se le mandó el expediente al proveedor
+    # (arranca el conteo de 48h en Pago Anticipado) -- "NA" cuando ese
+    # expediente todavía no se le ha mandado a nadie (ver routers/expedientes.py).
+    ("Coordinador", "rfc_envio", 22),
     ("Fecha Envío a Proveedor", "fecha_envio", 22),
 ]
 

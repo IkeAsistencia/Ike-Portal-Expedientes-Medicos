@@ -128,11 +128,15 @@ def generar_corte(data: GenerarCorteInput, usuario: dict = Depends(usuario_actua
     estatus de ningún expediente, es solo evidencia/corte.
 
     Todos los expedientes seleccionados deben compartir el MISMO estatus
-    (regla del jefe: un corte de "Abierto" no tiene fecha/RFC de envío que
-    mostrar, uno de "En Espera de Respuesta" sí -- mezclar estatus en un
-    mismo corte no tendría sentido). Cuando el estatus del lote es
-    "En Espera de Respuesta", se agregan las columnas RFC Coordinador y
-    Fecha de Envío a Proveedor (de lo contrario van en "NA").
+    (mezclar estatus en un mismo corte no tendría sentido).
+
+    Las columnas "Coordinador" y "Fecha Envío a Proveedor" muestran quién y
+    cuándo se le mandó el expediente al proveedor la PRIMERA vez (ver
+    correos_enviados_repo.obtener_envio_original) -- ese dato queda fijo
+    desde el envío original y no cambia aunque el expediente siga avanzando
+    después (a "Seguimiento Proveedor", "Finalizado", etc.). Un expediente
+    "Abierto" que nunca se le ha mandado a nadie sale en "NA" porque de
+    verdad no hay dato, no por una regla que lo fuerce.
     """
     _requerir_administrador(usuario)
 
@@ -152,18 +156,13 @@ def generar_corte(data: GenerarCorteInput, usuario: dict = Depends(usuario_actua
             "Todos los expedientes seleccionados deben tener el mismo estatus para generar el corte "
             f"(seleccionaste: {', '.join(sorted(e.value for e in estatuses))}).",
         )
-    estatus_lote = next(iter(estatuses))
 
     filas_excel = []
     for r in registros:
         fila = r.model_dump()
-        if estatus_lote in (EstatusExpediente.EN_ESPERA_RESPUESTA, EstatusExpediente.SEGUIMIENTO_CITA):
-            detalle = estatus_repo.obtener_detalle(r.expediente) or {}
-            fila["rfc_envio"] = detalle.get("rfc_cambio") or "NA"
-            fila["fecha_envio"] = detalle.get("fecha_cambio") or "NA"
-        else:
-            fila["rfc_envio"] = "NA"
-            fila["fecha_envio"] = "NA"
+        envio = correos_enviados_repo.obtener_envio_original(r.expediente)
+        fila["rfc_envio"] = envio["nombre_envio"] if envio else "NA"
+        fila["fecha_envio"] = envio["fecha"] if envio else "NA"
         filas_excel.append(fila)
 
     usuario_nombre = usuario.get("nombre") or usuario.get("usuario") or "desconocido"

@@ -15,8 +15,9 @@ export function paginar(rows, pagina) {
   };
 }
 
-/* alCambiar(nuevaPagina) se llama al presionar Anterior/Siguiente. */
-export function renderPaginador(contenedor, { totalFilas, pagina, totalPaginas, alCambiar }) {
+/* alCambiar(nuevaPagina) se llama al presionar Anterior/Siguiente.
+   etiqueta: el sustantivo a mostrar ("expediente", "usuario", ...). */
+export function renderPaginador(contenedor, { totalFilas, pagina, totalPaginas, alCambiar, etiqueta = "expediente" }) {
   if (!totalFilas) {
     contenedor.innerHTML = "";
     return;
@@ -24,7 +25,7 @@ export function renderPaginador(contenedor, { totalFilas, pagina, totalPaginas, 
   const inicio = (pagina - 1) * FILAS_POR_PAGINA + 1;
   const fin = Math.min(pagina * FILAS_POR_PAGINA, totalFilas);
   contenedor.innerHTML = `
-    <span class="pager-info">Mostrando ${inicio}–${fin} de ${totalFilas} expediente${totalFilas === 1 ? "" : "s"}</span>
+    <span class="pager-info">Mostrando ${inicio}–${fin} de ${totalFilas} ${etiqueta}${totalFilas === 1 ? "" : "s"}</span>
     <div class="pager-controls">
       <button class="btn btn-secondary" data-dir="-1" ${pagina <= 1 ? "disabled" : ""}>&larr; Anterior</button>
       <span class="pager-page">Página ${pagina} de ${totalPaginas}</span>

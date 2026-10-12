@@ -7,6 +7,7 @@ import { NOMBRES_PERFIL, PERFIL_PROVEEDOR } from "../core/sesion.js";
 import { cargarCatalogoEntidades, poblarSelectEntidades } from "../core/catalogos.js";
 import { ICONOS } from "../componentes/iconos.js";
 import { crearModal } from "../componentes/modal.js";
+import { paginar, renderPaginador } from "../componentes/paginador.js";
 
 const PLANTILLA = `
   <div class="card tono-azul">
@@ -15,7 +16,7 @@ const PLANTILLA = `
       <div class="filters-grid">
         <div class="field">
           <label for="acc-rfc">RFC</label>
-          <input type="text" id="acc-rfc" maxlength="20" placeholder="RFC" autocomplete="off">
+          <input type="text" id="acc-rfc" maxlength="10" placeholder="RFC" autocomplete="off">
         </div>
         <div class="field">
           <label for="acc-nombre">Nombre</label>
@@ -51,6 +52,12 @@ const PLANTILLA = `
     <div class="card-header">
       <h2>Accesos registrados (<span id="accCount">0</span>)</h2>
     </div>
+    <div class="card-body">
+      <div class="field" style="max-width:320px;">
+        <label for="acc-buscar">Buscar</label>
+        <input type="text" id="acc-buscar" placeholder="Por RFC, nombre o perfil" autocomplete="off">
+      </div>
+    </div>
     <div class="table-wrap">
       <table class="mini-table">
         <thead>
@@ -65,10 +72,13 @@ const PLANTILLA = `
         <tbody id="acc-tbody"></tbody>
       </table>
     </div>
+    <div class="pager" id="acc-pager"></div>
   </div>`;
 
 let modalEntidad = null;
 let cambiarEntidadRfc = null;
+let accesosActuales = [];
+let paginaActual = 1;
 
 const $ = (id) => document.getElementById(id);
 
@@ -93,40 +103,79 @@ function botonesAcciones(a) {
   return cambiarEntidad + resetear + activar;
 }
 
+function accesosFiltrados() {
+  const texto = $("acc-buscar").value.trim().toLowerCase();
+  if (!texto) return accesosActuales;
+  return accesosActuales.filter(a =>
+    a.rfc.toLowerCase().includes(texto) ||
+    a.nombre.toLowerCase().includes(texto) ||
+    (NOMBRES_PERFIL[String(a.perfil)] || "").toLowerCase().includes(texto)
+  );
+}
+
+function renderGrid() {
+  const tbody = $("acc-tbody");
+  const filtrados = accesosFiltrados();
+  $("accCount").textContent = filtrados.length;
+
+  if (!accesosActuales.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="mini-empty">Aún no hay accesos registrados.</td></tr>`;
+    $("acc-pager").innerHTML = "";
+    return;
+  }
+  if (!filtrados.length) {
+    tbody.innerHTML = `<tr><td colspan="8" class="mini-empty">Ningún acceso coincide con tu búsqueda.</td></tr>`;
+    $("acc-pager").innerHTML = "";
+    return;
+  }
+
+  const pag = paginar(filtrados, paginaActual);
+  paginaActual = pag.pagina;
+
+  tbody.innerHTML = pag.filas.map(a => `
+    <tr>
+      <td data-label="RFC">${escapeHtml(a.rfc)}</td>
+      <td data-label="Nombre">${escapeHtml(a.nombre)}</td>
+      <td data-label="Perfil"><span class="badge perfil-${a.perfil}">${escapeHtml(NOMBRES_PERFIL[String(a.perfil)] || a.perfil)}</span></td>
+      <td data-label="Entidad">${escapeHtml(a.entidad || "NA")}</td>
+      <td data-label="Correo">${escapeHtml(a.correo || "NA")}</td>
+      <td data-label="Estado"><span class="badge ${a.activo ? "activo" : "inactivo"}">${a.activo ? "Activo" : "Inactivo"}</span></td>
+      <td data-label="Contraseña">${a.tiene_password ? '<span class="muted">Ya creada</span>' : '<span class="muted">Pendiente</span>'}</td>
+      <td data-label="Acciones">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">${botonesAcciones(a)}</div>
+      </td>
+    </tr>
+  `).join("");
+
+  const acciones = {
+    "inactivar": (btn) => inactivar(btn.dataset.rfc),
+    "reactivar": (btn) => reactivar(btn.dataset.rfc),
+    "reset": (btn) => resetearPassword(btn.dataset.rfc),
+    "cambiar-entidad": (btn) => abrirModalCambiarEntidad(btn.dataset.rfc, btn.dataset.entidad),
+  };
+  tbody.querySelectorAll(".row-action-btn[data-accion]").forEach(btn => {
+    btn.addEventListener("click", () => acciones[btn.dataset.accion](btn));
+  });
+
+  renderPaginador($("acc-pager"), {
+    totalFilas: filtrados.length,
+    pagina: paginaActual,
+    totalPaginas: pag.totalPaginas,
+    etiqueta: "usuario",
+    alCambiar: (nueva) => {
+      paginaActual = nueva;
+      renderGrid();
+    },
+  });
+}
+
 async function cargarGrid() {
   const tbody = $("acc-tbody");
   tbody.innerHTML = `<tr><td colspan="8" class="mini-empty">Cargando…</td></tr>`;
   try {
-    const accesos = await api("/admin/accesos");
-    $("accCount").textContent = accesos.length;
-    if (!accesos.length) {
-      tbody.innerHTML = `<tr><td colspan="8" class="mini-empty">Aún no hay accesos registrados.</td></tr>`;
-      return;
-    }
-    tbody.innerHTML = accesos.map(a => `
-      <tr>
-        <td data-label="RFC">${escapeHtml(a.rfc)}</td>
-        <td data-label="Nombre">${escapeHtml(a.nombre)}</td>
-        <td data-label="Perfil"><span class="badge perfil-${a.perfil}">${escapeHtml(NOMBRES_PERFIL[String(a.perfil)] || a.perfil)}</span></td>
-        <td data-label="Entidad">${escapeHtml(a.entidad || "NA")}</td>
-        <td data-label="Correo">${escapeHtml(a.correo || "NA")}</td>
-        <td data-label="Estado"><span class="badge ${a.activo ? "activo" : "inactivo"}">${a.activo ? "Activo" : "Inactivo"}</span></td>
-        <td data-label="Contraseña">${a.tiene_password ? '<span class="muted">Ya creada</span>' : '<span class="muted">Pendiente</span>'}</td>
-        <td data-label="Acciones">
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">${botonesAcciones(a)}</div>
-        </td>
-      </tr>
-    `).join("");
-
-    const acciones = {
-      "inactivar": (btn) => inactivar(btn.dataset.rfc),
-      "reactivar": (btn) => reactivar(btn.dataset.rfc),
-      "reset": (btn) => resetearPassword(btn.dataset.rfc),
-      "cambiar-entidad": (btn) => abrirModalCambiarEntidad(btn.dataset.rfc, btn.dataset.entidad),
-    };
-    tbody.querySelectorAll(".row-action-btn[data-accion]").forEach(btn => {
-      btn.addEventListener("click", () => acciones[btn.dataset.accion](btn));
-    });
+    accesosActuales = await api("/admin/accesos");
+    paginaActual = 1;
+    renderGrid();
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="8" class="mini-empty">${escapeHtml(err.message)}</td></tr>`;
   }
@@ -282,6 +331,10 @@ export function montar(contenedor) {
     }
   });
   $("acc-dar-alta-btn").addEventListener("click", darDeAlta);
+  $("acc-buscar").addEventListener("input", () => {
+    paginaActual = 1;
+    renderGrid();
+  });
   ["acc-rfc", "acc-nombre"].forEach(id => {
     $(id).addEventListener("keydown", (e) => {
       // .click() y no darDeAlta(): si el botón está deshabilitado (alta en

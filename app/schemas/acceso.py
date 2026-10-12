@@ -25,7 +25,7 @@ def _cumple_regla_password(password: str) -> bool:
 
 
 class RfcEstadoInput(BaseModel):
-    rfc: str = Field(..., min_length=1, max_length=20)
+    rfc: str = Field(..., min_length=1, max_length=10)
 
 
 class RfcEstadoResponse(BaseModel):
@@ -35,7 +35,7 @@ class RfcEstadoResponse(BaseModel):
 
 
 class CrearPasswordInput(BaseModel):
-    rfc: str = Field(..., min_length=1, max_length=20)
+    rfc: str = Field(..., min_length=1, max_length=10)
     password: str = Field(..., min_length=8, max_length=40)
 
     @field_validator("password")
@@ -47,7 +47,7 @@ class CrearPasswordInput(BaseModel):
 
 
 class RfcLoginInput(BaseModel):
-    rfc: str = Field(..., min_length=1, max_length=20)
+    rfc: str = Field(..., min_length=1, max_length=10)
     password: str = Field(..., min_length=1, max_length=40)
 
 
@@ -67,7 +67,7 @@ def _correo_valido(correo: str) -> bool:
 
 
 class AltaAccesoInput(BaseModel):
-    rfc: str = Field(..., min_length=1, max_length=20)
+    rfc: str = Field(..., min_length=1, max_length=10)
     nombre: str = Field(..., min_length=1, max_length=120)
     perfil: int = Field(..., ge=1, le=3)
     entidad: Optional[str] = None  # obligatoria solo si perfil == Proveedor

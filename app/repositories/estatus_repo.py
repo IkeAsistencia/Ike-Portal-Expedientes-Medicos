@@ -9,8 +9,12 @@ def actualizar_estatus(cl_expediente: int, estatus: EstatusExpediente, identific
     explícita del usuario.
 
     identificador: RFC (o usuario SISE legado) de quién hizo el cambio --
-    se usa para el corte de expedientes (columna "RFC Coordinador"),
-    específicamente cuando el estatus queda en "En Espera de Respuesta".
+    se usa para el corte de expedientes (columna "Coordinador"). OJO: esta
+    tabla solo guarda el ÚLTIMO cambio de estatus (UPDATE, no historial), así
+    que si el expediente avanza después de "En Espera de Respuesta" (ej. el
+    proveedor responde y pasa a "Seguimiento Proveedor"), este campo pasa a
+    reflejar ESE cambio más reciente -- ya no a quién/cuándo se le mandó
+    originalmente al proveedor.
     """
     with get_local_connection() as conn:
         conn.execute(

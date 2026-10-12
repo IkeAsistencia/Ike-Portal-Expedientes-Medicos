@@ -142,6 +142,10 @@ function filtrarPorKPI(cardId, estatusList, valorCombo) {
   filtroEstatusKPI = estatusList;
   $("f-estatus").value = valorCombo || "";
   paginaActual = 1;
+  // Mismo motivo que en loadExpedientes(): no dejar seleccionado algo que
+  // quedó fuera de este filtro (de otro estado).
+  seleccionados.clear();
+  $("chk-todos").checked = false;
   marcarKpiActivo(cardId);
   const filtrados = aplicarFiltrosLocales(expedientesActuales);
   // Para que el siguiente refresco silencioso compare contra lo que se ve
@@ -297,6 +301,11 @@ async function loadExpedientes() {
   filtroEstatusKPI = null;
   marcarKpiActivo(null);
   paginaActual = 1;
+  // Limpia la selección: si no, quedan marcados expedientes de un estado
+  // distinto al que acabas de buscar (ej. seleccionaste "Abierto", ahora
+  // buscas "Finalizado") y el corte/correo truena por mezclar estados.
+  seleccionados.clear();
+  $("chk-todos").checked = false;
 
   filaMensaje($("tabla-expedientes-body"), "Cargando…", "spinner-row");
   await ejecutarBusqueda(params, { silencioso: false });
