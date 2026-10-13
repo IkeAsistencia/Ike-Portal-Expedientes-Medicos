@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import Optional
 
 from app.config import get_settings
+from app.core.log_seguro import sanear_para_log
 
 logger = logging.getLogger("email_service")
 
@@ -49,7 +50,7 @@ def _adjuntar_logo(msg: MIMEMultipart) -> None:
         with open(_LOGO_PATH, "rb") as f:
             imagen = MIMEImage(f.read())
     except OSError:
-        logger.warning("No se encontró el logo en %s; el correo se manda sin logo.", _LOGO_PATH)
+        logger.warning("No se encontró el logo en %s; el correo se manda sin logo.", sanear_para_log(_LOGO_PATH))
         return
     imagen.add_header("Content-ID", f"<{_LOGO_CID}>")
     imagen.add_header("Content-Disposition", "inline", filename="logo-ike-lema.png")
@@ -80,10 +81,12 @@ def _enviar_smtp(destinatario: str, asunto: str, html: str) -> None:
 def _enviar_o_simular(destinatario: str, asunto: str, html: str) -> bool:
     settings = get_settings()
     if not settings.smtp_configurado:
+        # sanear_para_log: nada de lo que se interpola aquí puede meter un
+        # salto de línea y forjar renglones falsos en el log (CWE-117).
         logger.info(
             "[MODO SIMULADO — falta configurar SMTP_HOST/SMTP_REMITENTE en .env] "
-            "Para: %s | Asunto: %s\n%s",
-            destinatario, asunto, html,
+            "Para: %s | Asunto: %s | Cuerpo: %s",
+            sanear_para_log(destinatario), sanear_para_log(asunto), sanear_para_log(html),
         )
         return False
     _enviar_smtp(destinatario, asunto, html)
@@ -128,8 +131,9 @@ def _enviar_o_simular_con_adjunto(
     if not settings.smtp_configurado:
         logger.info(
             "[MODO SIMULADO — falta configurar SMTP_HOST/SMTP_REMITENTE en .env] "
-            "Para: %s | Asunto: %s | Adjunto: %s (%d bytes)\n%s",
-            destinatario, asunto, adjunto_nombre, len(adjunto_bytes), html,
+            "Para: %s | Asunto: %s | Adjunto: %s (%d bytes) | Cuerpo: %s",
+            sanear_para_log(destinatario), sanear_para_log(asunto),
+            sanear_para_log(adjunto_nombre), len(adjunto_bytes), sanear_para_log(html),
         )
         return False
     _enviar_smtp_con_adjunto(destinatario, asunto, html, adjunto_nombre, adjunto_bytes)

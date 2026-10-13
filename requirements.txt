@@ -1,4 +1,14 @@
-fastapi==0.115.0
+fastapi==0.141.1
+# Starlette va pineado explícito (FastAPI solo pide ">=0.46.0"): la 0.38.6
+# que se usaba antes arrastraba 5 CVEs reportadas por el escaneo SCA --
+# CVE-2026-48818 (alta: con StaticFiles en Windows, una ruta UNC hacía que
+# os.path.realpath abriera una conexión SMB al host del atacante y filtrara
+# las credenciales NTLMv2 de la cuenta de servicio; este portal sirve el
+# frontend justo con StaticFiles), CVE-2026-48710 y CVE-2026-54282 (Host y
+# path sin validar al reconstruir request.url), CVE-2026-48817 (HTTPEndpoint
+# resolvía el handler con getattr sin limitarlo a verbos HTTP) y
+# CVE-2025-54121 (subir un archivo grande bloqueaba el event loop).
+starlette==1.8.0
 uvicorn[standard]==0.30.6
 pyodbc==5.2.0
 pydantic==2.9.2

@@ -1457,3 +1457,135 @@ def test_subservicio_referencias_medicas_sale_del_catalogo(monkeypatch):
         ],
     )
     assert [s.clave for s in catalogos_repo.listar_subservicios(4)] == [377]
+
+
+# ---------- Hallazgos del escaneo de seguridad (Checkmarx, 13-oct-2026) ----------
+# Cada prueba de aquí abajo fija una de las correcciones; si alguien quita la
+# validación o el manejador, la prueba vuelve a fallar.
+
+
+def test_error_de_validacion_no_refleja_el_dato_recibido(client):
+    """
+    CWE-359: Pydantic mete el valor recibido en la clave "input" de cada
+    error y FastAPI lo regresaba tal cual, así que una contraseña rechazada
+    terminaba escrita en el body del 422.
+    """
+    import app.repositories.accesos_repo as accesos_repo_module
+
+    accesos_repo_module.alta_acceso("RFCLEAKTST", "Prueba Fuga", accesos_repo_module.PERFIL_CABINA)
+    secreto = "SinCaracterEspecial1"
+
+    r = client.post("/auth/rfc/crear-password", json={"rfc": "RFCLEAKTST", "password": secreto})
+
+    assert r.status_code == 422
+    assert secreto not in r.text
+    error = r.json()["detail"][0]
+    assert "input" not in error
+    # El frontend solo usa detail[].msg (ver frontend/js/core/api.js), así
+    # que el mensaje de por qué falló sí debe seguir llegando.
+    assert error["loc"] == ["body", "password"]
+    assert "contraseña" in error["msg"]
+
+
+def test_password_queda_enmascarada_en_el_modelo():
+    """CWE-359: SecretStr evita que la contraseña salga por un repr o un dump."""
+    from app.schemas.acceso import RfcLoginInput
+
+    secreto = "Clave2026!"
+    modelo = RfcLoginInput(rfc="ABCD123456", password=secreto)
+
+    assert secreto not in repr(modelo)
+    assert secreto not in modelo.model_dump_json()
+    assert modelo.password.get_secret_value() == secreto
+
+
+def test_corte_acota_cuantos_expedientes_se_pueden_mandar(client):
+    """
+    CWE-606: el corte consulta el SP una vez por expediente de la lista; sin
+    tope, un body con cientos de miles de claves deja al servidor iterando.
+    """
+    from app.schemas.correo import MAXIMO_EXPEDIENTES_POR_OPERACION
+
+    headers = _auth_headers_admin(client)
+
+    r = client.post(
+        "/expedientes/corte",
+        json={"expedientes": list(range(1, MAXIMO_EXPEDIENTES_POR_OPERACION + 2))},
+        headers=headers,
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["type"] == "too_long"
+
+
+def test_enviar_correo_proveedores_acota_cuantos_expedientes_se_pueden_mandar(client):
+    """CWE-606: mismo tope que el corte, por el mismo motivo."""
+    from app.schemas.correo import MAXIMO_EXPEDIENTES_POR_OPERACION
+
+    headers = _auth_headers_cabina(client)
+
+    r = client.post(
+        "/expedientes/enviar-correo-proveedores",
+        json={"expedientes": list(range(1, MAXIMO_EXPEDIENTES_POR_OPERACION + 2))},
+        headers=headers,
+    )
+    assert r.status_code == 422
+    assert r.json()["detail"][0]["type"] == "too_long"
+
+
+def test_busqueda_de_cuentas_acota_el_largo_del_texto(client):
+    """CWE-606: el typeahead valida el texto carácter por carácter."""
+    from app.routers.catalogos import LARGO_MAXIMO_BUSQUEDA_CUENTA
+
+    headers = _auth_headers(client)
+
+    r = client.get(
+        "/catalogos/cuentas/buscar",
+        params={"texto": "a" * (LARGO_MAXIMO_BUSQUEDA_CUENTA + 1)},
+        headers=headers,
+    )
+    assert r.status_code == 422
+
+
+def test_catalogos_acotan_el_rango_de_cl_servicio(client):
+    """CWE-606: cl_servicio llegaba sin rango y lo que regrese el SP se recorre completo."""
+    headers = _auth_headers(client)
+
+    for ruta in ("/catalogos/servicios", "/catalogos/subservicios"):
+        assert client.get(ruta, params={"cl_servicio": 0}, headers=headers).status_code == 422
+        assert client.get(ruta, params={"cl_servicio": 10**9}, headers=headers).status_code == 422
+        # El valor que de verdad usa el portal sigue pasando.
+        assert client.get(ruta, params={"cl_servicio": 4}, headers=headers).status_code == 200
+
+
+def test_sanear_para_log_no_deja_forjar_renglones():
+    """CWE-117: un salto de línea en un valor permitía inventar entradas en el log."""
+    from app.core.log_seguro import sanear_para_log
+
+    saneado = sanear_para_log("corte.xlsx\r\n2026-10-13 INFO Acceso concedido a ADMIN\x1b[2J")
+
+    assert "\n" not in saneado
+    assert "\r" not in saneado
+    assert "\x1b" not in saneado
+    assert saneado.startswith("corte.xlsx\\r\\n")
+
+
+def test_modo_simulado_sanea_el_nombre_del_adjunto(client, caplog):
+    """CWE-117: el nombre del archivo del corte llega al log del modo simulado."""
+    import logging
+
+    from app.services import email_service
+
+    with caplog.at_level(logging.INFO, logger="email_service"):
+        email_service._enviar_o_simular_con_adjunto(
+            "alguien@ike.com",
+            "Corte",
+            "<p>cuerpo</p>",
+            "corte.xlsx\n2026-10-13 INFO renglon forjado",
+            b"x",
+        )
+
+    registros = [r for r in caplog.records if r.name == "email_service"]
+    assert registros, "no se registró nada en el log del modo simulado"
+    mensaje = registros[-1].getMessage()
+    assert "\n" not in mensaje
+    assert "corte.xlsx\\n2026-10-13" in mensaje

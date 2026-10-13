@@ -2,8 +2,10 @@ import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_arranque_settings, get_settings, validar_jwt_secret
@@ -57,6 +59,28 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.exception_handler(RequestValidationError)
+async def manejar_error_de_validacion(_: Request, exc: RequestValidationError) -> JSONResponse:
+    """
+    422 sin devolver el dato que llegó.
+
+    Pydantic mete en cada error la clave "input" con el valor recibido y
+    FastAPI lo regresa tal cual en la respuesta. Eso significaba que una
+    contraseña que no cumplía la regla (POST /auth/rfc/crear-password)
+    terminaba reflejada en el body del 422 -- y de ahí a los logs del
+    proxy, al historial del navegador o a cualquier intermediario
+    (CWE-359, exposición de datos sensibles).
+
+    Se responde solo con qué campo falló y por qué, que es lo único que el
+    frontend usa (ver `detail[].msg` en frontend/js/core/api.js).
+    """
+    errores = [
+        {"type": e.get("type"), "loc": list(e.get("loc", ())), "msg": e.get("msg")}
+        for e in exc.errors()
+    ]
+    return JSONResponse(status_code=422, content={"detail": errores})
 
 
 _RUTAS_FRONTEND_SIN_CACHE = ("/js/", "/css/", "/img/")

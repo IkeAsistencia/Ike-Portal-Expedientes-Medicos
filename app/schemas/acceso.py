@@ -1,7 +1,7 @@
 import re
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
 from app.repositories.accesos_repo import ENTIDADES_MEXICO, PERFIL_PROVEEDOR, SIN_APLICA
 
@@ -36,19 +36,22 @@ class RfcEstadoResponse(BaseModel):
 
 class CrearPasswordInput(BaseModel):
     rfc: str = Field(..., min_length=1, max_length=10)
-    password: str = Field(..., min_length=8, max_length=40)
+    # SecretStr para que la contraseña no pueda salir por un repr, un
+    # model_dump ni el "input" de un error de validación (CWE-359) -- ver la
+    # nota en app/schemas/auth.py.
+    password: SecretStr = Field(..., min_length=8, max_length=40)
 
     @field_validator("password")
     @classmethod
-    def _validar_password(cls, v: str) -> str:
-        if not _cumple_regla_password(v):
+    def _validar_password(cls, v: SecretStr) -> SecretStr:
+        if not _cumple_regla_password(v.get_secret_value()):
             raise ValueError(MENSAJE_REGLA_PASSWORD)
         return v
 
 
 class RfcLoginInput(BaseModel):
     rfc: str = Field(..., min_length=1, max_length=10)
-    password: str = Field(..., min_length=1, max_length=40)
+    password: SecretStr = Field(..., min_length=1, max_length=40)
 
 
 class AccesoLoginResponse(BaseModel):

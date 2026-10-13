@@ -38,7 +38,7 @@ def login(data: LoginInput, request: Request):
     verificar_limite(f"login:{ip}:{data.usuario}", MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS)
 
     try:
-        resultado = auth_repo.autenticar(data.usuario, data.password, host, ip[:20])
+        resultado = auth_repo.autenticar(data.usuario, data.password.get_secret_value(), host, ip[:20])
     except auth_repo.UsuarioInactivo as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e))
     except auth_repo.CredencialesInvalidas as e:
@@ -80,7 +80,7 @@ def rfc_crear_password(data: CrearPasswordInput, request: Request):
     verificar_limite(f"rfc-crear:{ip}:{data.rfc}", MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS)
 
     try:
-        acceso = accesos_repo.crear_password(data.rfc, data.password)
+        acceso = accesos_repo.crear_password(data.rfc, data.password.get_secret_value())
     except accesos_repo.RfcNoAutorizado as e:
         raise HTTPException(status.HTTP_403_FORBIDDEN, str(e))
     except accesos_repo.CredencialesInvalidas as e:
@@ -99,7 +99,7 @@ def rfc_login(data: RfcLoginInput, request: Request):
     verificar_limite(f"rfc-login:{ip}:{data.rfc}", MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS)
 
     try:
-        acceso = accesos_repo.autenticar(data.rfc, data.password)
+        acceso = accesos_repo.autenticar(data.rfc, data.password.get_secret_value())
     except accesos_repo.CredencialesInvalidas as e:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(e))
 
