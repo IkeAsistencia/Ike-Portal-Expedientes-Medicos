@@ -7,7 +7,7 @@
      alEntrar()          -> (opcional) cada vez que se navega a ella
      reiniciar()         -> (opcional) al cerrar sesión, limpia su estado
 */
-import { getToken, limpiarSesion, nombrePerfilActual, nombreUsuario, esPerfilAdministrador } from "./core/sesion.js";
+import { getToken, limpiarSesion, nombrePerfilActual, nombreUsuario, esPerfilAdministrador, esPerfilProveedor } from "./core/sesion.js";
 import { limpiarCatalogos } from "./core/catalogos.js";
 import { toast } from "./core/toast.js";
 import { confirmar } from "./componentes/confirmar.js";
@@ -20,6 +20,7 @@ import * as configuracionCuentas from "./pantallas/configuracion-cuentas.js";
 import * as usuariosAccesos from "./pantallas/usuarios-accesos.js";
 import * as historialCorreos from "./pantallas/historial-correos.js";
 import * as corte from "./pantallas/corte.js";
+import * as directorioProveedores from "./pantallas/directorio-proveedores.js";
 
 const PANTALLAS = {
   "expedientes": { modulo: expedientes, titulo: "Expedientes" },
@@ -28,6 +29,7 @@ const PANTALLAS = {
   "configuracion": { modulo: configuracionCuentas, titulo: "Configuración Cuentas" },
   "accesos": { modulo: usuariosAccesos, titulo: "Usuarios y Accesos" },
   "historial-correos": { modulo: historialCorreos, titulo: "Historial de Correos" },
+  "directorio-proveedores": { modulo: directorioProveedores, titulo: "Directorio de Proveedores" },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -53,6 +55,9 @@ function pantallaPermitida(nombre) {
     // Usuarios y Accesos e Historial de Correos son exclusivos de Administrador.
     case "accesos":
     case "historial-correos": return admin;
+    // Directorio de Proveedores: maqueta (datos simulados, sin conexión al
+    // backend), solo para el perfil Proveedor.
+    case "directorio-proveedores": return esPerfilProveedor();
     default: return false;
   }
 }
