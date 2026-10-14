@@ -1589,3 +1589,23 @@ def test_modo_simulado_sanea_el_nombre_del_adjunto(client, caplog):
     mensaje = registros[-1].getMessage()
     assert "\n" not in mensaje
     assert "corte.xlsx\\n2026-10-13" in mensaje
+
+
+def test_seed_usuarios_prueba_con_password_permite_login_de_los_3_perfiles(client):
+    from scripts.seed_usuarios_prueba import USUARIOS_PRUEBA, ejecutar
+
+    ejecutar(password="Qwer1234$")
+    perfiles = []
+    for rfc, _nombre, perfil, *_ in USUARIOS_PRUEBA:
+        r = client.post("/auth/rfc/login", json={"rfc": rfc, "password": "Qwer1234$"})
+        assert r.status_code == 200, (rfc, r.text)
+        perfiles.append(r.json()["perfil"])
+        assert client.post("/auth/rfc/login", json={"rfc": rfc, "password": "Otra1234$"}).status_code == 401
+    assert sorted(perfiles) == [1, 2, 3]
+
+
+def test_seed_usuarios_prueba_rechaza_password_debil(client):
+    from scripts.seed_usuarios_prueba import ejecutar
+
+    with pytest.raises(SystemExit):
+        ejecutar(password="debil")

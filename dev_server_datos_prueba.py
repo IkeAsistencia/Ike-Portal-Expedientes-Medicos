@@ -10,8 +10,8 @@ Uso:
     python dev_server_datos_prueba.py
 
 Luego abre http://127.0.0.1:8000 en tu navegador e inicia sesión con
-cualquiera de estos RFC de prueba (se dan de alta solos al arrancar; la
-primera vez el portal te pide crear una contraseña):
+cualquiera de estos RFC de prueba (se dan de alta solos al arrancar, todos
+con la contraseña de prueba Qwer1234$):
     ADMI000001 -> Administrador
     CABI000001 -> Cabina
     PROV000001 -> Proveedor (entidad Campeche)
@@ -131,8 +131,10 @@ from app.main import app  # noqa: E402
 if __name__ == "__main__":
     from scripts.seed_usuarios_prueba import USUARIOS_PRUEBA, ejecutar as seed_usuarios_prueba
 
-    seed_usuarios_prueba()
+    # Contraseña común de prueba (este servidor solo sirve datos inventados).
+    seed_usuarios_prueba(password="Qwer1234$")
     print("Servidor de DATOS DE PRUEBA (sin SQL Server) en http://127.0.0.1:8000")
     print("RFC de prueba: " + ", ".join(f"{rfc} ({nombre})" for rfc, nombre, *_ in USUARIOS_PRUEBA))
+    print("Contraseña de prueba para los tres: Qwer1234$")
     print("Abre http://127.0.0.1:8000 en tu navegador para probarlo.")
     uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")

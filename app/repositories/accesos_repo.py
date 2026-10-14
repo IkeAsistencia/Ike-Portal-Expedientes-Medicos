@@ -139,6 +139,20 @@ def crear_password(rfc: str, password: str) -> dict:
     return acceso
 
 
+def establecer_password(rfc: str, password: str) -> None:
+    """
+    Fija la contraseña de un RFC ya dado de alta, sin pasar por el primer
+    ingreso. Solo para el seed de usuarios de prueba (scripts/seed_usuarios_prueba.py):
+    el flujo real es que cada persona cree la suya con crear_password.
+    """
+    with get_local_connection() as conn:
+        conn.execute(
+            "UPDATE usuarios_acceso SET password_hash = ? WHERE rfc = ?",
+            (_crear_hash_nuevo(password), _normalizar_rfc(rfc)),
+        )
+        conn.commit()
+
+
 def autenticar(rfc: str, password: str) -> dict:
     acceso = buscar_acceso(rfc)
     if not acceso or not acceso["activo"] or not acceso["password_hash"]:
