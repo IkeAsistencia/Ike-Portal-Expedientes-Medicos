@@ -2,6 +2,7 @@
 import { api } from "../core/api.js";
 import { escapeHtml, normalizarEntidad } from "../core/formato.js";
 import { toast } from "../core/toast.js";
+import { mostrarAlertaFlotante } from "../componentes/alerta-flotante.js";
 import { esPerfilAdministrador, esPerfilCabina, esPerfilProveedor } from "../core/sesion.js";
 import {
   cargarCatalogoCuentas, cargarCatalogoEntidades, cargarServiciosEnSelect,
@@ -341,8 +342,10 @@ function notificarExpedientesNuevos(nuevos) {
 }
 
 // Aviso a Cabina cuando un Proveedor responde (el expediente ya estaba en
-// pantalla, pero cambió a "Seguimiento Proveedor") -- antes solo se avisaba
-// de expedientes nuevos, no de este cambio de estatus.
+// pantalla, pero cambió a "Seguimiento Proveedor"). Además del cambio de
+// estatus que ya se ve en la tabla, se pidió una alerta aparte (sección 1
+// de "Puntos a modificar.docx"): esquina superior derecha, con sonido,
+// sin botón de aceptar, se quita sola a los 10s -- no bloquea la pantalla.
 function notificarRespuestaProveedor(respondidos) {
   const numeros = respondidos.map(r => r.expediente);
   const mensaje = numeros.length === 1
@@ -351,6 +354,7 @@ function notificarRespuestaProveedor(respondidos) {
       ? `El proveedor respondió ${numeros.length} expedientes: ${numeros.join(", ")}.`
       : `El proveedor respondió ${numeros.length} expedientes.`;
   toast(mensaje, "success", 6000);
+  mostrarAlertaFlotante(mensaje);
 }
 
 async function ejecutarBusqueda(params, { silencioso }) {
