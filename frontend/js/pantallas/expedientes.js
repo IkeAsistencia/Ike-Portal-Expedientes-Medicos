@@ -19,7 +19,7 @@ import { limitarADigitos } from "../componentes/campo-numerico.js";
 import { crearMultiselectCuentas } from "../componentes/multiselect-cuentas.js";
 import { filtrosExpedientesHtml, leerParametrosBusqueda } from "../componentes/filtros-expedientes.js";
 import { paginar, renderPaginador } from "../componentes/paginador.js";
-import { filaMensaje, puntoSemaforo, renderFilasExpedientes, tablaExpedientesHtml } from "../componentes/tabla-expedientes.js";
+import { filaMensaje, renderFilasExpedientes, tablaExpedientesHtml } from "../componentes/tabla-expedientes.js";
 import { abrirModalCorte } from "./corte.js";
 import { abrirSeguimiento, refrescarSiEsElMismo } from "./seguimiento.js";
 
@@ -422,7 +422,7 @@ function notificarExpedientesNuevos(nuevos) {
 // del primer diseño, ahora NO se quita sola: los expedientes se van
 // acumulando en la misma alerta hasta que Cabina le cambia el estatus (ver
 // reconciliarRespuestasPendientes), y cada uno muestra también el nombre
-// del paciente y su semáforo.
+// del paciente, el subservicio, el estado (entidad) y el municipio.
 function notificarRespuestaProveedor(respondidos) {
   const numeros = respondidos.map(r => r.expediente);
   const mensajeToast = numeros.length === 1
@@ -436,8 +436,9 @@ function notificarRespuestaProveedor(respondidos) {
     respuestasPendientes.set(r.expediente, {
       expediente: r.expediente,
       nombre_paciente: r.nombre_paciente,
-      color_semaforo: r.color_semaforo,
-      tiempo_semaforo: r.tiempo_semaforo,
+      tipo_subservicio: r.tipo_subservicio,
+      entidad: r.entidad,
+      municipio: r.municipio,
     });
     // Si Cabina tiene abierta la pantalla de Seguimiento justo de este
     // expediente, que se vea de una vez la respuesta que Core acaba de
@@ -488,9 +489,11 @@ function renderAlertaRespuestasPendientes({ sonar }) {
     : `El proveedor respondió ${pendientes.length} expedientes:`;
   const items = pendientes.map(p => `
     <li class="alerta-flotante-item">
-      <a href="#" class="alerta-flotante-link" data-exp="${p.expediente}">${p.expediente}</a>
-      <span class="alerta-flotante-paciente">${escapeHtml(p.nombre_paciente || "")}</span>
-      ${puntoSemaforo(p.color_semaforo, p.tiempo_semaforo)}
+      <div class="alerta-flotante-item-linea">
+        <a href="#" class="alerta-flotante-link" data-exp="${p.expediente}">${p.expediente}</a>
+        <span class="alerta-flotante-paciente">${escapeHtml(p.nombre_paciente || "")}</span>
+      </div>
+      <div class="alerta-flotante-detalle">${escapeHtml([p.tipo_subservicio, p.entidad, p.municipio].filter(Boolean).join(" · "))}</div>
     </li>`).join("");
   const mensajeHtml = `${titulo}<ul class="alerta-flotante-lista">${items}</ul>`;
 
