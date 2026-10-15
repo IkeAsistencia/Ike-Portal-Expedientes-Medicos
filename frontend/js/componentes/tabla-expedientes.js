@@ -1,6 +1,6 @@
 /* Tabla de expedientes (columnas fijas a la izquierda, casillas de
    selección y liga al Seguimiento). La usan Expedientes y Expedientes PA. */
-import { escapeHtml, formatDate } from "../core/formato.js";
+import { escapeHtml, formatDate, formatDateTime } from "../core/formato.js";
 import { esPerfilAdministrador } from "../core/sesion.js";
 
 export const COLUMNAS_TABLA = 18;
@@ -47,12 +47,12 @@ export function tablaExpedientesHtml({ idTabla, idChkTodos, idTbody, mensajeInic
         <tr>
           <th class="col-frozen" style="width:40px;left:0;">#</th>
           <th class="col-frozen" style="width:32px;left:40px;"><input type="checkbox" id="${idChkTodos}"></th>
-          <th class="col-frozen" style="width:100px;left:72px;">Fecha Apertura</th>
-          <th class="col-frozen" style="width:100px;left:172px;">Expediente</th>
-          <th class="col-frozen" style="width:36px;left:272px;" title="Semáforo del expediente">⏱</th>
-          <th class="col-frozen" style="width:190px;left:308px;">Cuenta</th>
-          <th class="col-frozen" style="width:130px;left:498px;">Servicio</th>
-          <th class="col-frozen col-frozen-last" style="width:150px;left:628px;">Subservicio</th>
+          <th class="col-frozen" style="width:140px;left:72px;">Fecha Apertura</th>
+          <th class="col-frozen" style="width:100px;left:212px;">Expediente</th>
+          <th class="col-frozen" style="width:36px;left:312px;" title="Semáforo del expediente">⏱</th>
+          <th class="col-frozen" style="width:190px;left:348px;">Cuenta</th>
+          <th class="col-frozen" style="width:130px;left:538px;">Servicio</th>
+          <th class="col-frozen col-frozen-last" style="width:150px;left:668px;">Subservicio</th>
           <th>Titular</th><th>Paciente</th><th>Especialidad</th>
           <th>Entidad</th><th>Municipio</th><th>Fecha Asignación Proveedor</th>
           <th>Fecha Cita</th><th>Teléfono</th><th>Correo</th><th>Estado</th>
@@ -79,12 +79,12 @@ export function renderFilasExpedientes(tbody, filas, { inicio, seleccionados, al
     <tr>
       <td class="col-frozen" style="left:0;">${inicio + i + 1}</td>
       <td class="col-frozen" style="left:40px;"><input type="checkbox" class="chk-expediente" data-exp="${r.expediente}" ${seleccionados.has(r.expediente) ? "checked" : ""}></td>
-      <td class="col-frozen" style="left:72px;">${formatDate(r.fecha_apertura_servicio)}</td>
-      <td class="col-frozen" style="left:172px;">${celdaExpediente(r.expediente)}</td>
-      <td class="col-frozen" style="left:272px;">${puntoSemaforo(r.color_semaforo)}</td>
-      <td class="col-frozen" style="left:308px;">${escapeHtml(r.cuenta)}</td>
-      <td class="col-frozen" style="left:498px;">${escapeHtml(r.tipo_servicio || "")}</td>
-      <td class="col-frozen col-frozen-last" style="left:628px;">${escapeHtml(r.tipo_subservicio || "")}</td>
+      <td class="col-frozen" style="left:72px;">${formatDateTime(r.fecha_apertura_completa)}</td>
+      <td class="col-frozen" style="left:212px;">${celdaExpediente(r.expediente)}</td>
+      <td class="col-frozen" style="left:312px;">${puntoSemaforo(r.color_semaforo)}</td>
+      <td class="col-frozen" style="left:348px;">${escapeHtml(r.cuenta)}</td>
+      <td class="col-frozen" style="left:538px;">${escapeHtml(r.tipo_servicio || "")}</td>
+      <td class="col-frozen col-frozen-last" style="left:668px;">${escapeHtml(r.tipo_subservicio || "")}</td>
       <td>${escapeHtml(r.nombre_titular || "")}</td>
       <td>${escapeHtml(r.nombre_paciente)}</td>
       <td>${escapeHtml(r.especialidad || "")}</td>

@@ -120,6 +120,7 @@ def listar_expedientes(filtro: ExpedienteFiltro) -> list[Expediente]:
                 entidad=row.get("Entidad"),
                 municipio=row.get("Municipio"),
                 fecha_apertura_servicio=row["FechaAperturaServicio"],
+                fecha_apertura_completa=row["FechaAperturaCompleta"],
                 fecha_asignacion_proveedor=row.get("FechaAsignacionProveedor"),
                 fecha_cita=row.get("FechaCita"),
                 telefono=row.get("Telefono"),
