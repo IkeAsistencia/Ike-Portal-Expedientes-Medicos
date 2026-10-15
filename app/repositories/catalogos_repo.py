@@ -3,11 +3,14 @@ from app.db.connection import as_tvp_rows, call_procedure
 from app.schemas.catalogo import CatalogoItem
 
 
-# Subservicios que el portal ya no trabaja: salen del combo Subservicio y,
-# como el frontend solo muestra expedientes de los subservicios del
-# catálogo, también dejan de aparecer en la búsqueda.
-#   226 = "Referencias Médicas" (pausado, decisión 2026-10-12)
-SUBSERVICIOS_EXCLUIDOS = frozenset({226})
+# Únicos subservicios que trabaja dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
+# (sql/01_..._Medico.sql) -- el resto del catálogo de clServicio=4 (Ambulancia,
+# Consulta Médica Virtual, Médico a Domicilio, etc.) siempre regresaría 0
+# resultados en esta pantalla, así que no tiene caso ofrecerlo en el combo.
+#   226 Referencias Médicas, 376 Segunda Opinión, 377 Check Up,
+#   383 Consulta Médica en Consultorio, 403 Renta de Equipo Médico,
+#   404 Enfermería a Domicilio, 420 Plan Visión, 432 Envío de Medicamentos
+SUBSERVICIOS_PERMITIDOS = frozenset({226, 376, 377, 383, 403, 404, 420, 432})
 
 
 def listar_servicios(cl_servicio: int = 4) -> list[CatalogoItem]:
@@ -27,7 +30,7 @@ def listar_subservicios(cl_servicio: int = 4) -> list[CatalogoItem]:
     return [
         CatalogoItem(clave=r["clSubServicio"], descripcion=r["dsSubServicio"])
         for r in rows
-        if r["clSubServicio"] not in SUBSERVICIOS_EXCLUIDOS
+        if r["clSubServicio"] in SUBSERVICIOS_PERMITIDOS
     ]
 
 

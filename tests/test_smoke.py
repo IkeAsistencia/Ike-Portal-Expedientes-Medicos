@@ -1451,7 +1451,12 @@ def test_comprobante_acepta_comentario_de_20_caracteres_y_primer_envio_sigue_en_
     assert "comprobante" in r.json()["detail"].lower()
 
 
-def test_subservicio_referencias_medicas_sale_del_catalogo(monkeypatch):
+def test_listar_subservicios_filtra_a_los_que_soporta_la_pantalla_expedientes(monkeypatch):
+    """
+    El combo Subservicio debe mostrar exactamente los 8 subservicios que
+    trabaja dbo.ST_CP_ObtenerExpedientesSinProveedorMedico -- cualquier
+    otro (ej. Ambulancia) siempre daría 0 resultados en esa pantalla.
+    """
     import app.repositories.catalogos_repo as catalogos_repo
 
     monkeypatch.setattr(
@@ -1459,10 +1464,11 @@ def test_subservicio_referencias_medicas_sale_del_catalogo(monkeypatch):
         "call_procedure",
         lambda *a, **k: [
             {"clSubServicio": 226, "dsSubServicio": "Referencias Médicas"},
-            {"clSubServicio": 377, "dsSubServicio": "Consulta Externa"},
+            {"clSubServicio": 223, "dsSubServicio": "Ambulancia"},  # no soportado por esa pantalla
+            {"clSubServicio": 377, "dsSubServicio": "Check Up"},
         ],
     )
-    assert [s.clave for s in catalogos_repo.listar_subservicios(4)] == [377]
+    assert [s.clave for s in catalogos_repo.listar_subservicios(4)] == [226, 377]
 
 
 # ---------- Hallazgos del escaneo de seguridad (Checkmarx, 13-oct-2026) ----------
