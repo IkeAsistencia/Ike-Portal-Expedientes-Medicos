@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
 from typing import Optional
 
@@ -35,12 +35,20 @@ class Expediente(BaseModel):
     entidad: Optional[str] = None
     municipio: Optional[str] = None
     fecha_apertura_servicio: date
+    # Con hora -- para mostrarla en pantalla y para que se note a simple
+    # vista por qué el semáforo está en tal o cual color (ver
+    # app/services/semaforo_service.py, que también usa este dato).
+    fecha_apertura_completa: datetime
     fecha_asignacion_proveedor: Optional[date] = None
     fecha_cita: Optional[date] = None
     telefono: Optional[str] = None
     email: Optional[str] = None
     # No viene de SQL Server: se resuelve desde la base local (ver estatus_repo.py)
     estatus: EstatusExpediente = EstatusExpediente.ABIERTO
+    # Semáforo del Expediente (distinto del badge de Estado) -- ver
+    # app/services/semaforo_service.py. None = no aplica (ya hay respuesta
+    # del proveedor o el caso ya avanzó).
+    color_semaforo: Optional[str] = None
 
 
 class ExpedienteFiltro(BaseModel):

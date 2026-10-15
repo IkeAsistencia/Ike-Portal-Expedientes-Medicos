@@ -32,6 +32,8 @@ def fake_call_procedure(sp_name, params=None):
                 "Entidad": "Campeche",
                 "Municipio": "Campeche",
                 "FechaAperturaServicio": datetime.date(2026, 8, 1),
+                "FechaAperturaCompleta": datetime.datetime(2026, 8, 1, 8, 0, 0),
+                "ClSubServicio": 377,
                 "FechaAsignacionProveedor": datetime.date(2026, 8, 1),
                 "FechaCita": datetime.date(2026, 8, 3),
                 "Telefono": "9811234567",

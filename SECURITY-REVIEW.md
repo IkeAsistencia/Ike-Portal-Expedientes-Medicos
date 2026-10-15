@@ -232,3 +232,69 @@ nuevo.
   (`/\\127.0.0.1\share\x`) se responde 404 sin intentar la conexión.
 - Verificado en vivo que el 422 de `/auth/rfc/crear-password` ya no
   contiene la contraseña enviada.
+
+---
+
+# Escaneo Checkmarx — 2026-10-13 (segunda corrida)
+
+Reporte del área de seguridad (scan id `7c0531d9-d573-4c2b-b48e-4c12daca3a70`,
+preset ASA Premium, 111 archivos / 9,180 LOC). 6 hallazgos, todos Medium/Low,
+0 críticos/altos. Los 4 del escaneo anterior (3 `Unchecked_Input_for_Loop_Condition`
++ 1 `Privacy_Violation`) salen marcados "Resolved" por el propio Checkmarx.
+
+Análisis: ninguno de los 6 representa un hueco real sin atender. Son 2
+situaciones distintas, ninguna requiere cambio de código — se documentan
+aquí para triage en Checkmarx como "Not Exploitable".
+
+| Similarity Id | Severidad | Tipo | Dónde | Estado |
+|---|---|---|---|---|
+| -1731685342 | 🟡 Medium | Unchecked_Input_for_Loop_Condition | `catalogos.py:32` → `catalogos_repo.py:29` | No explotable |
+| 2008296053 | 🟡 Medium | Unchecked_Input_for_Loop_Condition | `catalogos.py:43` → `catalogos.py:51` | No explotable |
+| 1229767200 | 🟡 Medium | Unchecked_Input_for_Loop_Condition | `catalogos.py:27` → `catalogos_repo.py:15` | No explotable |
+| -1690917026 | 🟡 Medium | Unchecked_Input_for_Loop_Condition | `expedientes.py:122` → `expedientes.py:144` | Ya corregido |
+| -2077027318 | 🟡 Medium | Privacy_Violation | `auth.py:41` → `auth.py:48` | Falso positivo |
+| -1200604096 | ⚪ Low | Log_Forging | `expedientes.py:201` → `email_service.py:132` | No explotable / ya corregido |
+
+## Los 3 de `catalogos.py` — el escáner no reconoce la validación declarativa de FastAPI/Pydantic
+
+`cl_servicio` ya está acotado con `Query(4, ge=CL_SERVICIO_MINIMO, le=CL_SERVICIO_MAXIMO)`
+(rango 1–9999, ver `app/routers/catalogos.py`) y `texto` con `max_length=60`.
+Un valor fuera de rango se rechaza con HTTP 422 antes de que la función se
+ejecute. Además, en los dos casos de `cl_servicio` el ciclo (`for r in rows`)
+no itera "`cl_servicio` veces" -- itera sobre el resultado fijo del catálogo
+en SQL Server (decenas de filas), sin relación con la magnitud del
+parámetro. El motor de análisis estático no modela `ge=`/`le=`/`max_length=`
+de Pydantic como una validación previa al ciclo, así que sigue marcando el
+patrón genérico "input externo llega a un `for`" aunque ya esté acotado.
+
+## El de `expedientes.py` (Recurrent) — ya corregido en el escaneo anterior
+
+`GenerarCorteInput.expedientes` tiene `max_length=MAXIMO_EXPEDIENTES_POR_OPERACION`
+(2000, en `app/schemas/correo.py`) desde el fix del escaneo pasado. Sigue
+saliendo "Recurrent" por la misma razón que los de arriba: la cota vive en
+el schema Pydantic, no en un `if` explícito que el escáner pueda rastrear.
+
+## El `Privacy_Violation` de `auth.py` — falso positivo
+
+`LoginResponse` (`app/schemas/auth.py`) solo tiene `access_token`,
+`token_type`, `cl_usr_app`, `usuario` y `nombre` -- ningún campo transporta
+la contraseña. El escáner detecta que `data.password.get_secret_value()` se
+usa dentro de la misma función donde se construye la respuesta, pero el
+valor de la contraseña nunca llega a `LoginResponse`.
+
+## El `Log_Forging` de `expedientes.py`/`email_service.py` (Recurrent) — ya cubierto
+
+`corte_id` es `int` (no puede contener saltos de línea) y los valores de
+texto que sí se escriben en ese `logger.info` (destinatario, asunto,
+nombre de adjunto, cuerpo) ya pasan por `sanear_para_log()` desde el fix
+del escaneo anterior (líneas 135-136 de `email_service.py`).
+
+## Siguiente paso
+
+Marcar estos 6 resultados como "Not Exploitable" en Checkmarx con la
+justificación de arriba. Si el área de seguridad no lo acepta y exige
+cerrarlos en código, la alternativa es agregar validaciones explícitas
+redundantes (un `if` visible en el cuerpo de la función, además del
+`Query`/`Field` de Pydantic) solo para que el motor de análisis estático
+las reconozca -- no aportan protección adicional real, ya que FastAPI
+rechaza la petición antes de llegar a ese código.

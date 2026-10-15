@@ -4,18 +4,33 @@
 -- Compatible con SQL Server 2012 (sin CREATE OR ALTER, sin STRING_SPLIT).
 -- Requiere haber corrido antes 00_create_types.sql.
 --
--- Esta pantalla solo trabaja 3 subservicios, cada uno con su propio
--- subsistema de datos en Core:
---   377 "Check Up"                      -> dbo.Check_Up / cPerfilCheckUp
---   383 "CONSULTA MÉDICA EN CONSULTORIO" -> dbo.S2_ReferciasMedicas
+-- Esta pantalla trabaja 8 subservicios, cada uno con su propio
+-- subsistema de datos en Core (mapeo confirmado contra la base real,
+-- "Puntos a modificar.docx" de Cabina Médica, octubre 2026):
+--   226 "Referencias Médicas"            -> dbo.S2_ReferciasMedicas
+--   376 "Segunda Opinión"                -> dbo.S2_SegundaOpinion
+--   377 "Check Up"                       -> dbo.Check_Up / cPerfilCheckUp
+--   383 "CONSULTA MÉDICA EN CONSULTORIO" -> dbo.S2_ReferciasMedicas (misma tabla que 226)
+--   403 "Renta de Equipo Médico"         -> dbo.s2_RentaEquipoMedico
+--   404 "Enfermería a Domicilio"         -> dbo.s2_EnfermeriaDomicilio
 --   420 "Plan Visión"                    -> dbo.s2_cPuntoVision / s2_cPaqueteDescPuntoVision
+--   432 "Envío de Medicamentos"          -> dbo.s2_EnvioDeMedicamentos
+--
+-- OJO -- 226 "Referencias Médicas" había quedado EXCLUIDO del combo
+-- Subservicio en el frontend (SUBSERVICIOS_EXCLUIDOS en
+-- app/repositories/catalogos_repo.py, decisión del 2026-10-12, "pausado").
+-- El documento de Cabina Médica que pide este cambio sí incluye
+-- "Referencia" entre los servicios de primer contacto -- se agregó aquí
+-- al SP porque así se pidió explícitamente, pero falta confirmar con el
+-- negocio si esa pausa ya se levantó; si no, el combo seguirá sin
+-- mostrarlo aunque el SP ya lo traiga.
+--
 -- Un expediente solo se considera "sin proveedor médico" si, además de
 -- estar en dbo.Expediente con clEstatus=0, YA tiene su fila registrada
 -- en el subsistema que le corresponde según su subservicio -- si Core
 -- todavía no la creó, el expediente no está listo para escalarse aquí.
 -- Cualquier otro subservicio (Ambulancia, Consulta Médica Virtual,
--- Médico a Domicilio, Referencias Médicas, etc.) queda fuera de esta
--- pantalla por completo.
+-- Médico a Domicilio, etc.) queda fuera de esta pantalla por completo.
 --
 -- Los alias de columnas se limpiaron (sin espacios/acentos) para que
 -- sean más fáciles de consumir desde Python. Mapa:
@@ -23,15 +38,24 @@
 --   'Tipo de servicio'               -> TipoServicio
 --   'Tipo de subservicio'            -> TipoSubservicio
 --   'Nombre de titular'              -> NombreTitular
---   'Nombre de paciente'             -> NombrePaciente
+--   'Nombre de paciente'             -> NombrePaciente (sale de la tabla del subsistema de
+--                                        cada subservicio -- ver Especialidad más abajo)
 --   'Fecha asignacion cita'          -> FechaAsignacionProveedor  (OJO: es la fecha en que
 --                                        se asignó el proveedor -PE.FechaAsignacion-, no la
 --                                        fecha de la cita médica)
---   'Fecha de Cita'                  -> FechaCita  (sale de S2_ReferciasMedicas.Cita para 383,
---                                        de Check_Up.FechaCita para 377; Plan Visión -420- no
---                                        tiene ese dato en s2_cPuntoVision, queda NULL)
+--   'Fecha de Cita'                  -> FechaCita  (solo existe el dato para 226/383
+--                                        -S2_ReferciasMedicas.Cita-, 377 -Check_Up.FechaCita-,
+--                                        403 -s2_RentaEquipoMedico.FechaIniciio, así está
+--                                        escrito en la tabla real- y 404
+--                                        -s2_EnfermeriaDomicilio.FechaInicio-; 420/376/432
+--                                        no tienen ese campo en su subsistema, queda NULL)
 --   'Número telefonico del usuario'  -> Telefono
 --   'Correo del Usuario'             -> Email
+--
+-- Especialidad: solo 226/383 (catálogo dbo.cEspecialidad), 377 (perfil de
+-- Check Up) y 420 (paquete de Plan Visión) tienen un dato equivalente a
+-- "especialidad" en su subsistema. Para 376/403/404/432 no hay un campo
+-- así -- queda NULL.
 -- =====================================================================
 IF OBJECT_ID('dbo.ST_CP_ObtenerExpedientesSinProveedorMedico', 'P') IS NOT NULL
     DROP PROCEDURE dbo.ST_CP_ObtenerExpedientesSinProveedorMedico;
@@ -50,7 +74,9 @@ BEGIN
 
     SELECT
         CAST(E.FechaApertura AS DATE)                                                        AS FechaAperturaServicio,
+        E.FechaApertura                                                                        AS FechaAperturaCompleta,   -- con hora, para calcular el semáforo (ver app/services/semaforo_service.py)
         E.clExpediente                                                                        AS Expediente,
+        E.clSubServicio                                                                        AS ClSubServicio,          -- código numérico, para el semáforo (no se muestra en pantalla)
         C.Nombre                                                                               AS Cuenta,
         S.dsServicio                                                                            AS TipoServicio,
         SS.dsSubservicio                                                                        AS TipoSubservicio,
@@ -58,28 +84,48 @@ BEGIN
         CASE E.clSubServicio
             WHEN 420 THEN PV.Nombre
             WHEN 377 THEN CKP.NombreBene
-            ELSE RM.NombrePaciente   -- 383
+            WHEN 376 THEN SO.NombreBeneficiario
+            WHEN 403 THEN REM.NombrePaciente
+            WHEN 404 THEN ED.NombrePaciente
+            WHEN 432 THEN EM.Paciente
+            ELSE RM.NombrePaciente   -- 226/383
         END                                                                                     AS NombrePaciente,
         CASE E.clSubServicio
             WHEN 420 THEN PPV.dsPaqueteDesc
             WHEN 377 THEN PKU.dsPerfil
-            ELSE ESP.dsEspecialidad   -- 383
+            WHEN 376 THEN NULL
+            WHEN 403 THEN NULL
+            WHEN 404 THEN NULL
+            WHEN 432 THEN NULL
+            ELSE ESP.dsEspecialidad   -- 226/383
         END                                                                                     AS Especialidad,
         CASE E.clSubServicio
             WHEN 420 THEN VE.dsEntFed
             WHEN 377 THEN KE.dsEntFed
-            ELSE EF.dsEntFed   -- 383
+            WHEN 376 THEN OE.dsEntFed
+            WHEN 403 THEN RE.dsEntFed
+            WHEN 404 THEN DE.dsEntFed
+            WHEN 432 THEN ME.dsEntFed
+            ELSE EF.dsEntFed   -- 226/383
         END                                                                                     AS Entidad,
         CASE E.clSubServicio
             WHEN 420 THEN VMD.dsMunDel
             WHEN 377 THEN KMD.dsMunDel
-            ELSE MD.dsMunDel   -- 383
+            WHEN 376 THEN OMD.dsMunDel
+            WHEN 403 THEN RMD.dsMunDel
+            WHEN 404 THEN DMD.dsMunDel
+            WHEN 432 THEN MMD.dsMunDel
+            ELSE MD.dsMunDel   -- 226/383
         END                                                                                     AS Municipio,
         CAST(PE.FechaAsignacion AS DATE)                                                        AS FechaAsignacionProveedor,
         CASE E.clSubServicio
             WHEN 420 THEN NULL                                                                  -- s2_cPuntoVision no tiene fecha de cita
             WHEN 377 THEN CAST(CKP.FechaCita AS DATE)
-            ELSE CAST(RM.Cita AS DATE)   -- 383
+            WHEN 376 THEN NULL                                                                  -- S2_SegundaOpinion no tiene fecha de cita
+            WHEN 403 THEN CAST(REM.FechaIniciio AS DATE)                                         -- nombre real de la columna (con doble "i")
+            WHEN 404 THEN CAST(ED.FechaInicio AS DATE)
+            WHEN 432 THEN NULL                                                                  -- s2_EnvioDeMedicamentos no tiene fecha de cita
+            ELSE CAST(RM.Cita AS DATE)   -- 226/383
         END                                                                                     AS FechaCita,
         E.Telefono1                                                                             AS Telefono,
         E.Email                                                                                 AS Email
@@ -103,9 +149,26 @@ BEGIN
     LEFT JOIN dbo.cPerfilCheckUp PKU         ON PKU.clPerfil = CKP.clCheckUpTipo
     LEFT JOIN dbo.cEntFed KE                 ON KE.CodEnt = CKP.CodEnt
     LEFT JOIN dbo.cMunDel KMD                ON KMD.CodEnt = CKP.CodEnt AND KMD.CodMD = CKP.CodMD
+    -- Segunda Opinión (376): subsistema dbo.S2_SegundaOpinion (OJO: su columna de
+    -- entidad se llama "ConEnt", no "CodEnt" como en las demás tablas).
+    LEFT JOIN dbo.S2_SegundaOpinion SO       ON SO.clExpediente = E.clExpediente
+    LEFT JOIN dbo.cEntFed OE                 ON OE.CodEnt = SO.ConEnt
+    LEFT JOIN dbo.cMunDel OMD                ON OMD.CodEnt = SO.ConEnt AND OMD.CodMD = SO.CodMD
+    -- Renta de Equipo Médico (403): subsistema dbo.s2_RentaEquipoMedico.
+    LEFT JOIN dbo.s2_RentaEquipoMedico REM   ON REM.clExpediente = E.clExpediente
+    LEFT JOIN dbo.cEntFed RE                 ON RE.CodEnt = REM.CodEnt
+    LEFT JOIN dbo.cMunDel RMD                ON RMD.CodEnt = REM.CodEnt AND RMD.CodMD = REM.CodMD
+    -- Enfermería a Domicilio (404): subsistema dbo.s2_EnfermeriaDomicilio.
+    LEFT JOIN dbo.s2_EnfermeriaDomicilio ED  ON ED.clExpediente = E.clExpediente
+    LEFT JOIN dbo.cEntFed DE                 ON DE.CodEnt = ED.CodEnt
+    LEFT JOIN dbo.cMunDel DMD                ON DMD.CodEnt = ED.CodEnt AND DMD.CodMD = ED.CodMd
+    -- Envío de Medicamentos (432): subsistema dbo.s2_EnvioDeMedicamentos.
+    LEFT JOIN dbo.s2_EnvioDeMedicamentos EM  ON EM.clExpediente = E.clExpediente
+    LEFT JOIN dbo.cEntFed ME                 ON ME.CodEnt = EM.CodEnt
+    LEFT JOIN dbo.cMunDel MMD                ON MMD.CodEnt = EM.CodEnt AND MMD.CodMD = EM.CodMD
     LEFT JOIN dbo.ProveedorxExpediente PE    ON PE.clExpediente = E.clExpediente AND PE.clEstatus = 3
-    WHERE E.clEstatus = 0                          -- "sin proveedor médico asignado"
-        AND E.clSubServicio IN (377, 383, 420)     -- únicos subservicios que maneja esta pantalla
+    WHERE E.clEstatus = 0                                        -- "sin proveedor médico asignado"
+        AND E.clSubServicio IN (226, 376, 377, 383, 403, 404, 420, 432)   -- subservicios que maneja esta pantalla
         AND (@clExpediente  IS NULL OR E.clExpediente = @clExpediente)
         AND (@fechaInicio   IS NULL OR CAST(E.FechaApertura AS DATE) >= @fechaInicio)
         AND (@fechaFin      IS NULL OR CAST(E.FechaApertura AS DATE) <= @fechaFin)
@@ -122,7 +185,19 @@ BEGIN
         AND (
               (E.clSubServicio = 420 AND PV.clExpediente IS NOT NULL)
               OR (E.clSubServicio = 377 AND CKP.clExpediente IS NOT NULL)
-              OR (E.clSubServicio = 383 AND RM.clExpediente IS NOT NULL)
+              OR (E.clSubServicio IN (226, 383) AND RM.clExpediente IS NOT NULL)
+              OR (E.clSubServicio = 403 AND REM.clExpediente IS NOT NULL)
+              OR (E.clSubServicio = 404 AND ED.clExpediente IS NOT NULL)
+              OR (E.clSubServicio = 432 AND EM.clExpediente IS NOT NULL)
+              -- 376 (Segunda Opinión) NO exige fila en S2_SegundaOpinion: esa tabla
+              -- dejó de recibir registros nuevos desde diciembre de 2021 (confirmado
+              -- contra la base real), mientras que Core sigue abriendo expedientes de
+              -- este subservicio con normalidad hasta la fecha. Exigir la fila oculta
+              -- TODOS los casos actuales -- queda pendiente confirmar con negocio/Core
+              -- si esos datos (NombreBeneficiario, entidad, municipio) migraron a otra
+              -- tabla; mientras tanto, el expediente se muestra igual, con esos campos
+              -- en NULL si no hay fila.
+              OR (E.clSubServicio = 376)
             )
     ORDER BY E.clExpediente DESC;
 END

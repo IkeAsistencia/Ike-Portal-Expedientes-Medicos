@@ -2,6 +2,7 @@
 import { api } from "../core/api.js";
 import { escapeHtml, normalizarEntidad } from "../core/formato.js";
 import { toast } from "../core/toast.js";
+import { mostrarAlertaFlotante } from "../componentes/alerta-flotante.js";
 import { esPerfilAdministrador, esPerfilCabina, esPerfilProveedor } from "../core/sesion.js";
 import {
   cargarCatalogoCuentas, cargarCatalogoEntidades, cargarServiciosEnSelect,
@@ -49,6 +50,28 @@ const PLANTILLA = `
       <div style="display:flex;gap:8px;">
         <button class="btn btn-secondary" id="btn-generar-corte">Generar corte</button>
         <button class="btn btn-primary" id="btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
+      </div>
+    </div>
+    <div class="semaforo-leyenda">
+      <div class="semaforo-leyenda-fila">
+        <strong>Semáforo (⏱) — sin escalar, primer contacto</strong>
+        <span class="item"><span class="semaforo-punto verde"></span> &lt;6h</span>
+        <span class="item"><span class="semaforo-punto amarillo"></span> 6-12h</span>
+        <span class="item"><span class="semaforo-punto naranja"></span> 12-24h</span>
+        <span class="item"><span class="semaforo-punto rojo"></span> &gt;24h</span>
+      </div>
+      <div class="semaforo-leyenda-fila">
+        <strong>— segundo contacto</strong>
+        <span class="item"><span class="semaforo-punto verde"></span> &lt;12h</span>
+        <span class="item"><span class="semaforo-punto amarillo"></span> 12-48h</span>
+        <span class="item"><span class="semaforo-punto naranja"></span> 48-72h</span>
+        <span class="item"><span class="semaforo-punto rojo"></span> &gt;72h</span>
+      </div>
+      <div class="semaforo-leyenda-fila">
+        <strong>— ya escalado a proveedor</strong>
+        <span class="item"><span class="semaforo-punto verde"></span> ≤120min</span>
+        <span class="item"><span class="semaforo-punto naranja"></span> 120-180min</span>
+        <span class="item"><span class="semaforo-punto rojo"></span> &gt;180min (vencido)</span>
       </div>
     </div>
     <div class="table-wrap table-wrap-listado">
@@ -333,8 +356,10 @@ function notificarExpedientesNuevos(nuevos) {
 }
 
 // Aviso a Cabina cuando un Proveedor responde (el expediente ya estaba en
-// pantalla, pero cambió a "Seguimiento Proveedor") -- antes solo se avisaba
-// de expedientes nuevos, no de este cambio de estatus.
+// pantalla, pero cambió a "Seguimiento Proveedor"). Además del cambio de
+// estatus que ya se ve en la tabla, se pidió una alerta aparte (sección 1
+// de "Puntos a modificar.docx"): esquina superior derecha, con sonido,
+// sin botón de aceptar, se quita sola a los 10s -- no bloquea la pantalla.
 function notificarRespuestaProveedor(respondidos) {
   const numeros = respondidos.map(r => r.expediente);
   const mensaje = numeros.length === 1
@@ -343,6 +368,7 @@ function notificarRespuestaProveedor(respondidos) {
       ? `El proveedor respondió ${numeros.length} expedientes: ${numeros.join(", ")}.`
       : `El proveedor respondió ${numeros.length} expedientes.`;
   toast(mensaje, "success", 6000);
+  mostrarAlertaFlotante(mensaje);
 }
 
 async function ejecutarBusqueda(params, { silencioso }) {
