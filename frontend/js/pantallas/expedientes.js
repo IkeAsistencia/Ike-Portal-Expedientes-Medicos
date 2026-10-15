@@ -487,27 +487,21 @@ function renderAlertaRespuestasPendientes({ sonar, expandir = false }) {
   const titulo = pendientes.length === 1
     ? "El proveedor respondió 1 expediente:"
     : `El proveedor respondió ${pendientes.length} expedientes:`;
+  // Tabla compacta (una fila por expediente, columnas alineadas) en vez de
+  // párrafos apilados -- se pidió explícitamente que no se vea amontonado.
   const encabezado = `
-    <li class="alerta-flotante-item alerta-flotante-encabezado">
-      <div class="alerta-flotante-item-linea">
-        <span class="alerta-flotante-encabezado-exp">Expediente</span>
-        <span class="alerta-flotante-paciente">Paciente</span>
-      </div>
-      <div class="alerta-flotante-detalle">Subservicio</div>
-      <div class="alerta-flotante-detalle">Estado</div>
-      <div class="alerta-flotante-detalle">Municipio</div>
-    </li>`;
+    <div class="alerta-flotante-fila alerta-flotante-encabezado">
+      <span>Expediente</span><span>Paciente</span><span>Subservicio</span><span>Entidad</span><span>Municipio</span>
+    </div>`;
   const items = pendientes.map(p => `
-    <li class="alerta-flotante-item">
-      <div class="alerta-flotante-item-linea">
-        <a href="#" class="alerta-flotante-link" data-exp="${p.expediente}">${p.expediente}</a>
-        <span class="alerta-flotante-paciente">${escapeHtml(p.nombre_paciente || "")}</span>
-      </div>
-      <div class="alerta-flotante-detalle">${escapeHtml(p.tipo_subservicio || "")}</div>
-      <div class="alerta-flotante-detalle">${escapeHtml(p.entidad || "")}</div>
-      <div class="alerta-flotante-detalle">${escapeHtml(p.municipio || "")}</div>
-    </li>`).join("");
-  const mensajeHtml = `${titulo}<ul class="alerta-flotante-lista">${encabezado}${items}</ul>`;
+    <div class="alerta-flotante-fila">
+      <a href="#" class="alerta-flotante-link" data-exp="${p.expediente}">${p.expediente}</a>
+      <span class="alerta-flotante-paciente" title="${escapeHtml(p.nombre_paciente || "")}">${escapeHtml(p.nombre_paciente || "")}</span>
+      <span class="alerta-flotante-detalle" title="${escapeHtml(p.tipo_subservicio || "")}">${escapeHtml(p.tipo_subservicio || "")}</span>
+      <span class="alerta-flotante-detalle" title="${escapeHtml(p.entidad || "")}">${escapeHtml(p.entidad || "")}</span>
+      <span class="alerta-flotante-detalle" title="${escapeHtml(p.municipio || "")}">${escapeHtml(p.municipio || "")}</span>
+    </div>`).join("");
+  const mensajeHtml = `${titulo}<div class="alerta-flotante-lista">${encabezado}${items}</div>`;
 
   actualizarAlertaPersistente(ID_ALERTA_RESPUESTAS, mensajeHtml, {
     tipo: "proveedor-respondio",

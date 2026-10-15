@@ -117,30 +117,30 @@ body{
 .alerta-flotante.alerta-flotante-salida{animation:alerta-flotante-salida .3s ease-in forwards;}
 /* Lista de expedientes acumulados (ej. "el proveedor respondió" -- se van
    agregando hasta que Cabina revisa cada uno, ver reconciliarRespuestasPendientes
-   en pantallas/expedientes.js). */
-/* Máximo 5 filas visibles -- de ahí para arriba, scroll dentro de la misma
-   alerta en vez de que crezca sin límite (cada fila va en varios renglones:
-   expediente + paciente, y abajo subservicio, estado y municipio cada uno
-   en su propia línea, sin recortar -- ~70px por fila + 8px de separación). */
-.alerta-flotante-lista{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:8px;max-height:340px;overflow-y:auto;}
-.alerta-flotante-item{display:flex;flex-direction:column;gap:2px;padding-bottom:6px;border-bottom:1px dashed var(--gray-border);}
-.alerta-flotante-item:last-child{border-bottom:none;padding-bottom:0;}
-.alerta-flotante-item-linea{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
-.alerta-flotante-detalle{color:var(--text-secondary);font-size:11.5px;display:block;}
+   en pantallas/expedientes.js). Tabla compacta de 5 columnas (Expediente,
+   Paciente, Subservicio, Entidad, Municipio) -- letra chica pero legible,
+   cada dato recortado con "..." en vez de amontonarse o partirse en varias
+   líneas. Máximo ~5 filas visibles, de ahí para arriba scroll dentro de la
+   misma alerta en vez de que crezca sin límite. */
+.alerta-flotante-lista{
+  display:grid;grid-template-columns:minmax(52px,.7fr) minmax(80px,1.3fr) minmax(80px,1.2fr) minmax(62px,.9fr) minmax(62px,.9fr);
+  column-gap:10px;row-gap:5px;margin:6px 0 0;padding:0;font-size:11px;max-height:170px;overflow-y:auto;
+}
+.alerta-flotante-fila{display:contents;}
+.alerta-flotante-fila > *{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.alerta-flotante-detalle{color:var(--text-secondary);}
 .alerta-flotante-paciente{color:var(--text-secondary);}
-.alerta-flotante-encabezado-exp{flex-shrink:0;}
-/* Fila de encabezados (Expediente / Paciente, y abajo Subservicio / Estado /
-   Municipio), siempre fija como primera fila de la lista -- no es un
-   expediente, por eso no lleva liga ni se cuenta en el total. */
-.alerta-flotante-item.alerta-flotante-encabezado{
-  font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.02em;
-  color:var(--text-secondary);border-bottom:1px solid var(--gray-border);padding-bottom:6px;margin-bottom:2px;
-  /* Fijo arriba del todo al hacer scroll en la lista, para que siempre se
-     vea a qué corresponde cada columna aunque haya más de 5 pendientes --
-     el fondo debe repetir el de la alerta para no dejar ver lo que pasa debajo. */
+/* Fila de encabezados (Expediente / Paciente / Subservicio / Entidad /
+   Municipio), siempre fija como primera fila -- no es un expediente, por
+   eso no lleva liga ni se cuenta en el total. Fija arriba al hacer scroll
+   por más de 5 pendientes -- el fondo debe repetir el de la alerta para no
+   dejar ver lo que pasa debajo. */
+.alerta-flotante-encabezado > *{
+  font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.02em;
+  color:var(--text-secondary);border-bottom:1px solid var(--gray-border);padding-bottom:4px;
   position:sticky;top:-1px;background:var(--white);z-index:1;
 }
-.alerta-flotante.proveedor-respondio .alerta-flotante-item.alerta-flotante-encabezado{background:var(--sem-naranja-bg);}
+.alerta-flotante.proveedor-respondio .alerta-flotante-encabezado > *{background:var(--sem-naranja-bg);}
 /* Naranja para diferenciarla de otros tipos de alerta flotante que pueda
    haber a futuro -- ej. "el proveedor respondió un expediente". */
 .alerta-flotante.proveedor-respondio{
