@@ -11,7 +11,7 @@ compatibilidad aplicadas en todos los scripts:
 ## Orden de ejecución (en tu base de desarrollo)
 
 1. `00_create_types.sql` — crea el tipo `dbo.IntList` (requerido por 01 y 03)
-2. `01_ST_CP_ObtenerExpedientesSinProveedorMedico.sql` — listado principal (Servicio, titular, teléfono, correo, fecha de asignación de proveedor). Solo trabaja los subservicios 377 (Check Up), 383 (Consulta Médica en Consultorio) y 420 (Plan Visión), y solo considera expedientes que ya tienen su fila en el subsistema correspondiente (`Check_Up`, `S2_ReferciasMedicas`, `s2_cPuntoVision`)
+2. `01_ST_CP_ObtenerExpedientesSinProveedorMedico.sql` — listado principal (Servicio, titular, teléfono, correo, fecha de asignación de proveedor). Trabaja 8 subservicios: 226 Referencias Médicas, 376 Segunda Opinión, 377 Check Up, 383 Consulta Médica en Consultorio, 403 Renta de Equipo Médico, 404 Enfermería a Domicilio, 420 Plan Visión y 432 Envío de Medicamentos. Para la mayoría exige que el expediente ya tenga su fila en el subsistema correspondiente (`S2_ReferciasMedicas`, `Check_Up`, `s2_cPuntoVision`, `s2_RentaEquipoMedico`, `s2_EnfermeriaDomicilio`, `s2_EnvioDeMedicamentos`) — **excepto 376**, cuya tabla (`S2_SegundaOpinion`) dejó de alimentarse desde 2021 y por eso no se le exige (ver comentario en el propio script)
 3. `02_ST_CP_ObtenerCatalogoServicio.sql` — combo Servicio
 4. `03_ST_CP_ObtenerCatalogoCuentas.sql` — catálogo de cuentas
 5. `04_ST_CP_RegistrarSeguimiento.sql` — inserta en `dbo.Seguimiento` (tabla ya existente)
