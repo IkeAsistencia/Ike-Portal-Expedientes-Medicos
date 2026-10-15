@@ -358,17 +358,34 @@ function notificarExpedientesNuevos(nuevos) {
 // Aviso a Cabina cuando un Proveedor responde (el expediente ya estaba en
 // pantalla, pero cambió a "Seguimiento Proveedor"). Además del cambio de
 // estatus que ya se ve en la tabla, se pidió una alerta aparte (sección 1
-// de "Puntos a modificar.docx"): esquina superior derecha, con sonido,
-// sin botón de aceptar, se quita sola a los 10s -- no bloquea la pantalla.
+// de "Puntos a modificar.docx"): esquina superior derecha, en naranja (para
+// diferenciarla de otros tipos de alerta), con el número de expediente como
+// liga -- igual que en la tabla, abre directo su Seguimiento --, con
+// sonido, sin botón de aceptar, se quita sola a los 20s sin bloquear la
+// pantalla.
 function notificarRespuestaProveedor(respondidos) {
   const numeros = respondidos.map(r => r.expediente);
-  const mensaje = numeros.length === 1
+  const liga = (exp) => `<a href="#" class="alerta-flotante-link" data-exp="${exp}">${exp}</a>`;
+
+  const mensajeToast = numeros.length === 1
     ? `El proveedor respondió: expediente ${numeros[0]}.`
     : numeros.length <= 4
       ? `El proveedor respondió ${numeros.length} expedientes: ${numeros.join(", ")}.`
       : `El proveedor respondió ${numeros.length} expedientes.`;
-  toast(mensaje, "success", 6000);
-  mostrarAlertaFlotante(mensaje);
+  toast(mensajeToast, "success", 6000);
+
+  const mensajeHtml = numeros.length === 1
+    ? `El proveedor respondió: expediente ${liga(numeros[0])}.`
+    : numeros.length <= 4
+      ? `El proveedor respondió ${numeros.length} expedientes: ${numeros.map(liga).join(", ")}.`
+      : `El proveedor respondió ${numeros.length} expedientes.`;
+  mostrarAlertaFlotante(mensajeHtml, {
+    tipo: "proveedor-respondio",
+    alClicLink: (exp) => {
+      const rec = expedientesActuales.find(x => x.expediente === exp);
+      if (rec) abrirSeguimiento(rec, "link");
+    },
+  });
 }
 
 async function ejecutarBusqueda(params, { silencioso }) {
