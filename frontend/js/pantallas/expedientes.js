@@ -2,7 +2,7 @@
 import { api } from "../core/api.js";
 import { escapeHtml, normalizarEntidad } from "../core/formato.js";
 import { toast } from "../core/toast.js";
-import { mostrarAlertaFlotante } from "../componentes/alerta-flotante.js";
+import { actualizarAlertaPersistente, quitarAlertaPersistente } from "../componentes/alerta-flotante.js";
 import { esPerfilAdministrador, esPerfilCabina, esPerfilProveedor } from "../core/sesion.js";
 import {
   cargarCatalogoCuentas, cargarCatalogoEntidades, cargarServiciosEnSelect,
@@ -19,7 +19,7 @@ import { limitarADigitos } from "../componentes/campo-numerico.js";
 import { crearMultiselectCuentas } from "../componentes/multiselect-cuentas.js";
 import { filtrosExpedientesHtml, leerParametrosBusqueda } from "../componentes/filtros-expedientes.js";
 import { paginar, renderPaginador } from "../componentes/paginador.js";
-import { filaMensaje, renderFilasExpedientes, tablaExpedientesHtml } from "../componentes/tabla-expedientes.js";
+import { filaMensaje, puntoSemaforo, renderFilasExpedientes, tablaExpedientesHtml } from "../componentes/tabla-expedientes.js";
 import { abrirModalCorte } from "./corte.js";
 import { abrirSeguimiento } from "./seguimiento.js";
 
@@ -131,6 +131,12 @@ let estatusVisiblesAnteriores = null;
 // ninguno de los dos aparece en "Abierto", así que si solo se comparara
 // contra lo filtrado (estatusVisiblesAnteriores), ese cambio nunca se vería.
 let estatusTodosAnteriores = null;
+
+// Expedientes con respuesta del proveedor que Cabina todavía no revisa --
+// se acumulan aquí (en vez de desaparecer solos) y solo se quitan cuando el
+// expediente deja de estar en "Seguimiento Proveedor" (reconciliarRespuestasPendientes).
+const respuestasPendientes = new Map();
+const ID_ALERTA_RESPUESTAS = "alerta-respuestas-proveedor";
 
 const $ = (id) => document.getElementById(id);
 
@@ -412,13 +418,13 @@ function notificarExpedientesNuevos(nuevos) {
 // estatus que ya se ve en la tabla, se pidió una alerta aparte (sección 1
 // de "Puntos a modificar.docx"): esquina superior derecha, en naranja (para
 // diferenciarla de otros tipos de alerta), con el número de expediente como
-// liga -- igual que en la tabla, abre directo su Seguimiento --, con
-// sonido, sin botón de aceptar, se quita sola a los 20s sin bloquear la
-// pantalla.
+// liga -- igual que en la tabla, abre directo su Seguimiento. A diferencia
+// del primer diseño, ahora NO se quita sola: los expedientes se van
+// acumulando en la misma alerta hasta que Cabina le cambia el estatus (ver
+// reconciliarRespuestasPendientes), y cada uno muestra también el nombre
+// del paciente y su semáforo.
 function notificarRespuestaProveedor(respondidos) {
   const numeros = respondidos.map(r => r.expediente);
-  const liga = (exp) => `<a href="#" class="alerta-flotante-link" data-exp="${exp}">${exp}</a>`;
-
   const mensajeToast = numeros.length === 1
     ? `El proveedor respondió: expediente ${numeros[0]}.`
     : numeros.length <= 4
@@ -426,13 +432,55 @@ function notificarRespuestaProveedor(respondidos) {
       : `El proveedor respondió ${numeros.length} expedientes.`;
   toast(mensajeToast, "success", 6000);
 
-  const mensajeHtml = numeros.length === 1
-    ? `El proveedor respondió: expediente ${liga(numeros[0])}.`
-    : numeros.length <= 4
-      ? `El proveedor respondió ${numeros.length} expedientes: ${numeros.map(liga).join(", ")}.`
-      : `El proveedor respondió ${numeros.length} expedientes.`;
-  mostrarAlertaFlotante(mensajeHtml, {
+  respondidos.forEach(r => {
+    respuestasPendientes.set(r.expediente, {
+      expediente: r.expediente,
+      nombre_paciente: r.nombre_paciente,
+      color_semaforo: r.color_semaforo,
+      tiempo_semaforo: r.tiempo_semaforo,
+    });
+  });
+  renderAlertaRespuestasPendientes({ sonar: true });
+}
+
+// Quita de la alerta acumulada cualquier expediente que ya no esté en
+// "Seguimiento Proveedor" (porque Cabina lo revisó y le cambió el estatus) o
+// que ya no venga en la respuesta del servidor. Solo tiene sentido correrlo
+// con una búsqueda que trae TODO (sin acotar por número de expediente).
+function reconciliarRespuestasPendientes(data) {
+  if (respuestasPendientes.size === 0) return;
+  const porExpediente = new Map(data.map(r => [r.expediente, r]));
+  let cambio = false;
+  for (const exp of Array.from(respuestasPendientes.keys())) {
+    const actual = porExpediente.get(exp);
+    if (!actual || actual.estatus !== "Seguimiento Proveedor") {
+      respuestasPendientes.delete(exp);
+      cambio = true;
+    }
+  }
+  if (cambio) renderAlertaRespuestasPendientes({ sonar: false });
+}
+
+function renderAlertaRespuestasPendientes({ sonar }) {
+  if (respuestasPendientes.size === 0) {
+    quitarAlertaPersistente(ID_ALERTA_RESPUESTAS);
+    return;
+  }
+  const pendientes = Array.from(respuestasPendientes.values());
+  const titulo = pendientes.length === 1
+    ? "El proveedor respondió 1 expediente:"
+    : `El proveedor respondió ${pendientes.length} expedientes:`;
+  const items = pendientes.map(p => `
+    <li class="alerta-flotante-item">
+      <a href="#" class="alerta-flotante-link" data-exp="${p.expediente}">${p.expediente}</a>
+      <span class="alerta-flotante-paciente">${escapeHtml(p.nombre_paciente || "")}</span>
+      ${puntoSemaforo(p.color_semaforo, p.tiempo_semaforo)}
+    </li>`).join("");
+  const mensajeHtml = `${titulo}<ul class="alerta-flotante-lista">${items}</ul>`;
+
+  actualizarAlertaPersistente(ID_ALERTA_RESPUESTAS, mensajeHtml, {
     tipo: "proveedor-respondio",
+    sonar,
     alClicLink: (exp) => {
       const rec = expedientesActuales.find(x => x.expediente === exp);
       if (rec) abrirSeguimiento(rec, "link");
@@ -471,6 +519,9 @@ async function ejecutarBusqueda(params, { silencioso }) {
         estatusTodosAnteriores.get(r.expediente) !== "Seguimiento Proveedor"
       );
       if (respondidos.length > 0) notificarRespuestaProveedor(respondidos);
+    }
+    if (!params.cl_expediente && (esPerfilCabina() || esPerfilAdministrador())) {
+      reconciliarRespuestasPendientes(data);
     }
     actualizarBaselineVisibles(filtrados);
     actualizarBaselineTodos(data);
@@ -678,6 +729,8 @@ export function reiniciar() {
   filtroSemaforo = null;
   estatusVisiblesAnteriores = null;
   estatusTodosAnteriores = null;
+  respuestasPendientes.clear();
+  quitarAlertaPersistente(ID_ALERTA_RESPUESTAS);
   limpiarFiltros();
   $("f-estatus").value = "";
   $("tabla-expedientes-body").innerHTML = "";
