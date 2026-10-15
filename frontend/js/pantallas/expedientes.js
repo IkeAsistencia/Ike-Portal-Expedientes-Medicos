@@ -55,10 +55,10 @@ const PLANTILLA = `
     <div class="semaforo-panel">
     <div class="semaforo-filtro" id="semaforo-filtro">
       <span class="semaforo-filtro-titulo">Filtrar por semáforo</span>
-      <button type="button" class="semaforo-btn" data-color="verde" title="Ver solo los verdes"><i class="semaforo-punto verde"></i>Verde <b id="semaforo-n-verde">0</b></button>
-      <button type="button" class="semaforo-btn" data-color="amarillo" title="Ver solo los amarillos" id="semaforo-btn-amarillo"><i class="semaforo-punto amarillo"></i>Amarillo <b id="semaforo-n-amarillo">0</b></button>
-      <button type="button" class="semaforo-btn" data-color="naranja" title="Ver solo los naranjas"><i class="semaforo-punto naranja"></i>Naranja <b id="semaforo-n-naranja">0</b></button>
-      <button type="button" class="semaforo-btn" data-color="rojo" title="Ver solo los rojos"><i class="semaforo-punto rojo"></i>Rojo <b id="semaforo-n-rojo">0</b></button>
+      <button type="button" class="semaforo-btn" data-color="verde" title="Ver solo los expedientes en tiempo"><i class="semaforo-punto verde"></i>En tiempo <b id="semaforo-n-verde">0</b></button>
+      <button type="button" class="semaforo-btn" data-color="amarillo" title="Ver solo los expedientes por vencer" id="semaforo-btn-amarillo"><i class="semaforo-punto amarillo"></i>Por vencer <b id="semaforo-n-amarillo">0</b></button>
+      <button type="button" class="semaforo-btn" data-color="naranja" title="Ver solo los expedientes urgentes"><i class="semaforo-punto naranja"></i>Urgente <b id="semaforo-n-naranja">0</b></button>
+      <button type="button" class="semaforo-btn" data-color="rojo" title="Ver solo los expedientes vencidos"><i class="semaforo-punto rojo"></i>Vencido <b id="semaforo-n-rojo">0</b></button>
       <button type="button" class="btn-link-semaforo hidden" id="semaforo-quitar">Quitar filtro</button>
     </div>
     <details class="semaforo-leyenda" open>
