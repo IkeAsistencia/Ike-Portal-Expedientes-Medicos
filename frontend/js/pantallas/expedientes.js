@@ -61,7 +61,7 @@ const PLANTILLA = `
       <button type="button" class="semaforo-btn" data-color="rojo" title="Ver solo los expedientes vencidos"><i class="semaforo-punto rojo"></i>Vencido <b id="semaforo-n-rojo">0</b></button>
       <button type="button" class="btn-link-semaforo hidden" id="semaforo-quitar">Quitar filtro</button>
     </div>
-    <details class="semaforo-leyenda" open>
+    <details class="semaforo-leyenda">
       <summary>⏱ Semáforo de tiempos</summary>
       <div class="semaforo-grid">
         <div class="semaforo-fila" id="semaforo-filas-sin-escalar">
