@@ -51,6 +51,14 @@ const PLANTILLA = `
         <button class="btn btn-primary" id="btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
       </div>
     </div>
+    <div class="semaforo-leyenda">
+      <strong>Semáforo (⏱):</strong>
+      <span class="item"><span class="semaforo-punto verde"></span> dentro de tiempo</span>
+      <span class="item"><span class="semaforo-punto amarillo"></span> acercándose al límite</span>
+      <span class="item"><span class="semaforo-punto naranja"></span> fuera de tiempo</span>
+      <span class="item"><span class="semaforo-punto rojo"></span> vencido</span>
+      <span>— es distinto del Estado del expediente.</span>
+    </div>
     <div class="table-wrap table-wrap-listado">
       ${tablaExpedientesHtml({
         idTabla: "tabla-expedientes",

@@ -2,19 +2,18 @@ import calendar
 from datetime import date
 
 from app.db.connection import as_tvp_rows, call_procedure
-from app.db.local_store import get_local_connection
+from app.repositories import estatus_repo
 from app.schemas.expediente import Expediente, ExpedienteFiltro, EstatusExpediente
+from app.services import semaforo_service
 
 MESES_MAXIMOS_RANGO = 3
 
 
-def _obtener_estatus(cl_expediente: int) -> str:
-    with get_local_connection() as conn:
-        row = conn.execute(
-            "SELECT estatus FROM estatus_expediente WHERE cl_expediente = ?",
-            (cl_expediente,),
-        ).fetchone()
-        return row["estatus"] if row else EstatusExpediente.ABIERTO.value
+def _obtener_estatus_y_fecha_cambio(cl_expediente: int) -> tuple[str, str | None]:
+    detalle = estatus_repo.obtener_detalle(cl_expediente)
+    if not detalle:
+        return EstatusExpediente.ABIERTO.value, None
+    return detalle["estatus"], detalle["fecha_cambio"]
 
 
 def _sumar_meses(fecha: date, meses: int) -> date:
@@ -102,7 +101,13 @@ def listar_expedientes(filtro: ExpedienteFiltro) -> list[Expediente]:
 
     resultado: list[Expediente] = []
     for row in rows:
-        estatus = _obtener_estatus(row["Expediente"])
+        estatus, fecha_cambio_estatus = _obtener_estatus_y_fecha_cambio(row["Expediente"])
+        color_semaforo = semaforo_service.calcular_color(
+            cl_sub_servicio=row["ClSubServicio"],
+            estatus=estatus,
+            fecha_apertura=row["FechaAperturaCompleta"],
+            fecha_cambio_estatus=fecha_cambio_estatus,
+        )
         resultado.append(
             Expediente(
                 expediente=row["Expediente"],
@@ -120,6 +125,7 @@ def listar_expedientes(filtro: ExpedienteFiltro) -> list[Expediente]:
                 telefono=row.get("Telefono"),
                 email=row.get("Email"),
                 estatus=estatus,
+                color_semaforo=color_semaforo,
             )
         )
     return resultado

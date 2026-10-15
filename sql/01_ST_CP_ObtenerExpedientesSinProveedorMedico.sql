@@ -74,7 +74,9 @@ BEGIN
 
     SELECT
         CAST(E.FechaApertura AS DATE)                                                        AS FechaAperturaServicio,
+        E.FechaApertura                                                                        AS FechaAperturaCompleta,   -- con hora, para calcular el semáforo (ver app/services/semaforo_service.py)
         E.clExpediente                                                                        AS Expediente,
+        E.clSubServicio                                                                        AS ClSubServicio,          -- código numérico, para el semáforo (no se muestra en pantalla)
         C.Nombre                                                                               AS Cuenta,
         S.dsServicio                                                                            AS TipoServicio,
         SS.dsSubservicio                                                                        AS TipoSubservicio,

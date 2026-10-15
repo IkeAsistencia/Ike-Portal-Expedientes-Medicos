@@ -41,6 +41,10 @@ class Expediente(BaseModel):
     email: Optional[str] = None
     # No viene de SQL Server: se resuelve desde la base local (ver estatus_repo.py)
     estatus: EstatusExpediente = EstatusExpediente.ABIERTO
+    # Semáforo del Expediente (distinto del badge de Estado) -- ver
+    # app/services/semaforo_service.py. None = no aplica (ya hay respuesta
+    # del proveedor o el caso ya avanzó).
+    color_semaforo: Optional[str] = None
 
 
 class ExpedienteFiltro(BaseModel):
