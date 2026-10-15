@@ -53,11 +53,26 @@ const PLANTILLA = `
       </div>
     </div>
     <div class="semaforo-leyenda">
-      <strong>Semáforo (⏱):</strong>
-      <span class="item"><span class="semaforo-punto verde"></span> dentro de tiempo</span>
-      <span class="item"><span class="semaforo-punto amarillo"></span> acercándose al límite</span>
-      <span class="item"><span class="semaforo-punto naranja"></span> fuera de tiempo</span>
-      <span class="item"><span class="semaforo-punto rojo"></span> vencido</span>
+      <div class="semaforo-leyenda-fila">
+        <strong>Semáforo (⏱) — sin escalar, primer contacto</strong>
+        <span class="item"><span class="semaforo-punto verde"></span> &lt;6h</span>
+        <span class="item"><span class="semaforo-punto amarillo"></span> 6-12h</span>
+        <span class="item"><span class="semaforo-punto naranja"></span> 12-24h</span>
+        <span class="item"><span class="semaforo-punto rojo"></span> &gt;24h</span>
+      </div>
+      <div class="semaforo-leyenda-fila">
+        <strong>— segundo contacto</strong>
+        <span class="item"><span class="semaforo-punto verde"></span> &lt;12h</span>
+        <span class="item"><span class="semaforo-punto amarillo"></span> 12-48h</span>
+        <span class="item"><span class="semaforo-punto naranja"></span> 48-72h</span>
+        <span class="item"><span class="semaforo-punto rojo"></span> &gt;72h</span>
+      </div>
+      <div class="semaforo-leyenda-fila">
+        <strong>— ya escalado a proveedor</strong>
+        <span class="item"><span class="semaforo-punto verde"></span> ≤120min</span>
+        <span class="item"><span class="semaforo-punto naranja"></span> 120-180min</span>
+        <span class="item"><span class="semaforo-punto rojo"></span> &gt;180min (vencido)</span>
+      </div>
     </div>
     <div class="table-wrap table-wrap-listado">
       ${tablaExpedientesHtml({

@@ -190,11 +190,12 @@ tbody tr:hover{background:#FAFAFA;}
 .semaforo-punto.rojo{background:var(--sem-rojo);}
 
 .semaforo-leyenda{
-  display:flex;flex-wrap:wrap;gap:14px;align-items:center;
+  display:flex;flex-direction:column;gap:4px;
   font-size:11px;color:var(--text-secondary);padding:8px 14px;margin:-4px 0 10px;
 }
-.semaforo-leyenda strong{color:var(--navy);font-weight:600;}
-.semaforo-leyenda .item{display:inline-flex;align-items:center;gap:5px;}
+.semaforo-leyenda-fila{display:flex;flex-wrap:wrap;gap:14px;align-items:center;}
+.semaforo-leyenda strong{color:var(--navy);font-weight:600;min-width:190px;}
+.semaforo-leyenda .item{display:inline-flex;align-items:center;gap:5px;white-space:nowrap;}
 
 /* ---------- SEGUIMIENTO ---------- */
 .info-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;}
