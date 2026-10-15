@@ -27,7 +27,7 @@
   /* Semáforo del Expediente (distinto del badge de Estado) -- 4 colores
      propios para no confundirlos con los de --amber/--green de arriba. */
   --sem-verde: #107C10;
-  --sem-amarillo: #9D7700;
+  --sem-amarillo: #F2C811;
   --sem-amarillo-bg: #FFF4CE;
   --sem-naranja: #CA5010;
   --sem-naranja-bg: #FDE7D9;
