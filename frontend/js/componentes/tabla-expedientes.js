@@ -27,10 +27,11 @@ const SIGNIFICADO_SEMAFORO = {
 /* Punto de color del semáforo (distinto del badge de Estado, ver sección 1
    de "Puntos a modificar.docx"). null = no aplica (ya hay respuesta del
    proveedor o el caso ya avanzó) -- se muestra un punto gris neutro. */
-export function puntoSemaforo(color) {
+export function puntoSemaforo(color, tiempo) {
   const titulo = SIGNIFICADO_SEMAFORO[color] || "Semáforo: no aplica (ya tiene respuesta o avanzó)";
   const clase = color ? escapeHtml(color) : "";
-  return `<span class="semaforo-punto ${clase}" title="${titulo}"></span>`;
+  const texto = tiempo ? `<span class="semaforo-tiempo">${escapeHtml(tiempo)}</span>` : "";
+  return `<span class="semaforo-celda" title="${titulo}${tiempo ? " · " + escapeHtml(tiempo) : ""}"><span class="semaforo-punto ${clase}"></span>${texto}</span>`;
 }
 
 function celdaExpediente(numeroExpediente) {
@@ -49,10 +50,10 @@ export function tablaExpedientesHtml({ idTabla, idChkTodos, idTbody, mensajeInic
           <th class="col-frozen" style="width:32px;left:40px;"><input type="checkbox" id="${idChkTodos}"></th>
           <th class="col-frozen" style="width:140px;left:72px;">Fecha Apertura</th>
           <th class="col-frozen" style="width:100px;left:212px;">Expediente</th>
-          <th class="col-frozen" style="width:36px;left:312px;" title="Semáforo del expediente">⏱</th>
-          <th class="col-frozen" style="width:190px;left:348px;">Cuenta</th>
-          <th class="col-frozen" style="width:130px;left:538px;">Servicio</th>
-          <th class="col-frozen col-frozen-last" style="width:150px;left:668px;">Subservicio</th>
+          <th class="col-frozen" style="width:120px;left:312px;" title="Semáforo del expediente y tiempo transcurrido">⏱ Tiempo</th>
+          <th class="col-frozen" style="width:190px;left:432px;">Cuenta</th>
+          <th class="col-frozen" style="width:130px;left:622px;">Servicio</th>
+          <th class="col-frozen col-frozen-last" style="width:150px;left:752px;">Subservicio</th>
           <th>Titular</th><th>Paciente</th><th>Especialidad</th>
           <th>Entidad</th><th>Municipio</th><th>Fecha Asignación Proveedor</th>
           <th>Fecha Cita</th><th>Teléfono</th><th>Correo</th><th>Estado</th>
@@ -81,10 +82,10 @@ export function renderFilasExpedientes(tbody, filas, { inicio, seleccionados, al
       <td class="col-frozen" style="left:40px;"><input type="checkbox" class="chk-expediente" data-exp="${r.expediente}" ${seleccionados.has(r.expediente) ? "checked" : ""}></td>
       <td class="col-frozen" style="left:72px;">${formatDateTime(r.fecha_apertura_completa)}</td>
       <td class="col-frozen" style="left:212px;">${celdaExpediente(r.expediente)}</td>
-      <td class="col-frozen" style="left:312px;">${puntoSemaforo(r.color_semaforo)}</td>
-      <td class="col-frozen" style="left:348px;">${escapeHtml(r.cuenta)}</td>
-      <td class="col-frozen" style="left:538px;">${escapeHtml(r.tipo_servicio || "")}</td>
-      <td class="col-frozen col-frozen-last" style="left:668px;">${escapeHtml(r.tipo_subservicio || "")}</td>
+      <td class="col-frozen" style="left:312px;">${puntoSemaforo(r.color_semaforo, r.tiempo_semaforo)}</td>
+      <td class="col-frozen" style="left:432px;">${escapeHtml(r.cuenta)}</td>
+      <td class="col-frozen" style="left:622px;">${escapeHtml(r.tipo_servicio || "")}</td>
+      <td class="col-frozen col-frozen-last" style="left:752px;">${escapeHtml(r.tipo_subservicio || "")}</td>
       <td>${escapeHtml(r.nombre_titular || "")}</td>
       <td>${escapeHtml(r.nombre_paciente)}</td>
       <td>${escapeHtml(r.especialidad || "")}</td>

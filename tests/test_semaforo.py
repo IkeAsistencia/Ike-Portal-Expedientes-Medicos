@@ -63,3 +63,37 @@ def test_una_vez_que_hay_respuesta_o_el_caso_avanzo_no_aplica_semaforo(monkeypat
 def test_subservicio_sin_grupo_clasificado_no_inventa_color(monkeypatch):
     _fijar_ahora(monkeypatch)
     assert semaforo_service.calcular_color(999, EstatusExpediente.ABIERTO, _apertura(100), None) is None
+
+
+def test_formato_del_tiempo_transcurrido():
+    f = semaforo_service._formato_duracion
+    assert f(0) == "0 min"
+    assert f(45) == "45 min"
+    assert f(60) == "1 h"
+    assert f(80) == "1 h 20 min"
+    assert f(23 * 60 + 59) == "23 h 59 min"
+    assert f(24 * 60) == "1 d"
+    assert f(2 * 24 * 60 + 3 * 60 + 10) == "2 d 3 h"
+    assert f(-5) == "0 min"
+
+
+def test_tiempo_transcurrido_abierto_cuenta_desde_la_apertura(monkeypatch):
+    _fijar_ahora(monkeypatch)
+    texto = semaforo_service.tiempo_transcurrido(EstatusExpediente.ABIERTO, _apertura(13.5), None)
+    assert texto == "13 h 30 min"
+
+
+def test_tiempo_transcurrido_en_espera_cuenta_desde_el_cambio_de_estatus(monkeypatch):
+    _fijar_ahora(monkeypatch)
+    # Se mandó al proveedor hace 135 minutos (11:00 → 09:45 del mismo día)
+    assert semaforo_service.tiempo_transcurrido(
+        EstatusExpediente.EN_ESPERA_RESPUESTA, _apertura(100), "2026-08-01 09:45:00"
+    ) == "2 h 15 min"
+    # Sin fecha de cambio no se inventa un tiempo
+    assert semaforo_service.tiempo_transcurrido(EstatusExpediente.EN_ESPERA_RESPUESTA, _apertura(100), None) is None
+
+
+def test_tiempo_transcurrido_none_donde_no_aplica_semaforo(monkeypatch):
+    _fijar_ahora(monkeypatch)
+    for estatus in (EstatusExpediente.SEGUIMIENTO_PROVEEDOR, EstatusExpediente.SEGUIMIENTO_CITA):
+        assert semaforo_service.tiempo_transcurrido(estatus, _apertura(30), None) is None

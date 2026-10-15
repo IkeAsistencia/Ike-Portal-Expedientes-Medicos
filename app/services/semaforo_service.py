@@ -115,3 +115,35 @@ def calcular_color(
         return None
 
     return _color_por_umbrales(_horas_desde(fecha_apertura), umbrales)
+
+
+def _formato_duracion(minutos: float) -> str:
+    """Texto corto del tiempo transcurrido: '45 min', '13 h 20 min', '2 d 3 h'."""
+    minutos = max(0, int(minutos))
+    if minutos < 60:
+        return f"{minutos} min"
+    horas, resto = divmod(minutos, 60)
+    if horas < 24:
+        return f"{horas} h {resto} min" if resto else f"{horas} h"
+    dias, horas = divmod(horas, 24)
+    return f"{dias} d {horas} h" if horas else f"{dias} d"
+
+
+def tiempo_transcurrido(
+    estatus: EstatusExpediente,
+    fecha_apertura: datetime,
+    fecha_cambio_estatus: str | None,
+) -> str | None:
+    """
+    Texto del tiempo que lleva el expediente en la etapa que mide el
+    semáforo (el mismo que usa calcular_color): desde la apertura mientras
+    está "Abierto", desde que se mandó al proveedor en "En Espera de
+    Respuesta". None donde no aplica semáforo.
+    """
+    if estatus in _ESTATUS_SIN_SEMAFORO:
+        return None
+    if estatus == EstatusExpediente.EN_ESPERA_RESPUESTA:
+        if not fecha_cambio_estatus:
+            return None
+        return _formato_duracion(_minutos_desde(fecha_cambio_estatus))
+    return _formato_duracion(_horas_desde(fecha_apertura) * 60)

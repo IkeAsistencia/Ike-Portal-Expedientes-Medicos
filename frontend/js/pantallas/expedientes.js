@@ -52,27 +52,37 @@ const PLANTILLA = `
         <button class="btn btn-primary" id="btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
       </div>
     </div>
-    <div class="semaforo-leyenda">
-      <div class="semaforo-leyenda-fila">
-        <strong>Semáforo (⏱) — sin escalar, primer contacto</strong>
-        <span class="item"><span class="semaforo-punto verde"></span> &lt;6h</span>
-        <span class="item"><span class="semaforo-punto amarillo"></span> 6-12h</span>
-        <span class="item"><span class="semaforo-punto naranja"></span> 12-24h</span>
-        <span class="item"><span class="semaforo-punto rojo"></span> &gt;24h</span>
+    <div class="semaforo-panel">
+    <div class="semaforo-filtro" id="semaforo-filtro">
+      <span class="semaforo-filtro-titulo">Filtrar por semáforo</span>
+      <button type="button" class="semaforo-btn" data-color="verde" title="Ver solo los verdes"><i class="semaforo-punto verde"></i>Verde <b id="semaforo-n-verde">0</b></button>
+      <button type="button" class="semaforo-btn" data-color="amarillo" title="Ver solo los amarillos" id="semaforo-btn-amarillo"><i class="semaforo-punto amarillo"></i>Amarillo <b id="semaforo-n-amarillo">0</b></button>
+      <button type="button" class="semaforo-btn" data-color="naranja" title="Ver solo los naranjas"><i class="semaforo-punto naranja"></i>Naranja <b id="semaforo-n-naranja">0</b></button>
+      <button type="button" class="semaforo-btn" data-color="rojo" title="Ver solo los rojos"><i class="semaforo-punto rojo"></i>Rojo <b id="semaforo-n-rojo">0</b></button>
+      <button type="button" class="btn-link-semaforo hidden" id="semaforo-quitar">Quitar filtro</button>
+    </div>
+    <details class="semaforo-leyenda" open>
+      <summary>⏱ Semáforo de tiempos</summary>
+      <div class="semaforo-grid">
+        <div class="semaforo-fila" id="semaforo-filas-sin-escalar">
+          <div class="semaforo-grupo"><strong>Primer contacto</strong><span>Sin escalar a proveedor</span></div>
+          <span class="semaforo-chip"><i class="semaforo-punto verde"></i>&lt; 6 h</span>
+          <span class="semaforo-chip"><i class="semaforo-punto amarillo"></i>6 – 12 h</span>
+          <span class="semaforo-chip"><i class="semaforo-punto naranja"></i>12 – 24 h</span>
+          <span class="semaforo-chip"><i class="semaforo-punto rojo"></i>&gt; 24 h</span>
+          <div class="semaforo-grupo"><strong>Segundo contacto</strong><span>Sin escalar a proveedor</span></div>
+          <span class="semaforo-chip"><i class="semaforo-punto verde"></i>&lt; 12 h</span>
+          <span class="semaforo-chip"><i class="semaforo-punto amarillo"></i>12 – 48 h</span>
+          <span class="semaforo-chip"><i class="semaforo-punto naranja"></i>48 – 72 h</span>
+          <span class="semaforo-chip"><i class="semaforo-punto rojo"></i>&gt; 72 h</span>
+        </div>
+        <div class="semaforo-grupo"><strong>Escalado a proveedor</strong><span>Tiempo sin respuesta</span></div>
+        <span class="semaforo-chip"><i class="semaforo-punto verde"></i>≤ 120 min</span>
+        <span class="semaforo-vacio"></span>
+        <span class="semaforo-chip"><i class="semaforo-punto naranja"></i>120 – 180 min</span>
+        <span class="semaforo-chip"><i class="semaforo-punto rojo"></i>&gt; 180 min (vencido)</span>
       </div>
-      <div class="semaforo-leyenda-fila">
-        <strong>— segundo contacto</strong>
-        <span class="item"><span class="semaforo-punto verde"></span> &lt;12h</span>
-        <span class="item"><span class="semaforo-punto amarillo"></span> 12-48h</span>
-        <span class="item"><span class="semaforo-punto naranja"></span> 48-72h</span>
-        <span class="item"><span class="semaforo-punto rojo"></span> &gt;72h</span>
-      </div>
-      <div class="semaforo-leyenda-fila">
-        <strong>— ya escalado a proveedor</strong>
-        <span class="item"><span class="semaforo-punto verde"></span> ≤120min</span>
-        <span class="item"><span class="semaforo-punto naranja"></span> 120-180min</span>
-        <span class="item"><span class="semaforo-punto rojo"></span> &gt;180min (vencido)</span>
-      </div>
+    </details>
     </div>
     <div class="table-wrap table-wrap-listado">
       ${tablaExpedientesHtml({
@@ -96,6 +106,10 @@ let msCuentas = null;
 // tarjeta y se usa como filtro -- sin necesitar que el combo "Estado" tenga
 // una opción exacta para cada KPI (ej. "En Proceso" es dos estatus a la vez).
 let filtroEstatusKPI = null;
+
+// Color del semáforo elegido en la barra "Filtrar por semáforo" (null = todos).
+let filtroSemaforo = null;
+const COLORES_SEMAFORO = ["verde", "amarillo", "naranja", "rojo"];
 
 // Guarda la última búsqueda que el usuario realmente mandó (con "Buscar" o
 // al entrar a la pantalla), para que el refresco silencioso en segundo
@@ -144,8 +158,43 @@ function aplicarFiltroEntidadLocal(rows) {
   return rows.filter(r => normalizarEntidad(r.entidad) === valNormalizado);
 }
 
-function aplicarFiltrosLocales(rows) {
+function aplicarFiltroSemaforoLocal(rows) {
+  return filtroSemaforo ? rows.filter(r => r.color_semaforo === filtroSemaforo) : rows;
+}
+
+// Lo que se ve en la tabla ANTES de filtrar por color: de aquí salen los
+// contadores del semáforo, para que cada número diga cuántos hay de ese color
+// en la vista actual (mismo Estado/Subservicio/Entidad).
+function filasSinFiltroSemaforo(rows) {
   return aplicarFiltroEntidadLocal(aplicarFiltroSubservicioLocal(aplicarFiltroEstatusLocal(rows)));
+}
+
+function aplicarFiltrosLocales(rows) {
+  return aplicarFiltroSemaforoLocal(filasSinFiltroSemaforo(rows));
+}
+
+/* ---------- Semáforo: contadores y filtro por color ---------- */
+function renderSemaforoResumen(base) {
+  const cuenta = { verde: 0, amarillo: 0, naranja: 0, rojo: 0 };
+  base.forEach(r => { if (r.color_semaforo in cuenta) cuenta[r.color_semaforo]++; });
+  COLORES_SEMAFORO.forEach(c => { $("semaforo-n-" + c).textContent = cuenta[c]; });
+  document.querySelectorAll("#semaforo-filtro .semaforo-btn").forEach(b => {
+    b.classList.toggle("activo", b.dataset.color === filtroSemaforo);
+  });
+  $("semaforo-quitar").classList.toggle("hidden", !filtroSemaforo);
+}
+
+function filtrarPorSemaforo(color) {
+  filtroSemaforo = color && color !== filtroSemaforo ? color : null;
+  paginaActual = 1;
+  // Igual que al cambiar de Estado o usar un KPI: no dejar seleccionado algo
+  // que quedó fuera del filtro.
+  seleccionados.clear();
+  $("chk-todos").checked = false;
+  const filtrados = aplicarFiltrosLocales(expedientesActuales);
+  actualizarBaselineVisibles(filtrados);
+  renderTabla(filtrados);
+  renderSemaforoResumen(filasSinFiltroSemaforo(expedientesActuales));
 }
 
 function datosResumenPerfil() {
@@ -177,6 +226,7 @@ function filtrarPorKPI(cardId, estatusList, valorCombo) {
   // el filtro en vez de haber llegado algo de verdad.
   actualizarBaselineVisibles(filtrados);
   renderTabla(filtrados);
+  renderSemaforoResumen(filasSinFiltroSemaforo(expedientesActuales));
   renderKPIs();
   $("tabla-expedientes").scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -281,6 +331,7 @@ function renderTabla(rows) {
 /* Vuelve a pintar todo con lo que ya está en memoria, sin ir al servidor. */
 function refrescarVista() {
   renderTabla(aplicarFiltrosLocales(expedientesActuales));
+  renderSemaforoResumen(filasSinFiltroSemaforo(expedientesActuales));
   renderKPIs();
   actualizarNotificacionAtendidos();
 }
@@ -323,6 +374,7 @@ async function loadExpedientes() {
   // Una búsqueda explícita (clic en "Buscar") manda sobre cualquier filtro
   // rápido que se haya activado antes haciendo clic en un KPI.
   filtroEstatusKPI = null;
+  filtroSemaforo = null;
   marcarKpiActivo(null);
   paginaActual = 1;
   // Limpia la selección: si no, quedan marcados expedientes de un estado
@@ -424,6 +476,7 @@ async function ejecutarBusqueda(params, { silencioso }) {
     actualizarBaselineTodos(data);
 
     renderTabla(filtrados);
+    renderSemaforoResumen(params.cl_expediente ? filtrados : filasSinFiltroSemaforo(data));
     renderKPIs();
     actualizarNotificacionAtendidos();
   } catch (err) {
@@ -497,6 +550,11 @@ export function montar(contenedor) {
   msCuentas = crearMultiselectCuentas("f-cuentas");
   limitarADigitos($("f-expediente"));
 
+  $("semaforo-filtro").addEventListener("click", (e) => {
+    if (e.target.closest("#semaforo-quitar")) { filtrarPorSemaforo(null); return; }
+    const btn = e.target.closest(".semaforo-btn");
+    if (btn) filtrarPorSemaforo(btn.dataset.color);
+  });
   $("notif-atendidos-cerrar").addEventListener("click", () => $("notif-atendidos").classList.add("hidden"));
 
   $("kpi-total-card").addEventListener("click", () => {
@@ -578,6 +636,12 @@ export function aplicarPermisos() {
   // jefe): Cabina y Proveedor ya no lo ven.
   $("btn-generar-corte").classList.toggle("hidden-perfil", proveedor || cabina);
 
+  // Semáforo: Proveedor solo ve la leyenda de "Escalado a proveedor"; los
+  // tiempos de "sin escalar" (primer y segundo contacto) son de Cabina.
+  $("semaforo-filas-sin-escalar").classList.toggle("hidden-perfil", proveedor);
+  // Su semáforo (solo "escalado") no tiene amarillo.
+  $("semaforo-btn-amarillo").classList.toggle("hidden-perfil", proveedor);
+
   // KPIs adicionales "Seguimiento Proveedor" y "Seguimiento de Cita", solo para Cabina.
   $("kpi-seguimiento-card").classList.toggle("hidden-perfil", !cabina);
   $("kpi-cita-card").classList.toggle("hidden-perfil", !cabina);
@@ -611,6 +675,7 @@ export function reiniciar() {
   seleccionados.clear();
   paginaActual = 1;
   filtroEstatusKPI = null;
+  filtroSemaforo = null;
   estatusVisiblesAnteriores = null;
   estatusTodosAnteriores = null;
   limpiarFiltros();
