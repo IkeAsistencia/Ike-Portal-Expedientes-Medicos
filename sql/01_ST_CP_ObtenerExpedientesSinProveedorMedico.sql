@@ -134,36 +134,78 @@ BEGIN
     INNER JOIN dbo.cSubServicio SS           ON SS.clSubServicio = E.clSubServicio
     INNER JOIN dbo.cCuenta C                 ON C.clCuenta = E.clCuenta
     INNER JOIN dbo.cUsrApp U                 ON U.clUsrApp = E.clUsrApp
+    -- IMPORTANTE: las 7 tablas de subsistema de abajo NO son únicas por
+    -- clExpediente -- confirmado contra la base real que varias pueden
+    -- tener 2, 3 e incluso 5 filas para el mismo expediente (capturas
+    -- repetidas/corregidas). Un LEFT JOIN normal multiplicaría la fila del
+    -- expediente por cada una de esas filas -- se usa OUTER APPLY + TOP 1
+    -- para quedarnos con una sola (la más reciente por FechaAp).
+    --
     -- Consulta Médica en Consultorio (383): subsistema dbo.S2_ReferciasMedicas.
-    LEFT JOIN dbo.S2_ReferciasMedicas RM     ON RM.clExpediente = E.clExpediente
+    OUTER APPLY (
+        SELECT TOP 1 RM0.*
+        FROM dbo.S2_ReferciasMedicas RM0
+        WHERE RM0.clExpediente = E.clExpediente
+        ORDER BY RM0.FechaAp DESC
+    ) RM
     LEFT JOIN dbo.cEntFed EF                 ON EF.CodEnt = RM.CodEnt
     LEFT JOIN dbo.cMunDel MD                 ON MD.CodEnt = RM.CodEnt AND MD.CodMD = RM.CodMD
     LEFT JOIN dbo.cEspecialidad ESP          ON ESP.clEspecialidad = RM.clEspecialidad
     -- Plan Visión (420): subsistema dbo.s2_cPuntoVision.
-    LEFT JOIN dbo.s2_cPuntoVision PV         ON PV.clExpediente = E.clExpediente
+    OUTER APPLY (
+        SELECT TOP 1 PV0.*
+        FROM dbo.s2_cPuntoVision PV0
+        WHERE PV0.clExpediente = E.clExpediente
+        ORDER BY PV0.FechaAp DESC
+    ) PV
     LEFT JOIN dbo.s2_cPaqueteDescPuntoVision PPV ON PPV.clPaqueteDesc = PV.clPaquete
     LEFT JOIN dbo.cEntFed VE                 ON VE.CodEnt = PV.CodEnt
     LEFT JOIN dbo.cMunDel VMD                ON VMD.CodEnt = PV.CodEnt AND VMD.CodMD = PV.CodMD
     -- Check Up (377): subsistema dbo.Check_Up.
-    LEFT JOIN dbo.Check_Up CKP               ON CKP.clExpediente = E.clExpediente
+    OUTER APPLY (
+        SELECT TOP 1 CKP0.*
+        FROM dbo.Check_Up CKP0
+        WHERE CKP0.clExpediente = E.clExpediente
+        ORDER BY CKP0.FechaAp DESC, CKP0.clCheckUp DESC
+    ) CKP
     LEFT JOIN dbo.cPerfilCheckUp PKU         ON PKU.clPerfil = CKP.clCheckUpTipo
     LEFT JOIN dbo.cEntFed KE                 ON KE.CodEnt = CKP.CodEnt
     LEFT JOIN dbo.cMunDel KMD                ON KMD.CodEnt = CKP.CodEnt AND KMD.CodMD = CKP.CodMD
     -- Segunda Opinión (376): subsistema dbo.S2_SegundaOpinion (OJO: su columna de
     -- entidad se llama "ConEnt", no "CodEnt" como en las demás tablas).
-    LEFT JOIN dbo.S2_SegundaOpinion SO       ON SO.clExpediente = E.clExpediente
+    OUTER APPLY (
+        SELECT TOP 1 SO0.*
+        FROM dbo.S2_SegundaOpinion SO0
+        WHERE SO0.clExpediente = E.clExpediente
+        ORDER BY SO0.FechaAp DESC
+    ) SO
     LEFT JOIN dbo.cEntFed OE                 ON OE.CodEnt = SO.ConEnt
     LEFT JOIN dbo.cMunDel OMD                ON OMD.CodEnt = SO.ConEnt AND OMD.CodMD = SO.CodMD
     -- Renta de Equipo Médico (403): subsistema dbo.s2_RentaEquipoMedico.
-    LEFT JOIN dbo.s2_RentaEquipoMedico REM   ON REM.clExpediente = E.clExpediente
+    OUTER APPLY (
+        SELECT TOP 1 REM0.*
+        FROM dbo.s2_RentaEquipoMedico REM0
+        WHERE REM0.clExpediente = E.clExpediente
+        ORDER BY REM0.FechaAp DESC, REM0.clRentaEquipoMedico DESC
+    ) REM
     LEFT JOIN dbo.cEntFed RE                 ON RE.CodEnt = REM.CodEnt
     LEFT JOIN dbo.cMunDel RMD                ON RMD.CodEnt = REM.CodEnt AND RMD.CodMD = REM.CodMD
     -- Enfermería a Domicilio (404): subsistema dbo.s2_EnfermeriaDomicilio.
-    LEFT JOIN dbo.s2_EnfermeriaDomicilio ED  ON ED.clExpediente = E.clExpediente
+    OUTER APPLY (
+        SELECT TOP 1 ED0.*
+        FROM dbo.s2_EnfermeriaDomicilio ED0
+        WHERE ED0.clExpediente = E.clExpediente
+        ORDER BY ED0.FechaAp DESC, ED0.clEnfermeriaDomicilio DESC
+    ) ED
     LEFT JOIN dbo.cEntFed DE                 ON DE.CodEnt = ED.CodEnt
     LEFT JOIN dbo.cMunDel DMD                ON DMD.CodEnt = ED.CodEnt AND DMD.CodMD = ED.CodMd
     -- Envío de Medicamentos (432): subsistema dbo.s2_EnvioDeMedicamentos.
-    LEFT JOIN dbo.s2_EnvioDeMedicamentos EM  ON EM.clExpediente = E.clExpediente
+    OUTER APPLY (
+        SELECT TOP 1 EM0.*
+        FROM dbo.s2_EnvioDeMedicamentos EM0
+        WHERE EM0.clExpediente = E.clExpediente
+        ORDER BY EM0.FechaAp DESC
+    ) EM
     LEFT JOIN dbo.cEntFed ME                 ON ME.CodEnt = EM.CodEnt
     LEFT JOIN dbo.cMunDel MMD                ON MMD.CodEnt = EM.CodEnt AND MMD.CodMD = EM.CodMD
     LEFT JOIN dbo.ProveedorxExpediente PE    ON PE.clExpediente = E.clExpediente AND PE.clEstatus = 3
