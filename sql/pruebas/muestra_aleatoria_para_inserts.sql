@@ -2,70 +2,108 @@
 -- SOLO PARA DESARROLLO/PRUEBAS -- no inserta ni modifica nada por sí
 -- solo. Compatible con SQL Server 2012 (sin STRING_AGG, que es de 2017+).
 --
--- Idea: tomar 3 expedientes AL AZAR de dbo.Expediente por cada uno de los
--- 8 subservicios que maneja la pantalla Expedientes, y a partir de ESOS
--- mismos expedientes armar (pero NO ejecutar) el INSERT que haría falta
--- para "sembrarlos" también en la tabla de subsistema que le corresponda a
--- cada subservicio (mapeo igual al de
--- sql/01_ST_CP_ObtenerExpedientesSinProveedorMedico.sql):
---   226 "Referencias Médicas"            -> dbo.S2_ReferciasMedicas
---   383 "Consulta Médica en Consultorio" -> dbo.S2_ReferciasMedicas (misma tabla que 226)
---   376 "Segunda Opinión"                -> dbo.S2_SegundaOpinion
---   377 "Check Up"                       -> dbo.Check_Up
---   403 "Renta de Equipo Médico"         -> dbo.s2_RentaEquipoMedico
---   404 "Enfermería a Domicilio"         -> dbo.s2_EnfermeriaDomicilio
---   420 "Plan Visión"                    -> dbo.s2_cPuntoVision
---   432 "Envío de Medicamentos"          -> dbo.s2_EnvioDeMedicamentos
+-- Flujo pensado para "sembrar" expedientes de prueba nuevos (no para
+-- reusar un clExpediente que ya existe):
+--   1) Se toman, al azar, 3 expedientes reales por cada uno de los 8
+--      subservicios del combo -- junto con su fila ya existente en la
+--      tabla de subsistema que le corresponda (mismo mapeo que
+--      sql/01_ST_CP_ObtenerExpedientesSinProveedorMedico.sql) -- como
+--      "plantilla" de valores realistas (entidad/municipio/nombre/etc.)
+--   2) Por cada uno se arma (comentado, SIN ejecutarlo) el INSERT para
+--      dbo.Expediente, y justo después el INSERT para su tabla de
+--      subsistema -- este último usa @NuevoExpediente como clExpediente
+--      en vez del número de la plantilla, porque debe apuntar al
+--      expediente NUEVO que se vaya a crear, no al que se usó de ejemplo.
+--   3) Ninguna columna IDENTITY se incluye en los INSERT que arma (ni
+--      dbo.Expediente.clExpediente ni las tres tablas de subsistema que
+--      tienen su propio identity -- Check_Up.clCheckUp,
+--      s2_RentaEquipoMedico.clRentaEquipoMedico,
+--      s2_EnfermeriaDomicilio.clEnfermeriaDomicilio -- se detectan solas
+--      vía sys.columns.is_identity, no hace falta listarlas a mano).
 --
--- Cómo usarlo:
---   1) Correr el script completo (es una sola conexión/sesión -- los
---      resultados quedan todos en un solo SELECT final al terminar).
---   2) Revisar la columna "InsertComentado": cada fila trae el texto
---      "-- INSERT INTO tabla (cols) VALUES (...);" ya armado con los
---      valores reales de ese expediente, pero comentado (con "--" al
---      inicio) -- a propósito NO se ejecuta ningún INSERT aquí.
---   3) Copiar las líneas que se vayan a usar, quitarles el "--", y
---      revisarlas a mano antes de correrlas en el ambiente de
---      QA/local que se esté sembrando (sobre todo si clExpediente debe
---      ser un número nuevo en vez del mismo que trae la fila original --
---      si se deja igual y la tabla destino ya tiene ese expediente, el
---      INSERT va a tronar por llave duplicada).
---   4) dbo.Expediente normalmente tiene clExpediente como IDENTITY -- si
---      se va a insertar con el mismo número, hace falta
---      "SET IDENTITY_INSERT dbo.Expediente ON" antes del INSERT y
---      "...OFF" después (no lo hace este script).
+-- Cómo usarlo cuando de verdad se vaya a sembrar un expediente (a mano,
+-- revisando antes cada valor):
+--   DECLARE @NuevoExpediente INT;
+--   <pegar aquí el INSERT INTO dbo.Expediente (...) VALUES (...);>
+--   SET @NuevoExpediente = SCOPE_IDENTITY();
+--   <pegar aquí el INSERT INTO <tabla de subsistema> (...) VALUES (...);>
 --
--- Si un expediente de la muestra tiene más de una captura en su tabla de
--- subsistema (documentado como posible en el SP real), van a salir varios
--- INSERT comentados para ese mismo expediente -- es normal, quédate solo
--- con el que corresponda al revisar.
+-- Mapeo de "nombre del paciente" por tabla de subsistema (ya viene
+-- resuelto solo porque se copia de la fila real de esa tabla, no hace
+-- falta mapearlo a mano -- se deja aquí nomás de referencia):
+--   226/383 -> S2_ReferciasMedicas.NombrePaciente   377 -> Check_Up.NombreBene
+--   376 -> S2_SegundaOpinion.NombreBeneficiario     403 -> s2_RentaEquipoMedico.NombrePaciente
+--   404 -> s2_EnfermeriaDomicilio.NombrePaciente    420 -> s2_cPuntoVision.Nombre
+--   432 -> s2_EnvioDeMedicamentos.Paciente
 -- =====================================================================
 SET NOCOUNT ON;
 
 IF OBJECT_ID('tempdb..#Muestra') IS NOT NULL DROP TABLE #Muestra;
 CREATE TABLE #Muestra (clSubServicio INT, clExpediente INT);
 
-;WITH candidatos AS (
-    SELECT clExpediente, clSubServicio,
-           ROW_NUMBER() OVER (PARTITION BY clSubServicio ORDER BY NEWID()) AS rn
-    FROM dbo.Expediente
-    WHERE clSubServicio IN (226, 376, 377, 383, 403, 404, 420, 432)
-)
+-- Un bloque por subservicio -- cada uno exige que el expediente YA tenga
+-- su fila en la tabla de subsistema que le toca (misma regla que el SP
+-- real), para que la plantilla traiga datos de verdad y no puros NULL.
+-- 376 (Segunda Opinión) es la única excepción: esa tabla dejó de recibir
+-- registros desde dic-2021 (ver nota en el SP real), así que se deja sin
+-- exigir la fila -- si el azar no encuentra ninguno con fila, igual trae
+-- el expediente solo (su INSERT de subsistema va a salir con columnas en
+-- NULL, hay que llenarlas a mano al revisar).
 INSERT INTO #Muestra (clSubServicio, clExpediente)
-SELECT clSubServicio, clExpediente
-FROM candidatos
-WHERE rn <= 3;
+SELECT TOP 3 E.clExpediente, 226 FROM dbo.Expediente E
+WHERE E.clSubServicio = 226 AND EXISTS (SELECT 1 FROM dbo.S2_ReferciasMedicas RM WHERE RM.clExpediente = E.clExpediente)
+ORDER BY NEWID();
+
+INSERT INTO #Muestra (clSubServicio, clExpediente)
+SELECT TOP 3 E.clExpediente, 383 FROM dbo.Expediente E
+WHERE E.clSubServicio = 383 AND EXISTS (SELECT 1 FROM dbo.S2_ReferciasMedicas RM WHERE RM.clExpediente = E.clExpediente)
+ORDER BY NEWID();
+
+INSERT INTO #Muestra (clSubServicio, clExpediente)
+SELECT TOP 3 E.clExpediente, 376 FROM dbo.Expediente E
+WHERE E.clSubServicio = 376
+ORDER BY NEWID();
+
+INSERT INTO #Muestra (clSubServicio, clExpediente)
+SELECT TOP 3 E.clExpediente, 377 FROM dbo.Expediente E
+WHERE E.clSubServicio = 377 AND EXISTS (SELECT 1 FROM dbo.Check_Up CKP WHERE CKP.clExpediente = E.clExpediente)
+ORDER BY NEWID();
+
+INSERT INTO #Muestra (clSubServicio, clExpediente)
+SELECT TOP 3 E.clExpediente, 403 FROM dbo.Expediente E
+WHERE E.clSubServicio = 403 AND EXISTS (SELECT 1 FROM dbo.s2_RentaEquipoMedico REM WHERE REM.clExpediente = E.clExpediente)
+ORDER BY NEWID();
+
+INSERT INTO #Muestra (clSubServicio, clExpediente)
+SELECT TOP 3 E.clExpediente, 404 FROM dbo.Expediente E
+WHERE E.clSubServicio = 404 AND EXISTS (SELECT 1 FROM dbo.s2_EnfermeriaDomicilio ED WHERE ED.clExpediente = E.clExpediente)
+ORDER BY NEWID();
+
+INSERT INTO #Muestra (clSubServicio, clExpediente)
+SELECT TOP 3 E.clExpediente, 420 FROM dbo.Expediente E
+WHERE E.clSubServicio = 420 AND EXISTS (SELECT 1 FROM dbo.s2_cPuntoVision PV WHERE PV.clExpediente = E.clExpediente)
+ORDER BY NEWID();
+
+INSERT INTO #Muestra (clSubServicio, clExpediente)
+SELECT TOP 3 E.clExpediente, 432 FROM dbo.Expediente E
+WHERE E.clSubServicio = 432 AND EXISTS (SELECT 1 FROM dbo.s2_EnvioDeMedicamentos EM WHERE EM.clExpediente = E.clExpediente)
+ORDER BY NEWID();
 
 IF OBJECT_ID('tempdb..#Resultado') IS NOT NULL DROP TABLE #Resultado;
 CREATE TABLE #Resultado (Subservicio NVARCHAR(100), InsertComentado NVARCHAR(MAX));
 GO  -- CREATE PROCEDURE debe ser la única sentencia del batch (SQL Server < 2016 SP1)
 
--- Procedimiento TEMPORAL (vive solo en esta sesión, se borra solo al
--- desconectar o al final de este script): arma, para cualquier tabla, el
--- texto comentado de un INSERT por cada fila que cumpla @where, usando
--- sys.columns/sys.types para no tener que listar las columnas a mano (así
--- sirve igual para dbo.Expediente que para cualquiera de las 7 tablas de
--- subsistema). NUNCA ejecuta el INSERT que arma -- solo lo arma como texto.
+-- Procedimiento TEMPORAL (vive solo en esta sesión): arma, para cualquier
+-- tabla, el texto comentado de un INSERT por cada fila que cumpla @where,
+-- usando sys.columns/sys.types -- así sirve igual para dbo.Expediente que
+-- para cualquiera de las 7 tablas de subsistema, sin tener que listar las
+-- columnas a mano. Reglas que aplica solo:
+--   - Nunca incluye una columna IDENTITY (se genera sola al insertar).
+--   - Si la tabla NO es dbo.Expediente y tiene columna clExpediente, esa
+--     columna sale como el texto literal "@NuevoExpediente" en vez del
+--     número real de la plantilla -- debe apuntar al expediente nuevo que
+--     se cree, no al que se usó de ejemplo (ver encabezado del script).
+-- NUNCA ejecuta el INSERT que arma -- solo lo arma como texto.
 CREATE PROCEDURE #GenerarInserts
     @etiqueta NVARCHAR(100),
     @tabla    SYSNAME,
@@ -85,6 +123,7 @@ BEGIN
         FROM sys.columns c
         JOIN sys.types ty ON ty.user_type_id = c.user_type_id
         WHERE c.object_id = OBJECT_ID(@tabla)
+          AND c.is_identity = 0   -- nunca se setea a mano, se genera sola
         ORDER BY c.column_id;
 
     OPEN cur;
@@ -94,8 +133,13 @@ BEGIN
         IF @columnas <> '' SET @columnas = @columnas + ', ';
         SET @columnas = @columnas + '[' + @columna + ']';
 
-        IF @tipo IN ('char','varchar','nchar','nvarchar','text','ntext','xml','uniqueidentifier',
-                     'date','datetime','datetime2','smalldatetime','time','datetimeoffset')
+        IF @tabla <> 'dbo.Expediente' AND @columna = 'clExpediente'
+            -- FK al expediente NUEVO (todavía no existe mientras se arma
+            -- este texto) -- se deja como placeholder literal, no como
+            -- valor real de la plantilla.
+            SET @expr = @q + '@NuevoExpediente' + @q;
+        ELSE IF @tipo IN ('char','varchar','nchar','nvarchar','text','ntext','xml','uniqueidentifier',
+                           'date','datetime','datetime2','smalldatetime','time','datetimeoffset')
             -- Tipo con comillas: se escapa cualquier comilla simple que traiga el valor
             -- (REPLACE la duplica) y se envuelve entre comillas.
             SET @expr =
@@ -128,33 +172,44 @@ BEGIN
 END
 GO
 
--- Un par de llamadas por subservicio: el INSERT para dbo.Expediente y el
--- de su tabla de subsistema, con los 3 expedientes que le tocaron en #Muestra.
+-- Por cada subservicio: INSERT de dbo.Expediente, una nota recordando el
+-- paso de SCOPE_IDENTITY() que falta hacer a mano, y el INSERT de su
+-- tabla de subsistema (con @NuevoExpediente como placeholder, ver arriba).
 EXEC #GenerarInserts 'Referencias Médicas (226) - Expediente', 'dbo.Expediente', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 226)';
+INSERT INTO #Resultado VALUES ('Referencias Médicas (226) - Nota', '-- DECLARE @NuevoExpediente INT; -- después del INSERT de arriba: SET @NuevoExpediente = SCOPE_IDENTITY();');
 EXEC #GenerarInserts 'Referencias Médicas (226) - Subsistema', 'dbo.S2_ReferciasMedicas', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 226)';
 
 EXEC #GenerarInserts 'Consulta Médica en Consultorio (383) - Expediente', 'dbo.Expediente', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 383)';
+INSERT INTO #Resultado VALUES ('Consulta Médica en Consultorio (383) - Nota', '-- DECLARE @NuevoExpediente INT; -- después del INSERT de arriba: SET @NuevoExpediente = SCOPE_IDENTITY();');
 EXEC #GenerarInserts 'Consulta Médica en Consultorio (383) - Subsistema', 'dbo.S2_ReferciasMedicas', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 383)';
 
 EXEC #GenerarInserts 'Segunda Opinión (376) - Expediente', 'dbo.Expediente', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 376)';
+INSERT INTO #Resultado VALUES ('Segunda Opinión (376) - Nota', '-- DECLARE @NuevoExpediente INT; -- después del INSERT de arriba: SET @NuevoExpediente = SCOPE_IDENTITY(); -- ojo: esta tabla ya no recibe registros desde dic-2021, puede venir vacío.');
 EXEC #GenerarInserts 'Segunda Opinión (376) - Subsistema', 'dbo.S2_SegundaOpinion', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 376)';
 
 EXEC #GenerarInserts 'Check Up (377) - Expediente', 'dbo.Expediente', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 377)';
+INSERT INTO #Resultado VALUES ('Check Up (377) - Nota', '-- DECLARE @NuevoExpediente INT; -- después del INSERT de arriba: SET @NuevoExpediente = SCOPE_IDENTITY();');
 EXEC #GenerarInserts 'Check Up (377) - Subsistema', 'dbo.Check_Up', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 377)';
 
 EXEC #GenerarInserts 'Renta de Equipo Médico (403) - Expediente', 'dbo.Expediente', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 403)';
+INSERT INTO #Resultado VALUES ('Renta de Equipo Médico (403) - Nota', '-- DECLARE @NuevoExpediente INT; -- después del INSERT de arriba: SET @NuevoExpediente = SCOPE_IDENTITY();');
 EXEC #GenerarInserts 'Renta de Equipo Médico (403) - Subsistema', 'dbo.s2_RentaEquipoMedico', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 403)';
 
 EXEC #GenerarInserts 'Enfermería a Domicilio (404) - Expediente', 'dbo.Expediente', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 404)';
+INSERT INTO #Resultado VALUES ('Enfermería a Domicilio (404) - Nota', '-- DECLARE @NuevoExpediente INT; -- después del INSERT de arriba: SET @NuevoExpediente = SCOPE_IDENTITY();');
 EXEC #GenerarInserts 'Enfermería a Domicilio (404) - Subsistema', 'dbo.s2_EnfermeriaDomicilio', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 404)';
 
 EXEC #GenerarInserts 'Plan Visión (420) - Expediente', 'dbo.Expediente', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 420)';
+INSERT INTO #Resultado VALUES ('Plan Visión (420) - Nota', '-- DECLARE @NuevoExpediente INT; -- después del INSERT de arriba: SET @NuevoExpediente = SCOPE_IDENTITY();');
 EXEC #GenerarInserts 'Plan Visión (420) - Subsistema', 'dbo.s2_cPuntoVision', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 420)';
 
 EXEC #GenerarInserts 'Envío de Medicamentos (432) - Expediente', 'dbo.Expediente', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 432)';
+INSERT INTO #Resultado VALUES ('Envío de Medicamentos (432) - Nota', '-- DECLARE @NuevoExpediente INT; -- después del INSERT de arriba: SET @NuevoExpediente = SCOPE_IDENTITY();');
 EXEC #GenerarInserts 'Envío de Medicamentos (432) - Subsistema', 'dbo.s2_EnvioDeMedicamentos', 'clExpediente IN (SELECT clExpediente FROM #Muestra WHERE clSubServicio = 432)';
 
--- Resultado final: una fila por INSERT comentado, agrupado por subservicio.
+-- Resultado final: Expediente / Nota / Subsistema, agrupados por
+-- subservicio (el orden alfabético de "Subservicio" ya deja Expediente
+-- antes que Nota antes que Subsistema dentro de cada grupo).
 SELECT * FROM #Resultado ORDER BY Subservicio, InsertComentado;
 
 DROP PROCEDURE #GenerarInserts;
