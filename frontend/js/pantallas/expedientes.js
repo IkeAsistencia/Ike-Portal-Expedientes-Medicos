@@ -21,7 +21,7 @@ import { filtrosExpedientesHtml, leerParametrosBusqueda } from "../componentes/f
 import { paginar, renderPaginador } from "../componentes/paginador.js";
 import { filaMensaje, puntoSemaforo, renderFilasExpedientes, tablaExpedientesHtml } from "../componentes/tabla-expedientes.js";
 import { abrirModalCorte } from "./corte.js";
-import { abrirSeguimiento } from "./seguimiento.js";
+import { abrirSeguimiento, refrescarSiEsElMismo } from "./seguimiento.js";
 
 const PLANTILLA = `
   <div class="notif-banner hidden" id="notif-atendidos">
@@ -439,6 +439,10 @@ function notificarRespuestaProveedor(respondidos) {
       color_semaforo: r.color_semaforo,
       tiempo_semaforo: r.tiempo_semaforo,
     });
+    // Si Cabina tiene abierta la pantalla de Seguimiento justo de este
+    // expediente, que se vea de una vez la respuesta que Core acaba de
+    // registrar, sin esperar a que alguien lo busque de nuevo a mano.
+    refrescarSiEsElMismo(r.expediente);
   });
   renderAlertaRespuestasPendientes({ sonar: true });
 }
@@ -493,6 +497,7 @@ function renderAlertaRespuestasPendientes({ sonar }) {
   actualizarAlertaPersistente(ID_ALERTA_RESPUESTAS, mensajeHtml, {
     tipo: "proveedor-respondio",
     sonar,
+    colapsable: true,
     alClicLink: (exp) => {
       const rec = expedientesActuales.find(x => x.expediente === exp);
       if (rec) abrirSeguimiento(rec, "link");

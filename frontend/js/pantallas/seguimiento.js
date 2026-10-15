@@ -261,6 +261,15 @@ export async function abrirSeguimiento(record, source) {
   await cargarPagoAnticipado(record);
 }
 
+// Cuando el refresco silencioso de Expedientes detecta que Core actualizó
+// un expediente (ej. el proveedor respondió) y esta pantalla ya está
+// mostrando justo ese expediente, se refresca su listado de Seguimiento
+// (el historial que llena Core) en vez de dejarlo con datos viejos hasta
+// que alguien lo vuelva a buscar a mano.
+export function refrescarSiEsElMismo(clExpediente) {
+  if (registroActual?.expediente === clExpediente) cargarHistorialSise(clExpediente);
+}
+
 async function buscarExpediente() {
   const val = $("sg-buscar-expediente").value;
   if (!val) { toast("Ingresa un número de expediente.", "error"); return; }

@@ -8,6 +8,55 @@
    bloquea la pantalla, no tiene botón de "aceptar". */
 let audioCtx = null;
 
+// Posición (desplazamiento horizontal en px) y estado de contraído que el
+// usuario le haya dado a cada alerta -- se recuerdan mientras dure la sesión
+// (sobreviven a que actualizarAlertaPersistente reconstruya el contenido),
+// y se olvidan cuando la alerta se quita del todo (quitarAlertaPersistente).
+const posiciones = new Map();
+const colapsadas = new Set();
+
+/* Arrastre SOLO horizontal: la alerta vive en la esquina superior derecha
+   (posición vertical fija por diseño) y se pidió que únicamente se pueda
+   mover hacia los lados, no hacia arriba/abajo. Se mueve con transform
+   (no toca left/top), así no interfiere con el layout en columna del
+   contenedor de alertas. */
+function iniciarArrastre(el, id) {
+  let arrastrando = false;
+  let inicioX = 0;
+  let inicioDesplazamiento = 0;
+  let limiteIzq = 0;
+  let limiteDer = 0;
+
+  el.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("a, button")) return; // no competir con ligas/botones
+    arrastrando = true;
+    inicioX = e.clientX;
+    inicioDesplazamiento = posiciones.get(id) || 0;
+    const rect = el.getBoundingClientRect();
+    const baseLeft = rect.left - inicioDesplazamiento;
+    const margen = 10;
+    limiteIzq = margen - baseLeft;
+    limiteDer = window.innerWidth - margen - rect.width - baseLeft;
+    el.setPointerCapture(e.pointerId);
+    el.classList.add("alerta-flotante-arrastrando");
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!arrastrando) return;
+    let desplazamiento = inicioDesplazamiento + (e.clientX - inicioX);
+    desplazamiento = Math.min(limiteDer, Math.max(limiteIzq, desplazamiento));
+    posiciones.set(id, desplazamiento);
+    el.style.transform = `translateX(${desplazamiento}px)`;
+  });
+  const terminar = (e) => {
+    if (!arrastrando) return;
+    arrastrando = false;
+    el.classList.remove("alerta-flotante-arrastrando");
+    try { el.releasePointerCapture(e.pointerId); } catch { /* el pointer ya se soltó */ }
+  };
+  el.addEventListener("pointerup", terminar);
+  el.addEventListener("pointercancel", terminar);
+}
+
 function reproducirSonido() {
   try {
     if (!audioCtx) {
@@ -51,8 +100,11 @@ function reproducirSonido() {
    tipo: clase extra en el contenedor, para variar el color según el
    motivo de la alerta (ej. "proveedor-respondio" = naranja).
    sonar: true para reproducir el sonido en esta actualización (solo
-   cuando se agrega algo nuevo, no en cada refresco). */
-export function actualizarAlertaPersistente(id, mensajeHtml, { tipo = "", sonar = false, alClicLink } = {}) {
+   cuando se agrega algo nuevo, no en cada refresco).
+   colapsable: true agrega un botón para contraer/expandir el contenido --
+   pensado como alternativa a mover la alerta, para cuando estorbe algo de
+   la pantalla y sea más simple encogerla que arrastrarla. */
+export function actualizarAlertaPersistente(id, mensajeHtml, { tipo = "", sonar = false, colapsable = false, alClicLink } = {}) {
   const contenedor = document.getElementById("alerta-flotante-container");
   if (!contenedor) return;
 
@@ -62,11 +114,20 @@ export function actualizarAlertaPersistente(id, mensajeHtml, { tipo = "", sonar 
     el.id = id;
     el.setAttribute("role", "status");
     contenedor.appendChild(el);
+    iniciarArrastre(el, id);
+    const desplazamiento = posiciones.get(id);
+    if (desplazamiento) el.style.transform = `translateX(${desplazamiento}px)`;
   }
-  el.className = "alerta-flotante" + (tipo ? ` ${tipo}` : "");
+  const colapsada = colapsable && colapsadas.has(id);
+  el.className = "alerta-flotante" + (tipo ? ` ${tipo}` : "") + (colapsada ? " alerta-flotante-colapsada" : "");
+
+  const botonColapsar = colapsable
+    ? `<button type="button" class="alerta-flotante-colapsar" title="${colapsada ? "Expandir" : "Contraer"}">${colapsada ? "▸" : "▾"}</button>`
+    : "";
   el.innerHTML = `
     <span class="alerta-flotante-icono">🔔</span>
     <span class="alerta-flotante-texto">${mensajeHtml}</span>
+    ${botonColapsar}
   `;
 
   if (alClicLink) {
@@ -78,11 +139,27 @@ export function actualizarAlertaPersistente(id, mensajeHtml, { tipo = "", sonar 
     });
   }
 
+  if (colapsable) {
+    el.querySelector(".alerta-flotante-colapsar").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const ahoraColapsada = !colapsadas.has(id);
+      if (ahoraColapsada) colapsadas.add(id); else colapsadas.delete(id);
+      el.classList.toggle("alerta-flotante-colapsada", ahoraColapsada);
+      e.currentTarget.textContent = ahoraColapsada ? "▸" : "▾";
+      e.currentTarget.title = ahoraColapsada ? "Expandir" : "Contraer";
+    });
+  }
+
   if (sonar) reproducirSonido();
 }
 
 /* Quita del todo la alerta con ese id (ej. ya no queda ningún expediente
-   pendiente de revisar). No hace nada si no existe. */
+   pendiente de revisar). No hace nada si no existe -- y olvida su posición
+   y si estaba contraída, para que la próxima vez que aparezca (ej. llegó
+   una respuesta nueva) arranque limpia. */
 export function quitarAlertaPersistente(id) {
   document.getElementById(id)?.remove();
+  posiciones.delete(id);
+  colapsadas.delete(id);
 }
