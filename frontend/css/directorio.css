@@ -1,0 +1,284 @@
+/* Directorio de Proveedores (maqueta, perfil Proveedor). Estilos SOLO de esta
+   pantalla: todas las clases llevan el prefijo dp- para no chocar con las
+   demás (todas viven en el mismo documento). Reutiliza las tarjetas, botones,
+   campos, tablas, badges, KPIs y el modal del portal; aquí solo va lo que el
+   portal no tiene (cuadrículas de opciones, segmentado Lista/Mapa, agenda...).
+   Colores: únicamente las variables de base.css. */
+
+.dp-directorio{container-type:inline-size;container-name:dp;}
+
+/* ---------- Textos ---------- */
+.dp-titulo{font-size:24px;font-weight:700;line-height:1.2;color:var(--navy);margin:0 0 6px;}
+.dp-titulo-hero{font-size:28px;line-height:1.15;margin-bottom:12px;}
+.dp-titulo-medio{font-size:20px;margin:14px 0 8px;}
+.dp-texto{margin:0;font-size:13px;line-height:1.55;color:var(--text-secondary);}
+.dp-texto-hero{max-width:52ch;font-size:14px;}
+.dp-nota{font-size:12px;color:var(--text-secondary);}
+.dp-muted{color:var(--text-secondary);}
+.dp-fuerte{font-weight:600;color:var(--navy);}
+.dp-tabular{font-variant-numeric:tabular-nums;}
+.dp-etiqueta{font-size:10.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--text-secondary);}
+.dp-subtitulo{font-size:13px;font-weight:600;color:var(--navy);margin:0 0 10px;}
+.dp-subtitulo-espacio{margin-top:18px;}
+.dp-acciones{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+
+/* ---------- Botones propios ---------- */
+.btn.dp-btn-ghost{background:transparent;color:var(--blue-dark);border:1px solid transparent;}
+.btn.dp-btn-ghost:hover{background:var(--blue-light);}
+.btn.dp-btn-claro{color:var(--white);}
+.btn.dp-btn-claro:hover{background:var(--navy-light);}
+.dp-directorio button:focus-visible, .dp-directorio input:focus-visible, .dp-directorio select:focus-visible,
+#dp-ficha-modal button:focus-visible{outline:2px solid var(--blue);outline-offset:2px;}
+
+/* Opción seleccionable (especialidad, estado, municipio, precio, día). */
+.dp-opcion{
+  appearance:none;font-family:inherit;font-size:13px;color:inherit;text-align:left;cursor:pointer;
+  background:var(--white);border:1px solid var(--gray-border);border-radius:var(--radius);
+  transition:background-color .12s ease, border-color .12s ease;
+}
+.dp-opcion:hover{background:var(--blue-light);}
+.dp-opcion.dp-sel{background:var(--blue-light);border-color:var(--blue);font-weight:700;color:var(--navy);}
+.dp-opcion:disabled{opacity:.45;cursor:not-allowed;}
+.dp-opcion:disabled:hover{background:var(--white);}
+
+/* ---------- Barra propia del directorio ---------- */
+/* Se queda pegada arriba al hacer scroll, como el header del original. El
+   scroll vive en .content, que tiene 20px de padding: con top:-20px se pega
+   justo debajo de la barra del portal sin dejar un hueco por donde se vea
+   pasar el contenido. En móvil (<=720px) scrollea la ventana, ahí va en 0.
+   Queda por debajo de la barra de comparar (150) y del modal (200). */
+.dp-barra{
+  display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;
+  background:var(--white);border:1px solid var(--gray-border);border-radius:var(--radius);
+  box-shadow:var(--shadow-sm);padding:10px 14px 10px 18px;margin-bottom:16px;
+  position:sticky;top:-20px;z-index:30;
+}
+@media (max-width:720px){ .dp-barra{top:0;} }
+.dp-marca{
+  appearance:none;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:15px;font-weight:600;color:var(--navy);
+}
+.dp-marca svg{width:18px;height:18px;color:var(--blue);flex-shrink:0;}
+.dp-marca:hover span{color:var(--blue-dark);}
+.dp-barra-derecha{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.dp-migas{font-size:12px;color:var(--text-secondary);margin-right:8px;}
+.dp-barra .btn.dp-btn-ghost{padding:0 10px;}
+
+/* ---------- Encabezado de cada sub-pantalla ---------- */
+.dp-encabezado{margin:0 0 16px;}
+.dp-encabezado-acciones{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;}
+.dp-encabezado-texto{min-width:0;}
+.btn.dp-volver{padding:0 10px;margin:0 0 8px -10px;}
+
+/* ---------- Inicio ---------- */
+.dp-hero{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:32px;align-items:end;padding:24px 22px;}
+.dp-hero-busqueda{display:grid;gap:14px;}
+.dp-campo{margin-bottom:0;}
+.dp-campo-busqueda{position:relative;}
+.dp-fila-busqueda{display:flex;gap:8px;}
+.dp-fila-busqueda input{flex:1;min-width:0;}
+.dp-sugerencias{
+  position:absolute;top:100%;left:0;right:0;margin-top:4px;z-index:20;
+  background:var(--white);border:1px solid var(--gray-mid);border-radius:4px;box-shadow:var(--shadow-md);
+  overflow:hidden;display:grid;
+}
+.dp-sugerencia{
+  appearance:none;border:none;border-bottom:1px solid var(--gray-border);background:var(--white);cursor:pointer;
+  text-align:left;padding:9px 12px;font-family:inherit;font-size:13px;color:inherit;
+  display:flex;justify-content:space-between;align-items:center;gap:12px;
+}
+.dp-sugerencia:last-child{border-bottom:none;}
+.dp-sugerencia:hover{background:var(--blue-light);}
+.dp-recientes{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+.dp-recientes .dp-etiqueta{margin-right:2px;}
+.dp-chip{
+  appearance:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;
+  padding:3px 10px;border-radius:10px;border:1px solid var(--tono-azul-borde);
+  background:var(--white);color:var(--blue-dark);
+}
+.dp-chip:hover{background:var(--blue-light);}
+.dp-sync{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding-top:12px;border-top:1px solid var(--tono-azul-borde);}
+
+.dp-grid-especialidades{display:grid;grid-template-columns:repeat(auto-fill, minmax(220px, 1fr));gap:10px;}
+.dp-grid-especialidades.dp-grid-amplia{grid-template-columns:repeat(auto-fill, minmax(300px, 1fr));}
+.dp-tarjeta-especialidad{display:flex;flex-direction:column;gap:6px;min-height:118px;padding:14px 16px;}
+.dp-numero{font-size:11px;font-weight:600;letter-spacing:.1em;color:var(--blue-dark);}
+.dp-tarjeta-nombre{font-size:16px;font-weight:700;line-height:1.2;color:var(--navy);}
+.dp-tarjeta-especialidad .dp-tarjeta-nombre{margin-top:auto;}
+
+/* ---------- Zona ---------- */
+.dp-dos-columnas{display:grid;gap:16px;align-items:start;}
+.dp-dos-columnas > .card{margin-bottom:0;}
+.dp-zona{grid-template-columns:minmax(0,1fr) minmax(0,1.4fr);margin-bottom:16px;}
+.dp-lista-opciones{display:grid;gap:6px;}
+.dp-opcion-fila{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:11px 14px;font-size:13.5px;}
+.dp-opcion-compacta{padding:8px 12px;}
+.dp-grid-municipios{display:grid;grid-template-columns:repeat(auto-fill, minmax(200px, 1fr));gap:10px;}
+.dp-tarjeta-municipio{display:flex;flex-direction:column;gap:6px;min-height:84px;padding:14px 16px;}
+.dp-tarjeta-municipio .dp-tarjeta-nombre{font-size:15px;}
+
+/* ---------- Resultados ---------- */
+.dp-seg{display:inline-flex;border:1px solid var(--gray-mid);border-radius:4px;overflow:hidden;background:var(--white);}
+.dp-seg-opcion{
+  appearance:none;border:none;background:var(--white);height:32px;padding:0 14px;cursor:pointer;
+  font-family:inherit;font-size:13px;color:var(--navy);
+}
+.dp-seg-opcion + .dp-seg-opcion{border-left:1px solid var(--gray-mid);}
+.dp-seg-opcion:hover{background:var(--gray-bg);}
+.dp-seg-opcion.dp-sel{background:var(--blue-light);color:var(--blue-dark);font-weight:700;}
+
+.dp-resultados{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-start;margin-bottom:16px;}
+.dp-resultados > .card{margin-bottom:0;}
+.dp-filtros{flex:1 1 220px;min-width:220px;}
+.dp-filtros > .card-body{display:grid;gap:18px;align-content:start;}
+.dp-panel-resultados{flex:999 1 460px;min-width:0;}
+.dp-panel-resultados > .card-header{flex-wrap:wrap;}
+.dp-seccion{display:grid;gap:4px;}
+.dp-seccion .dp-subtitulo{margin-bottom:6px;}
+.dp-seccion-linea{border-top:1px solid var(--tono-azul-borde);padding-top:16px;}
+/* El ghost conserva el padding del .btn: se compensa para que "Limpiar
+   filtros" quede alineado con las opciones de arriba. */
+.dp-filtros .btn.dp-btn-ghost{justify-self:start;padding:0 8px;margin-left:-9px;}
+.dp-check{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;padding:3px 0;}
+.dp-check input{width:16px;height:16px;margin:0;accent-color:var(--blue);cursor:pointer;flex-shrink:0;}
+.dp-check-compacto{white-space:nowrap;padding:0;}
+
+.dp-panel-resultados > .card-body{padding-top:4px;padding-bottom:8px;}
+.dp-medico{
+  display:flex;flex-wrap:wrap;gap:12px 20px;align-items:center;
+  padding:16px 2px;border-bottom:1px solid var(--gray-border);font-size:13px;line-height:1.45;
+}
+.dp-medico:last-child{border-bottom:none;}
+.dp-medico-principal{flex:4 1 200px;min-width:0;}
+.dp-medico-nombre{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
+.dp-medico-nombre h3{font-size:15px;font-weight:600;color:var(--navy);margin:0 4px 0 0;}
+.dp-medico-consultorio{flex:3 1 170px;min-width:0;}
+.dp-medico-disponibilidad{flex:2 1 150px;min-width:0;}
+.dp-dato{white-space:nowrap;}
+.dp-medico-acciones{flex:0 0 auto;display:flex;align-items:center;gap:14px;margin-left:auto;}
+
+.dp-mapa{position:relative;height:560px;margin:12px 0 8px;border:1px solid var(--gray-border);border-radius:var(--radius);overflow:hidden;}
+.dp-mapa-marco{position:absolute;inset:0;width:100%;height:100%;border:0;}
+
+.dp-vacio{padding:28px 0 20px;}
+.dp-vacio-titulo{margin:0 0 8px;font-size:15px;font-weight:600;color:var(--navy);}
+.dp-vacio .dp-texto{max-width:56ch;margin-bottom:16px;}
+
+/* ---------- Comparar ---------- */
+/* Tablas directo dentro de la tarjeta (sin encabezado): que el thead gris
+   respete las esquinas redondeadas. */
+.dp-directorio .card > .table-wrap{border-radius:calc(var(--radius) - 1px);}
+.dp-tabla-comparar{min-width:640px;font-size:13px;}
+.dp-tabla-comparar .dp-col-criterio{width:180px;}
+.dp-tabla-comparar td{white-space:normal;}
+
+/* ---------- Métricas ---------- */
+.kpi-info .dp-nota{margin-top:2px;}
+.dp-metricas{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);margin-bottom:16px;}
+.dp-cobertura{display:grid;gap:14px;}
+.dp-cobertura-fila{display:flex;justify-content:space-between;gap:12px;font-size:13px;margin-bottom:6px;}
+.dp-pista{height:12px;background:var(--gray-bg);border:1px solid var(--gray-border);border-radius:6px;overflow:hidden;}
+.dp-pista-valor{height:100%;background:var(--blue);border-radius:6px;}
+.dp-renglon{
+  display:flex;justify-content:space-between;gap:12px;font-size:13px;padding:10px 14px;
+  background:var(--white);border:1px solid var(--tono-ambar-borde);border-radius:var(--radius);
+}
+.dp-valor-alerta{color:var(--amber);font-weight:600;}
+.hint.dp-umbral{margin-top:14px;font-size:12px;line-height:1.5;}
+
+/* ---------- Solicitudes ---------- */
+.dp-tabla-solicitudes{min-width:880px;}
+.dp-tabla-solicitudes td{white-space:nowrap;}
+/* En móvil el portal vuelve .mini-table tarjetas (etiqueta | valor): sin el
+   ancho mínimo ni el nowrap, para que el valor no se salga de la tarjeta. */
+@media (max-width:640px){
+  .dp-tabla-solicitudes{min-width:0;}
+  .dp-tabla-solicitudes td{white-space:normal;text-align:right;}
+}
+.dp-tabla-solicitudes .dp-acciones{flex-wrap:nowrap;}
+
+/* ---------- Alta de médico ---------- */
+.dp-alta{grid-template-columns:minmax(0,1.5fr) minmax(0,1fr);margin-bottom:16px;}
+.dp-formulario{display:grid;gap:18px;padding:22px;}
+.dp-grid-campos{display:grid;grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));gap:18px;}
+.dp-verificacion{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 0;
+  border-top:1px solid var(--tono-azul-borde);border-bottom:1px solid var(--tono-azul-borde);
+}
+.dp-mensaje{font-size:13px;font-weight:600;}
+.dp-ok{color:var(--teal);}
+.dp-error{color:var(--red);}
+.dp-neutro{color:var(--text-secondary);}
+.dp-enviar{gap:14px;}
+.dp-lateral{display:grid;gap:20px;align-content:start;padding:22px;}
+.dp-lateral .dp-seccion-linea{border-top-color:var(--tono-morado-borde);}
+#dp-alta-panel:empty{display:none;}
+.dp-panel-cedula{background:var(--white);border:1px solid var(--tono-morado-borde);border-radius:var(--radius);padding:14px 16px;}
+.dp-datos{margin:12px 0 0;display:grid;gap:10px;font-size:13px;}
+.dp-datos div{display:grid;gap:2px;}
+.dp-datos dt{color:var(--text-secondary);font-size:12px;}
+.dp-datos dd{margin:0;font-weight:600;color:var(--navy);}
+.dp-documentos{margin:0;padding-left:18px;font-size:13px;line-height:1.7;color:var(--text-secondary);}
+.dp-confirmacion{max-width:720px;}
+.dp-confirmacion .card-body{padding:24px 22px;}
+.dp-confirmacion .dp-texto{margin-bottom:18px;}
+
+/* ---------- Ficha / agenda (modal del portal) ---------- */
+#dp-ficha-modal .modal-body p.dp-ficha-sub{margin:8px 0 14px;font-size:13px;color:var(--text-secondary);}
+.dp-ficha-datos{margin:0;display:grid;gap:10px;font-size:13px;border-top:1px solid var(--gray-border);padding-top:14px;}
+.dp-ficha-datos div{display:flex;justify-content:space-between;gap:16px;}
+.dp-ficha-datos dt{color:var(--text-secondary);}
+.dp-ficha-datos dd{margin:0;font-weight:600;color:var(--navy);text-align:right;}
+.dp-ficha-seccion{border-top:1px solid var(--gray-border);padding-top:14px;}
+.dp-dias{display:grid;grid-template-columns:repeat(7, minmax(0, 1fr));gap:6px;}
+.dp-dia{display:flex;flex-direction:column;gap:2px;padding:9px 6px;}
+.dp-dia-num{font-size:17px;font-weight:700;color:var(--navy);}
+.dp-dia-cupo{font-size:11px;font-weight:400;color:var(--text-secondary);}
+.dp-horarios{display:flex;gap:8px;flex-wrap:wrap;}
+.dp-horario{
+  appearance:none;cursor:pointer;font-family:inherit;font-size:13px;color:inherit;
+  padding:8px 14px;background:var(--white);border:1px solid var(--gray-border);border-radius:4px;
+}
+.dp-horario:hover{border-color:var(--blue);}
+.dp-horario.dp-sel{background:var(--blue);border-color:var(--blue);color:var(--white);font-weight:600;}
+#dp-ficha-modal .modal-body p.dp-cita-resumen{margin:12px 0 6px;font-size:20px;font-weight:700;color:var(--navy);}
+#dp-ficha-modal .modal-body p.dp-texto{margin:0;}
+.modal-footer.dp-ficha-pie{justify-content:flex-start;align-items:center;flex-wrap:wrap;}
+
+/* ---------- Pie y barra de comparar ---------- */
+.dp-pie{
+  display:flex;justify-content:space-between;gap:12px 24px;flex-wrap:wrap;
+  padding:14px 2px 4px;border-top:1px solid var(--gray-border);font-size:12px;color:var(--text-secondary);
+}
+/* Pegada al fondo del área de contenido (sticky dentro de .content, no fixed):
+   así toma el ancho útil de esa área, no tapa el menú lateral ni la barra de
+   scroll de .content, y al final del scroll queda debajo del pie sin taparlo.
+   Los márgenes negativos y el bottom:-20px absorben el padding de .content. */
+.dp-barra-comparar{
+  position:sticky;bottom:-20px;z-index:150;margin:16px -20px -20px;
+  background:var(--navy);color:var(--white);box-shadow:var(--shadow-lg);
+  padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px 20px;flex-wrap:wrap;
+  font-size:13px;
+}
+@media (max-width:720px){ .dp-barra-comparar{bottom:0;} }
+
+/* ---------- Responsivo (según el ancho del área de contenido) ---------- */
+@container dp (max-width: 860px){
+  .dp-hero{grid-template-columns:1fr;gap:20px;}
+  .dp-metricas{grid-template-columns:1fr;}
+}
+/* Alta: el panel de cédula se queda a la derecha hasta 700px, como el original. */
+@container dp (max-width: 700px){
+  .dp-alta{grid-template-columns:1fr;}
+}
+@container dp (max-width: 560px){
+  .dp-titulo{font-size:21px;}
+  .dp-titulo-hero{font-size:24px;}
+  .dp-zona{grid-template-columns:1fr;}
+  .dp-migas{flex-basis:100%;margin-right:0;}
+  /* La ruta va sola en su renglón: "Métricas" se alinea con ella. */
+  .dp-migas + .btn.dp-btn-ghost{margin-left:-11px;}
+}
+/* El modal vive fuera del contenedor del directorio: va por ancho de ventana. */
+@media (max-width:560px){ .dp-dias{grid-template-columns:repeat(4, minmax(0, 1fr));} }

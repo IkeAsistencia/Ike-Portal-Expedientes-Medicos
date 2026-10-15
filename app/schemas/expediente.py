@@ -49,6 +49,8 @@ class Expediente(BaseModel):
     # app/services/semaforo_service.py. None = no aplica (ya hay respuesta
     # del proveedor o el caso ya avanzó).
     color_semaforo: Optional[str] = None
+    # Cuánto tiempo lleva en la etapa que mide el semáforo ("13 h 20 min").
+    tiempo_semaforo: Optional[str] = None
 
 
 class ExpedienteFiltro(BaseModel):

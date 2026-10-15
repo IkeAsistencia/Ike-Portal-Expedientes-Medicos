@@ -16,7 +16,7 @@ compatibilidad aplicadas en todos los scripts:
 4. `03_ST_CP_ObtenerCatalogoCuentas.sql` — catálogo de cuentas
 5. `04_ST_CP_RegistrarSeguimiento.sql` — inserta en `dbo.Seguimiento` (tabla ya existente)
 6. `05_ST_CP_ObtenerExpedientesSinRespuestaProveedor.sql` — usado por el cron de validación de proveedor
-7. `07_ST_CP_ObtenerServicioMedico.sql` — combo Subservicio
+7. `07_ST_CP_ObtenerServicioMedico.sql` — combo Subservicio (misma lista de 8 subservicios que trabaja el script 01)
 
 `06_ST_CP_ObtenerCatalogoSubServicio_DEPRECADO.sql` **NO se ejecuta**.
 

@@ -11,20 +11,22 @@
 -- Basado en:
 --   select clServicio, dsServicio from dbo.cServicio where clServicio = 4
 --   select clSubServicio, dsSubServicio from dbo.cSubServicio
---     where clServicio = 4 and clSubServicio in (226,377,420,383)
+--     where clServicio = 4 and clSubServicio in (226,376,377,383,403,404,420,432)
 --
 -- Igual que dbo.ST_CP_ObtenerCatalogoServicio, el Servicio siempre es el
 -- mismo (clServicio = 4, "Asistencia Médica"), así que se deja fijo
--- como default. La lista de Subservicios permitidos (226,377,420,383)
--- también se deja fija — confirmar si debe salir de configuración en
--- vez de estar fija en el SP.
+-- como default. La lista de Subservicios permitidos también se deja
+-- fija — confirmar si debe salir de configuración en vez de estar fija
+-- en el SP.
 -- NOTA: se pidió incluir también el 483, pero ese id no existe en
 -- dbo.cSubServicio de esta base (IKE_TEST) — se dejó fuera aquí.
--- ACTUALIZADO: se agregó el 226 "Referencias Médicas" -- es el único de
--- los 4 subservicios de esta pantalla con expedientes reales hoy en
--- IKE_TEST; sin él en esta lista, el combo Subservicio (y el filtro
--- local del frontend) lo escondían aunque el SP de expedientes ya lo
--- trajera bien. Ver sql/01_ST_CP_ObtenerExpedientesSinProveedorMedico.sql.
+-- ACTUALIZADO 2: la lista debe ser EXACTAMENTE la misma que trabaja
+-- dbo.ST_CP_ObtenerExpedientesSinProveedorMedico (sql/01_..._Medico.sql)
+-- -- si un subservicio sale aquí pero esa pantalla no lo soporta (o
+-- viceversa), el combo ofrece algo que siempre da 0 resultados, o
+-- esconde algo que sí tiene datos. Se agregaron los 4 que faltaban:
+-- 376 Segunda Opinión, 403 Renta de Equipo Médico, 404 Enfermería a
+-- Domicilio, 432 Envío de Medicamentos.
 -- =====================================================================
 IF OBJECT_ID('dbo.ST_CP_ObtenerServicioMedico', 'P') IS NOT NULL
     DROP PROCEDURE dbo.ST_CP_ObtenerServicioMedico;
@@ -49,6 +51,6 @@ BEGIN
         dsSubServicio
     FROM dbo.cSubServicio
     WHERE clServicio = @clServicioValido
-      AND clSubServicio IN (226, 377, 420, 383);
+      AND clSubServicio IN (226, 376, 377, 383, 403, 404, 420, 432);
 END
 GO

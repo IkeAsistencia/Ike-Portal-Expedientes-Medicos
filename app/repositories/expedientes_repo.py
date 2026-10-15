@@ -127,6 +127,11 @@ def listar_expedientes(filtro: ExpedienteFiltro) -> list[Expediente]:
                 email=row.get("Email"),
                 estatus=estatus,
                 color_semaforo=color_semaforo,
+                tiempo_semaforo=semaforo_service.tiempo_transcurrido(
+                    estatus=estatus,
+                    fecha_apertura=row["FechaAperturaCompleta"],
+                    fecha_cambio_estatus=fecha_cambio_estatus,
+                ),
             )
         )
     return resultado
