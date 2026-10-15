@@ -18,10 +18,10 @@ export function badgeEstatus(estatus) {
 }
 
 const SIGNIFICADO_SEMAFORO = {
-  verde: "Semáforo: verde — dentro de tiempo",
-  amarillo: "Semáforo: amarillo — acercándose al límite",
-  naranja: "Semáforo: naranja — fuera de tiempo",
-  rojo: "Semáforo: rojo — vencido",
+  verde: "Semáforo: en tiempo",
+  amarillo: "Semáforo: por vencer",
+  naranja: "Semáforo: urgente",
+  rojo: "Semáforo: vencido",
 };
 
 /* Punto de color del semáforo (distinto del badge de Estado, ver sección 1
