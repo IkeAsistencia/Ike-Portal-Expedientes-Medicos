@@ -493,7 +493,9 @@ function renderAlertaRespuestasPendientes({ sonar, expandir = false }) {
         <span class="alerta-flotante-encabezado-exp">Expediente</span>
         <span class="alerta-flotante-paciente">Paciente</span>
       </div>
-      <div class="alerta-flotante-detalle">Subservicio · Estado · Municipio</div>
+      <div class="alerta-flotante-detalle">Subservicio</div>
+      <div class="alerta-flotante-detalle">Estado</div>
+      <div class="alerta-flotante-detalle">Municipio</div>
     </li>`;
   const items = pendientes.map(p => `
     <li class="alerta-flotante-item">
@@ -501,7 +503,9 @@ function renderAlertaRespuestasPendientes({ sonar, expandir = false }) {
         <a href="#" class="alerta-flotante-link" data-exp="${p.expediente}">${p.expediente}</a>
         <span class="alerta-flotante-paciente">${escapeHtml(p.nombre_paciente || "")}</span>
       </div>
-      <div class="alerta-flotante-detalle">${escapeHtml([p.tipo_subservicio, p.entidad, p.municipio].filter(Boolean).join(" · "))}</div>
+      <div class="alerta-flotante-detalle">${escapeHtml(p.tipo_subservicio || "")}</div>
+      <div class="alerta-flotante-detalle">${escapeHtml(p.entidad || "")}</div>
+      <div class="alerta-flotante-detalle">${escapeHtml(p.municipio || "")}</div>
     </li>`).join("");
   const mensajeHtml = `${titulo}<ul class="alerta-flotante-lista">${encabezado}${items}</ul>`;
 
