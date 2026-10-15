@@ -24,6 +24,16 @@
   --purple: #5C2D91;
   --purple-bg: #EDE7F6;
 
+  /* Semáforo del Expediente (distinto del badge de Estado) -- 4 colores
+     propios para no confundirlos con los de --amber/--green de arriba. */
+  --sem-verde: #107C10;
+  --sem-amarillo: #F2C811;
+  --sem-amarillo-bg: #FFF4CE;
+  --sem-naranja: #F2641A;
+  --sem-naranja-bg: #FDE7D9;
+  --sem-rojo: #D13438;
+  --sem-rojo-bg: #FDE7E9;
+
   /* Tonos suaves para distinguir secciones (encabezado y borde de tarjetas).
      Derivados de la misma paleta: azul, verde azulado, morado, ámbar, verde. */
   --tono-azul: #EEF4FB;        --tono-azul-borde: #CFE0F2;
@@ -81,5 +91,29 @@ body{
 }
 .toast.error{background:var(--red);}
 .toast.success{background:var(--green);}
+
+/* ---------- ALERTA FLOTANTE (esquina superior derecha) ----------
+   Distinta del toast: es para avisos puntuales que además llevan sonido
+   (ej. "el proveedor respondió"), no para mensajes genéricos de la app. */
+#alerta-flotante-container{position:fixed;top:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:1100;max-width:360px;}
+.alerta-flotante{
+  display:flex;align-items:center;gap:10px;background:var(--white);color:var(--navy);
+  padding:12px 16px;border-radius:var(--radius);border:1px solid var(--gray-border);
+  box-shadow:var(--shadow-md);font-size:13px;
+  animation:alerta-flotante-entrada .25s ease-out;
+}
+.alerta-flotante-icono{font-size:16px;line-height:1;flex-shrink:0;}
+.alerta-flotante-texto{flex:1;}
+.alerta-flotante-link{color:var(--blue);text-decoration:none;font-weight:600;}
+.alerta-flotante-link:hover{text-decoration:underline;}
+.alerta-flotante.alerta-flotante-salida{animation:alerta-flotante-salida .3s ease-in forwards;}
+/* Naranja para diferenciarla de otros tipos de alerta flotante que pueda
+   haber a futuro -- ej. "el proveedor respondió un expediente". */
+.alerta-flotante.proveedor-respondio{
+  background:var(--sem-naranja-bg);border-color:var(--sem-naranja);border-left:4px solid var(--sem-naranja);
+}
+.alerta-flotante.proveedor-respondio .alerta-flotante-icono{color:var(--sem-naranja);}
+@keyframes alerta-flotante-entrada{from{opacity:0;transform:translateY(-8px);}to{opacity:1;transform:translateY(0);}}
+@keyframes alerta-flotante-salida{from{opacity:1;}to{opacity:0;transform:translateY(-8px);}}
 
 .spinner-row{padding:24px;text-align:center;color:var(--text-secondary);font-size:13px;}
