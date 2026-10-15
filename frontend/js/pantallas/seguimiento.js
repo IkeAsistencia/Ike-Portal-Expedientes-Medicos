@@ -233,6 +233,7 @@ export async function abrirSeguimiento(record, source) {
   $("sg-observaciones").disabled = false;
   $("sg-cancelar-btn").disabled = false;
   $("sg-actualizar-btn").disabled = false;
+  $("sg-estatus-btn").disabled = false;
   $("sg-exito-banner").classList.add("hidden");
   $("sg-comprobante-input").value = "";
   $("sg-comprobante-input").disabled = false;
@@ -259,6 +260,15 @@ export async function abrirSeguimiento(record, source) {
   cargarComentarios(record.expediente);
 
   await cargarPagoAnticipado(record);
+}
+
+// Cuando el refresco silencioso de Expedientes detecta que Core actualizó
+// un expediente (ej. el proveedor respondió) y esta pantalla ya está
+// mostrando justo ese expediente, se refresca su listado de Seguimiento
+// (el historial que llena Core) en vez de dejarlo con datos viejos hasta
+// que alguien lo vuelva a buscar a mano.
+export function refrescarSiEsElMismo(clExpediente) {
+  if (registroActual?.expediente === clExpediente) cargarHistorialSise(clExpediente);
 }
 
 async function buscarExpediente() {
@@ -512,6 +522,13 @@ async function actualizarEstatus() {
     toast("Indica un comentario para regresar el expediente al proveedor.", "error");
     return;
   }
+
+  // Sin este candado, un doble clic (o un clic de más mientras tarda la
+  // respuesta) mandaba dos veces el mismo comentario a Core -- se veía
+  // duplicado en el listado de Seguimiento aunque solo se quiso mandar uno.
+  const btn = $("sg-estatus-btn");
+  if (btn.disabled) return;
+  btn.disabled = true;
   try {
     await api("/seguimiento/estatus", {
       method: "POST",
@@ -537,6 +554,8 @@ async function actualizarEstatus() {
     }
   } catch (err) {
     toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
   }
 }
 

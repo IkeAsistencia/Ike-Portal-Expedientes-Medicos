@@ -1,11 +1,61 @@
-/* Alerta flotante en la esquina SUPERIOR derecha, con sonido ligero --
-   distinta del toast normal (que va abajo a la derecha, sin sonido).
-   Pedida explícitamente para avisar cuando un proveedor responde un
-   expediente (ver "Puntos a modificar.docx", sección 1): no bloquea la
-   pantalla, no tiene botón de "aceptar", se quita sola a los 20 segundos. */
-const DURACION_MS = 20000;
-
+/* Alerta PERSISTENTE en la esquina SUPERIOR derecha, con sonido ligero --
+   distinta del toast normal (que va abajo a la derecha, sin sonido, y se
+   quita solo). Esta no se quita por tiempo: quien llama la actualiza con
+   la lista vigente de pendientes (actualizarAlertaPersistente) y la quita
+   explícitamente cuando ya no queda nada (quitarAlertaPersistente) --
+   pensada para "expedientes con respuesta del proveedor que Cabina
+   todavía no resuelve" (ver "Puntos a modificar.docx", sección 1): no
+   bloquea la pantalla, no tiene botón de "aceptar". */
 let audioCtx = null;
+
+// Posición (desplazamiento horizontal en px) y estado de contraído que el
+// usuario le haya dado a cada alerta -- se recuerdan mientras dure la sesión
+// (sobreviven a que actualizarAlertaPersistente reconstruya el contenido),
+// y se olvidan cuando la alerta se quita del todo (quitarAlertaPersistente).
+const posiciones = new Map();
+const colapsadas = new Set();
+
+/* Arrastre SOLO horizontal: la alerta vive en la esquina superior derecha
+   (posición vertical fija por diseño) y se pidió que únicamente se pueda
+   mover hacia los lados, no hacia arriba/abajo. Se mueve con transform
+   (no toca left/top), así no interfiere con el layout en columna del
+   contenedor de alertas. */
+function iniciarArrastre(el, id) {
+  let arrastrando = false;
+  let inicioX = 0;
+  let inicioDesplazamiento = 0;
+  let limiteIzq = 0;
+  let limiteDer = 0;
+
+  el.addEventListener("pointerdown", (e) => {
+    if (e.target.closest("a, button")) return; // no competir con ligas/botones
+    arrastrando = true;
+    inicioX = e.clientX;
+    inicioDesplazamiento = posiciones.get(id) || 0;
+    const rect = el.getBoundingClientRect();
+    const baseLeft = rect.left - inicioDesplazamiento;
+    const margen = 10;
+    limiteIzq = margen - baseLeft;
+    limiteDer = window.innerWidth - margen - rect.width - baseLeft;
+    el.setPointerCapture(e.pointerId);
+    el.classList.add("alerta-flotante-arrastrando");
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!arrastrando) return;
+    let desplazamiento = inicioDesplazamiento + (e.clientX - inicioX);
+    desplazamiento = Math.min(limiteDer, Math.max(limiteIzq, desplazamiento));
+    posiciones.set(id, desplazamiento);
+    el.style.transform = `translateX(${desplazamiento}px)`;
+  });
+  const terminar = (e) => {
+    if (!arrastrando) return;
+    arrastrando = false;
+    el.classList.remove("alerta-flotante-arrastrando");
+    try { el.releasePointerCapture(e.pointerId); } catch { /* el pointer ya se soltó */ }
+  };
+  el.addEventListener("pointerup", terminar);
+  el.addEventListener("pointercancel", terminar);
+}
 
 function reproducirSonido() {
   try {
@@ -38,28 +88,47 @@ function reproducirSonido() {
   }
 }
 
-/* mensajeHtml: HTML ya armado por quien llama (el texto suelto debe venir
-   escapado por esa persona -- ver escapeHtml en core/formato.js; los
-   números de expediente son seguros de interpolar tal cual). Puede incluir
-   enlaces con class="alerta-flotante-link" y data-exp="<número>", iguales
-   a los de la columna Expediente de la tabla -- alClicLink(expediente) se
-   llama al darle clic a cualquiera de ellos.
+/* id: identifica la alerta -- si ya existe una con ese id, se actualiza su
+   contenido en el mismo lugar (sin re-animar la entrada ni duplicar el
+   recuadro); si no existe, se crea.
+   mensajeHtml: HTML ya armado por quien llama (el texto suelto debe venir
+   escapado -- ver escapeHtml en core/formato.js; los números de expediente
+   son seguros de interpolar tal cual). Puede incluir enlaces con
+   class="alerta-flotante-link" y data-exp="<número>", iguales a los de la
+   columna Expediente de la tabla -- alClicLink(expediente) se llama al
+   darle clic a cualquiera de ellos.
    tipo: clase extra en el contenedor, para variar el color según el
    motivo de la alerta (ej. "proveedor-respondio" = naranja).
-   silenciosa: true para omitir el sonido (por si algún llamador necesita
-   solo el aviso visual). */
-export function mostrarAlertaFlotante(mensajeHtml, { tipo = "", silenciosa = false, alClicLink } = {}) {
+   sonar: true para reproducir el sonido en esta actualización (solo
+   cuando se agrega algo nuevo, no en cada refresco).
+   colapsable: true agrega un botón para contraer/expandir el contenido --
+   pensado como alternativa a mover la alerta, para cuando estorbe algo de
+   la pantalla y sea más simple encogerla que arrastrarla. */
+export function actualizarAlertaPersistente(id, mensajeHtml, { tipo = "", sonar = false, colapsable = false, alClicLink } = {}) {
   const contenedor = document.getElementById("alerta-flotante-container");
   if (!contenedor) return;
 
-  const el = document.createElement("div");
-  el.className = "alerta-flotante" + (tipo ? ` ${tipo}` : "");
-  el.setAttribute("role", "status");
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = id;
+    el.setAttribute("role", "status");
+    contenedor.appendChild(el);
+    iniciarArrastre(el, id);
+    const desplazamiento = posiciones.get(id);
+    if (desplazamiento) el.style.transform = `translateX(${desplazamiento}px)`;
+  }
+  const colapsada = colapsable && colapsadas.has(id);
+  el.className = "alerta-flotante" + (tipo ? ` ${tipo}` : "") + (colapsada ? " alerta-flotante-colapsada" : "");
+
+  const botonColapsar = colapsable
+    ? `<button type="button" class="alerta-flotante-colapsar" title="${colapsada ? "Expandir" : "Contraer"}">${colapsada ? "▸" : "▾"}</button>`
+    : "";
   el.innerHTML = `
     <span class="alerta-flotante-icono">🔔</span>
     <span class="alerta-flotante-texto">${mensajeHtml}</span>
+    ${botonColapsar}
   `;
-  contenedor.appendChild(el);
 
   if (alClicLink) {
     el.querySelectorAll(".alerta-flotante-link").forEach(a => {
@@ -70,10 +139,27 @@ export function mostrarAlertaFlotante(mensajeHtml, { tipo = "", silenciosa = fal
     });
   }
 
-  if (!silenciosa) reproducirSonido();
+  if (colapsable) {
+    el.querySelector(".alerta-flotante-colapsar").addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const ahoraColapsada = !colapsadas.has(id);
+      if (ahoraColapsada) colapsadas.add(id); else colapsadas.delete(id);
+      el.classList.toggle("alerta-flotante-colapsada", ahoraColapsada);
+      e.currentTarget.textContent = ahoraColapsada ? "▸" : "▾";
+      e.currentTarget.title = ahoraColapsada ? "Expandir" : "Contraer";
+    });
+  }
 
-  setTimeout(() => {
-    el.classList.add("alerta-flotante-salida");
-    setTimeout(() => el.remove(), 300); // deja correr la transición de salida antes de quitarlo del DOM
-  }, DURACION_MS);
+  if (sonar) reproducirSonido();
+}
+
+/* Quita del todo la alerta con ese id (ej. ya no queda ningún expediente
+   pendiente de revisar). No hace nada si no existe -- y olvida su posición
+   y si estaba contraída, para que la próxima vez que aparezca (ej. llegó
+   una respuesta nueva) arranque limpia. */
+export function quitarAlertaPersistente(id) {
+  document.getElementById(id)?.remove();
+  posiciones.delete(id);
+  colapsadas.delete(id);
 }
