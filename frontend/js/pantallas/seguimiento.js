@@ -636,6 +636,10 @@ async function registrarSeguimiento() {
     // Refresca el comprobante y la casilla de pago anticipado (ya queda
     // bloqueada tras este primer/segundo envío, ver backend).
     cargarPagoAnticipado(registroActual);
+    // "Actualizar Core" acaba de insertar un registro nuevo en dbo.Seguimiento
+    // -- se vuelve a pedir el historial (dbo.sp_S2_Seguimiento) para que se
+    // vea de inmediato, sin tener que buscar el expediente otra vez a mano.
+    cargarHistorialSise(registroActual.expediente);
   } catch (err) {
     toast(err.message, "error");
   } finally {
