@@ -126,6 +126,15 @@ body{
 .alerta-flotante-item-linea{display:flex;align-items:center;gap:8px;}
 .alerta-flotante-detalle{color:var(--text-secondary);font-size:11.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .alerta-flotante-paciente{color:var(--text-secondary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.alerta-flotante-encabezado-exp{flex-shrink:0;}
+/* Fila de encabezados (Expediente / Paciente / Subservicio · Estado · Municipio),
+   siempre fija como primera fila de la lista -- no es un expediente, por eso
+   no lleva liga ni se cuenta en el total. */
+.alerta-flotante-item.alerta-flotante-encabezado{
+  font-weight:600;font-size:10.5px;text-transform:uppercase;letter-spacing:.02em;
+  color:var(--text-secondary);border-bottom:1px solid var(--gray-border);padding-bottom:4px;margin-bottom:2px;
+}
+.alerta-flotante-item.alerta-flotante-encabezado .alerta-flotante-detalle{text-transform:none;}
 /* Naranja para diferenciarla de otros tipos de alerta flotante que pueda
    haber a futuro -- ej. "el proveedor respondió un expediente". */
 .alerta-flotante.proveedor-respondio{

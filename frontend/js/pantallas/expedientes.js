@@ -445,7 +445,7 @@ function notificarRespuestaProveedor(respondidos) {
     // registrar, sin esperar a que alguien lo busque de nuevo a mano.
     refrescarSiEsElMismo(r.expediente);
   });
-  renderAlertaRespuestasPendientes({ sonar: true });
+  renderAlertaRespuestasPendientes({ sonar: true, expandir: true });
 }
 
 // Quita de la alerta acumulada cualquier expediente que ya no esté en
@@ -478,7 +478,7 @@ function quitarDeRespuestasPendientesSiYaNoAplica(expediente, estatus) {
   renderAlertaRespuestasPendientes({ sonar: false });
 }
 
-function renderAlertaRespuestasPendientes({ sonar }) {
+function renderAlertaRespuestasPendientes({ sonar, expandir = false }) {
   if (respuestasPendientes.size === 0) {
     quitarAlertaPersistente(ID_ALERTA_RESPUESTAS);
     return;
@@ -487,6 +487,14 @@ function renderAlertaRespuestasPendientes({ sonar }) {
   const titulo = pendientes.length === 1
     ? "El proveedor respondió 1 expediente:"
     : `El proveedor respondió ${pendientes.length} expedientes:`;
+  const encabezado = `
+    <li class="alerta-flotante-item alerta-flotante-encabezado">
+      <div class="alerta-flotante-item-linea">
+        <span class="alerta-flotante-encabezado-exp">Expediente</span>
+        <span class="alerta-flotante-paciente">Paciente</span>
+      </div>
+      <div class="alerta-flotante-detalle">Subservicio · Estado · Municipio</div>
+    </li>`;
   const items = pendientes.map(p => `
     <li class="alerta-flotante-item">
       <div class="alerta-flotante-item-linea">
@@ -495,12 +503,13 @@ function renderAlertaRespuestasPendientes({ sonar }) {
       </div>
       <div class="alerta-flotante-detalle">${escapeHtml([p.tipo_subservicio, p.entidad, p.municipio].filter(Boolean).join(" · "))}</div>
     </li>`).join("");
-  const mensajeHtml = `${titulo}<ul class="alerta-flotante-lista">${items}</ul>`;
+  const mensajeHtml = `${titulo}<ul class="alerta-flotante-lista">${encabezado}${items}</ul>`;
 
   actualizarAlertaPersistente(ID_ALERTA_RESPUESTAS, mensajeHtml, {
     tipo: "proveedor-respondio",
     sonar,
     colapsable: true,
+    expandir,
     alClicLink: (exp) => {
       const rec = expedientesActuales.find(x => x.expediente === exp);
       if (rec) abrirSeguimiento(rec, "link");

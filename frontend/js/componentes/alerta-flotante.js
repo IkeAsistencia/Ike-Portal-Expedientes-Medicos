@@ -103,8 +103,11 @@ function reproducirSonido() {
    cuando se agrega algo nuevo, no en cada refresco).
    colapsable: true agrega un botón para contraer/expandir el contenido --
    pensado como alternativa a mover la alerta, para cuando estorbe algo de
-   la pantalla y sea más simple encogerla que arrastrarla. */
-export function actualizarAlertaPersistente(id, mensajeHtml, { tipo = "", sonar = false, colapsable = false, alClicLink } = {}) {
+   la pantalla y sea más simple encogerla que arrastrarla.
+   expandir: true obliga a que se vea expandida en esta actualización (ej.
+   llegó una respuesta nueva) aunque el usuario la hubiera contraído antes --
+   para que nunca se le pase una respuesta nueva por tenerla encogida. */
+export function actualizarAlertaPersistente(id, mensajeHtml, { tipo = "", sonar = false, colapsable = false, expandir = false, alClicLink } = {}) {
   const contenedor = document.getElementById("alerta-flotante-container");
   if (!contenedor) return;
 
@@ -118,6 +121,7 @@ export function actualizarAlertaPersistente(id, mensajeHtml, { tipo = "", sonar 
     const desplazamiento = posiciones.get(id);
     if (desplazamiento) el.style.transform = `translateX(${desplazamiento}px)`;
   }
+  if (expandir) colapsadas.delete(id);
   const colapsada = colapsable && colapsadas.has(id);
   el.className = "alerta-flotante" + (tipo ? ` ${tipo}` : "") + (colapsada ? " alerta-flotante-colapsada" : "");
 
