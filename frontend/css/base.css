@@ -104,7 +104,15 @@ body{
 }
 .alerta-flotante-icono{font-size:16px;line-height:1;flex-shrink:0;}
 .alerta-flotante-texto{flex:1;}
+.alerta-flotante-link{color:var(--blue);text-decoration:none;font-weight:600;}
+.alerta-flotante-link:hover{text-decoration:underline;}
 .alerta-flotante.alerta-flotante-salida{animation:alerta-flotante-salida .3s ease-in forwards;}
+/* Naranja para diferenciarla de otros tipos de alerta flotante que pueda
+   haber a futuro -- ej. "el proveedor respondió un expediente". */
+.alerta-flotante.proveedor-respondio{
+  background:var(--sem-naranja-bg);border-color:var(--sem-naranja);border-left:4px solid var(--sem-naranja);
+}
+.alerta-flotante.proveedor-respondio .alerta-flotante-icono{color:var(--sem-naranja);}
 @keyframes alerta-flotante-entrada{from{opacity:0;transform:translateY(-8px);}to{opacity:1;transform:translateY(0);}}
 @keyframes alerta-flotante-salida{from{opacity:1;}to{opacity:0;transform:translateY(-8px);}}
 
