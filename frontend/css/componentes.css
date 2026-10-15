@@ -163,6 +163,16 @@ tbody tr:hover{background:#FAFAFA;}
 .pager-controls{display:flex;align-items:center;gap:10px;}
 .pager-controls .pager-page{font-size:12.5px;color:var(--navy);font-weight:600;}
 .pager-controls button:disabled{opacity:.5;cursor:not-allowed;}
+/* Ventana de hasta 3 números de página (ver ventanaDePaginas en
+   componentes/paginador.js) para saltar directo a una página cercana,
+   además del texto "Página X de Y" y Anterior/Siguiente de siempre. */
+.pager-numeros{display:flex;gap:4px;}
+.pager-numero{
+  min-width:28px;height:28px;padding:0 6px;border-radius:var(--radius);border:1px solid var(--gray-border);
+  background:var(--white);color:var(--blue);font-size:12.5px;font-weight:600;cursor:pointer;
+}
+.pager-numero:hover{border-color:var(--blue);}
+.pager-numero.activo{background:var(--blue);border-color:var(--blue);color:var(--white);cursor:default;}
 
 .badge{
   display:inline-block;padding:2px 10px;border-radius:10px;font-size:11px;font-weight:600;
