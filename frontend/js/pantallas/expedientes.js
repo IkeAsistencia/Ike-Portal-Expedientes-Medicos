@@ -461,6 +461,18 @@ function reconciliarRespuestasPendientes(data) {
   if (cambio) renderAlertaRespuestasPendientes({ sonar: false });
 }
 
+// Un usuario de Cabina "toma" un expediente de la alerta en cuanto le
+// cambia el estatus (lo revisó y avanzó el caso) -- se quita de inmediato en
+// esta misma sesión, sin esperar al siguiente refresco silencioso (hasta
+// 20s). Para las demás sesiones de Cabina que tengan ese mismo expediente
+// pendiente, el siguiente refresco (reconciliarRespuestasPendientes) lo
+// quita igual, así no queda abierto para que alguien más lo tome también.
+function quitarDeRespuestasPendientesSiYaNoAplica(expediente, estatus) {
+  if (!respuestasPendientes.has(expediente) || estatus === "Seguimiento Proveedor") return;
+  respuestasPendientes.delete(expediente);
+  renderAlertaRespuestasPendientes({ sonar: false });
+}
+
 function renderAlertaRespuestasPendientes({ sonar }) {
   if (respuestasPendientes.size === 0) {
     quitarAlertaPersistente(ID_ALERTA_RESPUESTAS);
@@ -666,6 +678,7 @@ export function montar(contenedor) {
     const rec = expedientesActuales.find(r => r.expediente === e.detail.expediente);
     if (!rec) return;
     rec.estatus = e.detail.estatus;
+    quitarDeRespuestasPendientesSiYaNoAplica(e.detail.expediente, e.detail.estatus);
     refrescarVista();
   });
 }

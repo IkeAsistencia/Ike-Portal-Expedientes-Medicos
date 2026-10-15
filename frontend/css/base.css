@@ -110,8 +110,10 @@ body{
 /* Lista de expedientes acumulados (ej. "el proveedor respondió" -- se van
    agregando hasta que Cabina revisa cada uno, ver reconciliarRespuestasPendientes
    en pantallas/expedientes.js). */
-.alerta-flotante-lista{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:5px;max-height:220px;overflow-y:auto;}
-.alerta-flotante-item{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+/* Máximo 5 filas visibles -- de ahí para arriba, scroll dentro de la misma
+   alerta en vez de que crezca sin límite (27px por fila + 5px de separación). */
+.alerta-flotante-lista{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:5px;max-height:155px;overflow-y:auto;}
+.alerta-flotante-item{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;min-height:22px;}
 .alerta-flotante-paciente{color:var(--text-secondary);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 /* Naranja para diferenciarla de otros tipos de alerta flotante que pueda
    haber a futuro -- ej. "el proveedor respondió un expediente". */
