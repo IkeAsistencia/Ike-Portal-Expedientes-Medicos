@@ -101,6 +101,7 @@ function mapearProveedor(row) {
     latitud: row.latitud ?? null,
     longitud: row.longitud ?? null,
     source: esPortal ? "Alta desde el portal" : "Catálogo cargado",
+    origen: esPortal ? "portal" : "core",
     fromPlaces: false,
   };
 }

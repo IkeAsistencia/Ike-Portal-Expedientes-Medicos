@@ -410,6 +410,7 @@ export function listaResultados(v) {
     <article class="dp-medico">
       <div class="dp-medico-principal">
         <div class="dp-medico-nombre">
+          <span class="dp-origen-punto ${d.origen === "portal" ? "portal" : "core"}" title="${d.origen === "portal" ? "Dado de alta desde el portal" : "Proveedor del catálogo Core"}"></span>
           <h3>${e(d.name)}</h3>
           <span class="badge ${clasePorFuente(d.fromPlaces)}">${e(d.source)}</span>
           ${d.tele ? `<span class="badge espera">Teleconsulta</span>` : ""}

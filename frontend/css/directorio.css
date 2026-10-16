@@ -153,6 +153,12 @@
 .dp-medico-principal{flex:4 1 200px;min-width:0;}
 .dp-medico-nombre{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
 .dp-medico-nombre h3{font-size:15px;font-weight:600;color:var(--navy);margin:0 4px 0 0;}
+/* Distintivo tipo semáforo: de dónde salió este proveedor -- azul si viene
+   del catálogo Core (Excel cargado por Administrador), morado si se dio de
+   alta desde esta misma pantalla ("Alta de médico") y ya fue aprobado. */
+.dp-origen-punto{width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block;}
+.dp-origen-punto.core{background:var(--blue);}
+.dp-origen-punto.portal{background:var(--purple);}
 .dp-medico-consultorio{flex:3 1 170px;min-width:0;}
 .dp-medico-disponibilidad{flex:2 1 150px;min-width:0;}
 .dp-dato{white-space:nowrap;}
