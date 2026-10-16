@@ -1,7 +1,9 @@
 """
 Pruebas de /proveedores-catalogo (carga del catálogo de proveedores del
-Directorio de Proveedores, exclusiva de Administrador) -- NO requiere SQL
-Server real: todo vive en SQLite local.
+Directorio de Proveedores, exclusiva de Administrador) y de
+/directorio-proveedores (lectura del catálogo para la pantalla "Proveedores",
+abierta a Proveedor y Administrador) -- NO requiere SQL Server real: todo
+vive en SQLite local.
 """
 from io import BytesIO
 
@@ -18,6 +20,14 @@ def _sin_sql_server(monkeypatch):
     import app.main as main_module
 
     monkeypatch.setattr(main_module, "calentar_pool", lambda: None)
+
+    # El limitador de intentos de /auth (app/core/rate_limit.py) guarda su
+    # conteo en memoria del PROCESO, compartido entre archivos de prueba --
+    # sin esto, los mismos RFC de prueba (RFCADMTEST, etc.) usados también
+    # en test_smoke.py chocan entre sí y el login empieza a responder 429.
+    from app.core.rate_limit import limpiar_todo
+
+    limpiar_todo()
 
 
 @pytest.fixture()
@@ -269,3 +279,30 @@ def test_teleconsulta_si_no_se_interpreta_a_booleano(client):
     catalogo = {r["cl_proveedor"]: r for r in repo.listar_catalogo()}
     assert catalogo[1]["teleconsulta"] == 1
     assert catalogo[2]["teleconsulta"] == 0
+
+
+# ---------- GET /directorio-proveedores (lectura para la pantalla "Proveedores") ----------
+
+def test_directorio_rechaza_cabina(client):
+    r = client.get("/directorio-proveedores", headers=_auth_headers_cabina(client))
+    assert r.status_code == 403
+
+
+def test_directorio_permite_proveedor_y_administrador(client):
+    assert client.get("/directorio-proveedores", headers=_auth_headers_proveedor(client)).status_code == 200
+    assert client.get("/directorio-proveedores", headers=_auth_headers_admin(client)).status_code == 200
+
+
+def test_directorio_regresa_el_catalogo_cargado(client):
+    admin = _auth_headers_admin(client)
+    archivo = _xlsx_de_filas([FILA_VALIDA])
+    client.post(
+        "/proveedores-catalogo/cargar", headers=admin,
+        files={"archivo": ("catalogo.xlsx", archivo, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    )
+    r = client.get("/directorio-proveedores", headers=_auth_headers_proveedor(client))
+    assert r.status_code == 200
+    datos = r.json()
+    assert len(datos) == 1
+    assert datos[0]["nombre"] == FILA_VALIDA["nombre"]
+    assert datos[0]["cl_proveedor"] == FILA_VALIDA["cl_proveedor"]

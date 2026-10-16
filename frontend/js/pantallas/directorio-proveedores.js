@@ -13,7 +13,7 @@
 import { crearModal } from "../componentes/modal.js";
 import {
   ESTADOS, RECENT_KEY, SEED_REQUESTS, PROPS,
-  num, visible, formularioVacio,
+  num, visible, formularioVacio, cargarCatalogoReal,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
 
@@ -422,6 +422,10 @@ export function montar(contenedor) {
 
 export function alEntrar() {
   pintar();
+  // El catálogo real puede haber cambiado desde la última visita (ej.
+  // Administrador cargó uno nuevo) -- se vuelve a pedir cada vez que se
+  // entra a la pantalla, y se repinta si ya había una búsqueda en curso.
+  cargarCatalogoReal().then(() => pintar());
 }
 
 export function reiniciar() {

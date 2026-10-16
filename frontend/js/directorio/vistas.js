@@ -10,8 +10,8 @@
 import { escapeHtml as e } from "../core/formato.js";
 import { ICONOS } from "../componentes/iconos.js";
 import {
-  SPECIALTIES, ESTADOS, NOMBRES, DOW, PRICE_OPTIONS, PROPS,
-  num, pick, raw, visible, slotsFor,
+  SPECIALTIES, ESTADOS, DOW, PRICE_OPTIONS, PROPS,
+  num, pick, raw, visible, slotsFor, valoresUnicosCatalogo,
 } from "./datos.js";
 
 const svg = (contenido) =>
@@ -25,17 +25,18 @@ const ICONO_KPI = {
   nube: svg(`<polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/>`),
 };
 
-/* ---------- Sugerencias del buscador (solo en Inicio, desde 2 letras) ---------- */
+/* ---------- Sugerencias del buscador (solo en Inicio, desde 2 letras) ----------
+   Salen del catálogo real cargado por Administrador (ver cargarCatalogoReal
+   en datos.js), no de datos simulados -- así lo que se sugiere siempre
+   existe de verdad en los resultados. */
 export function calcularSugerencias(s) {
   const q = s.query.trim().toLowerCase();
   const sugg = [];
   if (q.length >= 2 && s.screen === "home") {
-    ESTADOS.forEach(es => {
-      es.municipios.forEach(m => { if (m.toLowerCase().includes(q)) sugg.push({ label: m + ", " + es.name, kind: "Municipio", term: m }); });
-      if (es.name.toLowerCase().includes(q)) sugg.push({ label: es.name, kind: "Estado", term: es.name });
-    });
-    SPECIALTIES.forEach(sp => { if (sp.toLowerCase().includes(q)) sugg.push({ label: sp, kind: "Especialidad", term: sp }); });
-    NOMBRES.forEach(n => { if (n.toLowerCase().includes(q)) sugg.push({ label: n, kind: "Médico", term: n }); });
+    valoresUnicosCatalogo("municipio").forEach(m => { if (m.toLowerCase().includes(q)) sugg.push({ label: m, kind: "Municipio", term: m }); });
+    valoresUnicosCatalogo("estado").forEach(es => { if (es.toLowerCase().includes(q)) sugg.push({ label: es, kind: "Estado", term: es }); });
+    valoresUnicosCatalogo("specialty").forEach(sp => { if (sp.toLowerCase().includes(q)) sugg.push({ label: sp, kind: "Especialidad", term: sp }); });
+    valoresUnicosCatalogo("name").forEach(n => { if (n.toLowerCase().includes(q)) sugg.push({ label: n, kind: "Médico", term: n }); });
   }
   return sugg.slice(0, 6);
 }

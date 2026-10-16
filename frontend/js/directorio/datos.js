@@ -4,7 +4,15 @@
    nombres, y la misma matemática (hash FNV-1a) para generar médicos,
    precios, calificaciones y horarios. Así, para la misma zona salen
    exactamente los mismos médicos y en el mismo orden que en el original.
-   No hay conexión con el backend: todo vive en el navegador. */
+
+   ÚNICA EXCEPCIÓN: la búsqueda y la lista de resultados (ver raw()/visible()
+   más abajo) sí están conectadas al catálogo real que carga Administrador
+   (ver pantallas/directorio-proveedores-carga.js) -- cargarCatalogoReal()
+   trae ese catálogo una vez al entrar a la pantalla. El resto (reservar
+   cita, comparador, panel de Métricas/Solicitudes, alta de médico) se
+   queda igual que antes, con datos simulados: no hay horarios/calificaciones
+   reales ni validación real de cédula todavía. */
+import { api } from "../core/api.js";
 
 export const SPECIALTIES = [
   "Medicina General", "Psicología", "Nutrición", "Cardiología", "Ginecología", "Pediatría",
@@ -27,10 +35,6 @@ export const NOMBRES = [
   "Dra. Verónica Aguilar Sáenz", "Dr. Julián Espinoza Mora", "Dra. Rebeca Villanueva Ponce", "Dr. Marco Delgado Ávila"
 ];
 
-export const CALLES = ["Av. Vallarta", "Blvd. Constitución", "Calle Morelos", "Av. Reforma", "Calzada del Valle", "Paseo Montejo", "Av. Juárez", "Calle 60 Norte"];
-export const COLONIAS = ["Col. Americana", "Centro", "Col. del Valle", "Zona Río", "Col. Itzimná", "Lomas Verdes", "Col. Roma Norte"];
-export const HORARIOS = ["Lun–Vie 09:00–14:00", "Lun–Sáb 10:00–18:00", "Mar–Sáb 08:00–13:00", "Lun–Vie 16:00–20:00", "Lun–Jue 09:00–17:00"];
-export const CONVENIOS = ["Convenio GNP", "Convenio AXA", "Convenio MetLife", "Sin convenio"];
 export const SLOTS = ["09:00", "10:30", "12:00", "13:30", "16:00", "17:30", "19:00"];
 export const DOW = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 export const PRICE_OPTIONS = [
@@ -69,72 +73,90 @@ export function formularioVacio() {
   return { name: "", specialty: SPECIALTIES[0], cedula: "", rfc: "", estado: ESTADOS[0].name, municipio: ESTADOS[0].municipios[0], address: "", phone: "", email: "" };
 }
 
-/* Médico número i de una zona (especialidad + estado + municipio). Cada 4o
-   (i % 4 === 3) viene "de Google Places". */
-export function doctorAt(specialty, estado, municipio, i) {
-  const seed = specialty + estado + municipio + i;
-  const fromPlaces = i % 4 === 3;
-  const priceNum = num(seed, "p", 5, 14) * 100;
-  const ratingNum = 4 + num(seed, "r", 0, 9) / 10;
-  const distNum = num(seed, "d", 4, 92) / 10;
+/* Catálogo real (cargado por Administrador, ver GET /directorio-proveedores)
+   -- null mientras no se ha pedido todavía, [] si ya se pidió y vino vacío. */
+let catalogoReal = null;
+
+function mapearProveedor(row) {
+  const costo = parseFloat(row.costo_consulta);
   return {
-    id: seed, name: pick(NOMBRES, seed, "n"), specialty, estado, municipio,
-    cedula: String(num(seed, "c", 1000000, 99999999)).slice(0, 8),
-    clinic: fromPlaces ? "Clínica " + pick(["Santa Fe", "Del Bosque", "Angelis", "Nova Salud", "San Rafael"], seed, "cl") : "Consultorio " + pick(["101", "204", "3B", "512", "8"], seed, "cn"),
-    address: pick(CALLES, seed, "ca") + " " + num(seed, "no", 120, 2400) + ", " + pick(COLONIAS, seed, "co"),
-    schedule: pick(HORARIOS, seed, "h"),
-    ratingNum, rating: ratingNum.toFixed(1) + " ★",
-    priceNum, price: "$" + priceNum + " consulta",
-    distNum, distance: distNum.toFixed(1) + " km",
-    hoy: hash(seed + "hoy") % 2 === 0,
-    tele: hash(seed + "tel") % 3 === 0,
-    convenio: pick(CONVENIOS, seed, "cv"),
-    phone: num(seed, "t", 30, 99) + " " + num(seed, "t2", 1000, 9999) + " " + num(seed, "t3", 1000, 9999),
-    source: fromPlaces ? "Google Places" : "Directorio verificado",
-    fromPlaces
+    id: String(row.cl_proveedor),
+    name: row.nombre,
+    specialty: row.especialidad || "Sin especialidad",
+    estado: row.estado || "",
+    municipio: row.municipio || "",
+    cedula: row.cedula || "",
+    clinic: row.consultorio || "Consultorio no especificado",
+    address: row.direccion || "",
+    schedule: row.horario || "Horario no especificado",
+    // Sin calificación ni distancia real todavía (no hay reseñas ni
+    // geolocalización) -- valores neutros para que ordenar/filtrar no truene.
+    ratingNum: 0, rating: "Sin calificación",
+    priceNum: Number.isFinite(costo) ? costo : 0,
+    price: row.costo_consulta ? "$" + row.costo_consulta + " consulta" : "Costo no especificado",
+    distNum: 0, distance: "—",
+    hoy: true,
+    tele: !!row.teleconsulta,
+    convenio: row.convenio || "Sin convenio",
+    phone: row.telefono || "",
+    email: row.email || "",
+    source: "Catálogo cargado",
+    fromPlaces: false,
   };
 }
 
-/* Lista de una zona. Los de Google Places solo aparecen ya sincronizado. */
-export function buildList(specialty, estado, municipio, placesSynced) {
-  const total = num(specialty + estado + municipio, "len", 5, 9);
-  const out = [];
-  for (let i = 0; i < total; i++) {
-    const d = doctorAt(specialty, estado, municipio, i);
-    if (d.fromPlaces && !placesSynced) continue;
-    out.push(d);
+/* Trae el catálogo real una vez (ver pantallas/directorio-proveedores.js,
+   se llama al montar la pantalla). Si falla (red, permisos), se deja como
+   lista vacía -- la búsqueda/resultados simplemente no encuentran nada en
+   vez de tronar. */
+export async function cargarCatalogoReal() {
+  try {
+    const filas = await api("/directorio-proveedores");
+    catalogoReal = filas.map(mapearProveedor);
+  } catch (err) {
+    catalogoReal = [];
   }
+  return catalogoReal;
+}
+
+function normalizar(texto) {
+  return (texto || "").toString().trim().toLowerCase();
+}
+
+/* Valores únicos de un campo del catálogo real, para las sugerencias del
+   buscador (ver calcularSugerencias en vistas.js). */
+export function valoresUnicosCatalogo(campo) {
+  const vistos = new Set();
+  const out = [];
+  (catalogoReal || []).forEach(d => {
+    const valor = (d[campo] || "").toString().trim();
+    const clave = valor.toLowerCase();
+    if (valor && !vistos.has(clave)) { vistos.add(clave); out.push(valor); }
+  });
   return out;
 }
 
-/* Búsqueda libre: reconoce municipio/estado y/o especialidad en el texto. */
-export function searchResults(term, placesSynced) {
-  const t = term.trim().toLowerCase();
-  if (!t) return { list: [], label: "Sin término de búsqueda", sub: "" };
-  let estado = null, municipio = null, specialty = null;
-  ESTADOS.forEach(e => {
-    if (e.name.toLowerCase().includes(t)) { estado = e.name; municipio = e.municipios[0]; }
-    e.municipios.forEach(m => { if (m.toLowerCase().includes(t)) { estado = e.name; municipio = m; } });
-  });
-  SPECIALTIES.forEach(s => { if (s.toLowerCase().includes(t)) specialty = s; });
-  if (municipio && specialty) return { list: buildList(specialty, estado, municipio, placesSynced), label: specialty + " en " + municipio, sub: municipio + ", " + estado };
-  if (municipio) {
-    const list = [];
-    SPECIALTIES.slice(0, 5).forEach(s => buildList(s, estado, municipio, placesSynced).slice(0, 2).forEach(d => list.push(d)));
-    return { list, label: "Especialistas en " + municipio, sub: municipio + ", " + estado + " · todas las especialidades" };
-  }
-  if (specialty) {
-    const list = [];
-    ESTADOS.slice(0, 4).forEach(e => buildList(specialty, e.name, e.municipios[0], placesSynced).slice(0, 2).forEach(d => list.push(d)));
-    return { list, label: specialty, sub: "Resultados en las zonas con mayor cobertura" };
-  }
-  return { list: [], label: "Sin resultados para «" + term + "»", sub: "No encontramos coincidencias" };
-}
-
-/* Lista "cruda" según el estado actual: por búsqueda o por zona elegida. */
+/* Lista "cruda" según el estado actual: por búsqueda libre o por zona
+   elegida (pantalla "Zona") -- ambas leen del catálogo real cargado por
+   Administrador, ver cargarCatalogoReal(). */
 export function raw(s) {
-  if (s.searchTerm) return searchResults(s.searchTerm, s.placesSynced);
-  if (s.specialty && s.municipio) return { list: buildList(s.specialty, s.estado, s.municipio, s.placesSynced), label: s.specialty + " en " + s.municipio, sub: s.municipio + ", " + s.estado };
+  const catalogo = catalogoReal || [];
+  if (s.searchTerm) {
+    const t = normalizar(s.searchTerm);
+    const list = catalogo.filter(d =>
+      normalizar(d.name).includes(t) || normalizar(d.specialty).includes(t) ||
+      normalizar(d.estado).includes(t) || normalizar(d.municipio).includes(t)
+    );
+    return {
+      list,
+      label: list.length ? `Resultados para "${s.searchTerm}"` : "Sin resultados para «" + s.searchTerm + "»",
+      sub: list.length ? list.length + " especialista(s) encontrados" : "No encontramos coincidencias en el catálogo cargado",
+    };
+  }
+  if (s.specialty && s.municipio) {
+    const list = catalogo.filter(d => normalizar(d.specialty) === normalizar(s.specialty) && normalizar(d.municipio) === normalizar(s.municipio));
+    return { list, label: s.specialty + " en " + s.municipio, sub: s.municipio + ", " + s.estado };
+  }
   return { list: [], label: "", sub: "" };
 }
 
