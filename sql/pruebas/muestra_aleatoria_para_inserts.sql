@@ -20,6 +20,10 @@
 --      s2_RentaEquipoMedico.clRentaEquipoMedico,
 --      s2_EnfermeriaDomicilio.clEnfermeriaDomicilio -- se detectan solas
 --      vía sys.columns.is_identity, no hace falta listarlas a mano).
+--   4) En dbo.Expediente, cualquier columna de tipo date/datetime
+--      (FechaApertura, FechaRegistro, etc.) va con GETDATE() en vez del
+--      valor de la plantilla -- excepto FechaTermino, que siempre va NULL
+--      (expediente nuevo/abierto, todavía no tiene fecha de término).
 --
 -- Cómo usarlo cuando de verdad se vaya a sembrar un expediente (a mano,
 -- revisando antes cada valor):
@@ -103,6 +107,8 @@ GO  -- CREATE PROCEDURE debe ser la única sentencia del batch (SQL Server < 201
 --     columna sale como el texto literal "@NuevoExpediente" en vez del
 --     número real de la plantilla -- debe apuntar al expediente nuevo que
 --     se cree, no al que se usó de ejemplo (ver encabezado del script).
+--   - Si la tabla SÍ es dbo.Expediente, cualquier columna date/datetime
+--     sale como GETDATE() -- excepto FechaTermino, que sale como NULL.
 -- NUNCA ejecuta el INSERT que arma -- solo lo arma como texto.
 CREATE PROCEDURE #GenerarInserts
     @etiqueta NVARCHAR(100),
@@ -138,6 +144,14 @@ BEGIN
             -- este texto) -- se deja como placeholder literal, no como
             -- valor real de la plantilla.
             SET @expr = @q + '@NuevoExpediente' + @q;
+        ELSE IF @tabla = 'dbo.Expediente' AND @columna = 'FechaTermino'
+            -- Expediente nuevo/abierto: todavía no tiene fecha de término.
+            SET @expr = @q + 'NULL' + @q;
+        ELSE IF @tabla = 'dbo.Expediente' AND @tipo IN ('date','datetime','datetime2','smalldatetime','time','datetimeoffset')
+            -- Todas las fechas de dbo.Expediente (FechaApertura, FechaRegistro,
+            -- etc.) van con la fecha/hora real de cuando se vaya a insertar,
+            -- no con la de la plantilla que se usó de ejemplo.
+            SET @expr = @q + 'GETDATE()' + @q;
         ELSE IF @tipo IN ('char','varchar','nchar','nvarchar','text','ntext','xml','uniqueidentifier',
                            'date','datetime','datetime2','smalldatetime','time','datetimeoffset')
             -- Tipo con comillas: se escapa cualquier comilla simple que traiga el valor
