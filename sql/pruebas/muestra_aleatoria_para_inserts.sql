@@ -49,42 +49,42 @@ CREATE TABLE #Muestra (clSubServicio INT, clExpediente INT);
 -- exigir la fila -- si el azar no encuentra ninguno con fila, igual trae
 -- el expediente solo (su INSERT de subsistema va a salir con columnas en
 -- NULL, hay que llenarlas a mano al revisar).
-INSERT INTO #Muestra (clSubServicio, clExpediente)
+INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 226 FROM dbo.Expediente E
 WHERE E.clSubServicio = 226 AND EXISTS (SELECT 1 FROM dbo.S2_ReferciasMedicas RM WHERE RM.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
-INSERT INTO #Muestra (clSubServicio, clExpediente)
+INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 383 FROM dbo.Expediente E
 WHERE E.clSubServicio = 383 AND EXISTS (SELECT 1 FROM dbo.S2_ReferciasMedicas RM WHERE RM.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
-INSERT INTO #Muestra (clSubServicio, clExpediente)
+INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 376 FROM dbo.Expediente E
 WHERE E.clSubServicio = 376
 ORDER BY NEWID();
 
-INSERT INTO #Muestra (clSubServicio, clExpediente)
+INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 377 FROM dbo.Expediente E
 WHERE E.clSubServicio = 377 AND EXISTS (SELECT 1 FROM dbo.Check_Up CKP WHERE CKP.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
-INSERT INTO #Muestra (clSubServicio, clExpediente)
+INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 403 FROM dbo.Expediente E
 WHERE E.clSubServicio = 403 AND EXISTS (SELECT 1 FROM dbo.s2_RentaEquipoMedico REM WHERE REM.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
-INSERT INTO #Muestra (clSubServicio, clExpediente)
+INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 404 FROM dbo.Expediente E
 WHERE E.clSubServicio = 404 AND EXISTS (SELECT 1 FROM dbo.s2_EnfermeriaDomicilio ED WHERE ED.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
-INSERT INTO #Muestra (clSubServicio, clExpediente)
+INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 420 FROM dbo.Expediente E
 WHERE E.clSubServicio = 420 AND EXISTS (SELECT 1 FROM dbo.s2_cPuntoVision PV WHERE PV.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
-INSERT INTO #Muestra (clSubServicio, clExpediente)
+INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 432 FROM dbo.Expediente E
 WHERE E.clSubServicio = 432 AND EXISTS (SELECT 1 FROM dbo.s2_EnvioDeMedicamentos EM WHERE EM.clExpediente = E.clExpediente)
 ORDER BY NEWID();
