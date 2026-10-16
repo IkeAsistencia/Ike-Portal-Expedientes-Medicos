@@ -160,7 +160,7 @@ BEGIN
             -- Siempre 0 ("sin proveedor médico asignado") -- es lo que exige
             -- dbo.ST_CP_ObtenerExpedientesSinProveedorMedico para que el
             -- expediente nuevo aparezca en el portal.
-            SET @expr = '0';
+            SET @expr = @q + '0' + @q;
         ELSE IF @tipo IN ('char','varchar','nchar','nvarchar','text','ntext','xml','uniqueidentifier',
                            'date','datetime','datetime2','smalldatetime','time','datetimeoffset')
             -- Tipo con comillas: se escapa cualquier comilla simple que traiga el valor
