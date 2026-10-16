@@ -98,6 +98,13 @@ ORDER BY NEWID();
 
 IF OBJECT_ID('tempdb..#Resultado') IS NOT NULL DROP TABLE #Resultado;
 CREATE TABLE #Resultado (Subservicio NVARCHAR(100), InsertComentado NVARCHAR(MAX));
+
+-- Si una corrida anterior en esta misma conexión truncó a medias (por un
+-- error, como el de conversión de más abajo), el procedimiento se queda
+-- creado -- hay que tirarlo antes de volver a crearlo, si no la siguiente
+-- corrida usa la versión VIEJA (sin el fix) y revienta con el mismo error
+-- aunque el script ya esté corregido.
+IF OBJECT_ID('tempdb..#GenerarInserts') IS NOT NULL DROP PROCEDURE #GenerarInserts;
 GO  -- CREATE PROCEDURE debe ser la única sentencia del batch (SQL Server < 2016 SP1)
 
 -- Procedimiento TEMPORAL (vive solo en esta sesión): arma, para cualquier
