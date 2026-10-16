@@ -24,6 +24,9 @@
 --      (FechaApertura, FechaRegistro, etc.) va con GETDATE() en vez del
 --      valor de la plantilla -- excepto FechaTermino, que siempre va NULL
 --      (expediente nuevo/abierto, todavía no tiene fecha de término).
+--   5) clEstatus siempre va en 0 ("sin proveedor médico asignado") -- es
+--      lo que exige dbo.ST_CP_ObtenerExpedientesSinProveedorMedico para
+--      que el expediente nuevo se vea en el portal.
 --
 -- Cómo usarlo cuando de verdad se vaya a sembrar un expediente (a mano,
 -- revisando antes cada valor):
@@ -108,7 +111,8 @@ GO  -- CREATE PROCEDURE debe ser la única sentencia del batch (SQL Server < 201
 --     número real de la plantilla -- debe apuntar al expediente nuevo que
 --     se cree, no al que se usó de ejemplo (ver encabezado del script).
 --   - Si la tabla SÍ es dbo.Expediente, cualquier columna date/datetime
---     sale como GETDATE() -- excepto FechaTermino, que sale como NULL.
+--     sale como GETDATE() -- excepto FechaTermino, que sale como NULL --
+--     y clEstatus siempre sale como 0.
 -- NUNCA ejecuta el INSERT que arma -- solo lo arma como texto.
 CREATE PROCEDURE #GenerarInserts
     @etiqueta NVARCHAR(100),
@@ -152,6 +156,11 @@ BEGIN
             -- etc.) van con la fecha/hora real de cuando se vaya a insertar,
             -- no con la de la plantilla que se usó de ejemplo.
             SET @expr = @q + 'GETDATE()' + @q;
+        ELSE IF @tabla = 'dbo.Expediente' AND @columna = 'clEstatus'
+            -- Siempre 0 ("sin proveedor médico asignado") -- es lo que exige
+            -- dbo.ST_CP_ObtenerExpedientesSinProveedorMedico para que el
+            -- expediente nuevo aparezca en el portal.
+            SET @expr = '0';
         ELSE IF @tipo IN ('char','varchar','nchar','nvarchar','text','ntext','xml','uniqueidentifier',
                            'date','datetime','datetime2','smalldatetime','time','datetimeoffset')
             -- Tipo con comillas: se escapa cualquier comilla simple que traiga el valor
