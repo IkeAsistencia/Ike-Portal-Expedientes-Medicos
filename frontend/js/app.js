@@ -58,8 +58,8 @@ function pantallaPermitida(nombre) {
     case "accesos":
     case "historial-correos": return admin;
     // Directorio de Proveedores: maqueta (datos simulados, sin conexión al
-    // backend), solo para el perfil Proveedor.
-    case "directorio-proveedores": return esPerfilProveedor();
+    // backend), para el perfil Proveedor y también para Administrador.
+    case "directorio-proveedores": return esPerfilProveedor() || admin;
     // Carga del catálogo de proveedores (desde Excel): exclusiva de
     // Administrador -- vive solo en este portal, no en Core.
     case "directorio-proveedores-carga": return admin;

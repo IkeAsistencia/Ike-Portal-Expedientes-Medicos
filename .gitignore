@@ -18,3 +18,8 @@ venv/
 # Paquetes zip para solicitar escaneos de seguridad (SGI/Checkmarx) -- se
 # regeneran con `git archive` cuando hagan falta, no es código fuente.
 *.zip
+
+# Plantillas/Excels generados para pruebas manuales (ej. plantilla del
+# catálogo de proveedores) -- se regeneran con el servicio que los crea,
+# no son código fuente.
+*.xlsx

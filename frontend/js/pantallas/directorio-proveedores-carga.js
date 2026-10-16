@@ -13,10 +13,9 @@ const PLANTILLA = `
     <div class="card-header"><h2>Carga del catálogo de proveedores (Core)</h2></div>
     <div class="card-body">
       <p>
-        Este catálogo alimenta el Directorio de Proveedores y vive únicamente
-        en este portal, no en SQL Server. Cada archivo que subas
-        <b>reemplaza por completo</b> el catálogo anterior: debe traer a
-        TODOS los proveedores, no solo los nuevos.
+        Este catálogo se administra únicamente desde este portal. Cada
+        archivo que subas <b>reemplaza por completo</b> el catálogo
+        anterior: debe traer a TODOS los proveedores, no solo los nuevos.
       </p>
       <div class="actions-row" style="justify-content:flex-start;">
         <button class="btn btn-secondary" id="cp-descargar-plantilla">Descargar plantilla Excel</button>
