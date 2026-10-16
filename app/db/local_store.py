@@ -56,6 +56,16 @@ CREATE TABLE IF NOT EXISTS cuentas_configuradas (
     nombre    TEXT NOT NULL
 );
 
+-- Color y prefijo por cuenta (módulo "Colores de Cuentas", solo Administrador).
+CREATE TABLE IF NOT EXISTS cuentas_etiqueta (
+    cl_cuenta        INTEGER PRIMARY KEY,
+    nombre           TEXT NOT NULL,
+    prefijo          TEXT NOT NULL DEFAULT '',
+    color            TEXT NOT NULL,
+    actualizado      TEXT,
+    actualizado_por  TEXT
+);
+
 CREATE TABLE IF NOT EXISTS alertas_proveedor_enviadas (
     cl_expediente INTEGER NOT NULL,
     nivel         TEXT NOT NULL,      -- 'naranja' (>=8h) | 'rojo' (>=24h)

@@ -138,6 +138,10 @@ tbody tr:hover{background:#FAFAFA;}
    scrollea es .content, no la ventana -- position:sticky se ancla solo a
    eso). z-index por encima de las filas del cuerpo (incluidas las columnas
    fijas de abajo) para que el encabezado nunca quede debajo. */
+.tabla-expedientes{table-layout:fixed;}
+/* Anchos fijos (ver COLUMNAS en tabla-expedientes.js): lo que no cabe se corta con "…". */
+.tabla-expedientes th,
+.tabla-expedientes td{overflow:hidden;text-overflow:ellipsis;}
 .tabla-expedientes thead th{position:sticky;top:0;z-index:3;}
 
 /* Franjas alternadas (zebra) en renglones pares -- azul pastel del mismo
@@ -395,3 +399,61 @@ tbody tr:hover{background:#FAFAFA;}
 .mini-table-corte{width:100%;border-collapse:collapse;font-size:12px;}
 .mini-table-corte th{background:var(--gray-bg);text-align:left;padding:6px 8px;position:sticky;top:0;}
 .mini-table-corte td{padding:6px 8px;border-bottom:1px solid var(--gray-border);}
+
+/* ---------- COLORES DE CUENTAS (renglón de Expedientes y módulo del Administrador) ---------- */
+/* Paleta pastel (las claves las valida el servidor: app/schemas/cuenta_etiqueta.py).
+   --cta-bg = tinte del renglón, --cta-fuerte = borde/acento, --cta-texto = texto del prefijo. */
+.cta-rosa{--cta-bg:#FDE9F1;--cta-fuerte:#D6457F;--cta-texto:#8C1D4F;}
+.cta-fucsia{--cta-bg:#F9E6F5;--cta-fuerte:#B5379E;--cta-texto:#6E1E60;}
+.cta-morado{--cta-bg:#EEE8FA;--cta-fuerte:#7253C2;--cta-texto:#43288A;}
+.cta-azul{--cta-bg:#E4EEFC;--cta-fuerte:#2F7DD1;--cta-texto:#174E8C;}
+.cta-celeste{--cta-bg:#E1F4FA;--cta-fuerte:#1C93B8;--cta-texto:#0B5A73;}
+.cta-turquesa{--cta-bg:#DFF5F0;--cta-fuerte:#1E9885;--cta-texto:#0B5E52;}
+.cta-verde{--cta-bg:#E8F5E3;--cta-fuerte:#4A9A3C;--cta-texto:#285B1E;}
+.cta-arena{--cta-bg:#F6EEE0;--cta-fuerte:#A8803A;--cta-texto:#6B4F17;}
+.cta-gris{--cta-bg:#ECEBEA;--cta-fuerte:#6B6A68;--cta-texto:#3F3E3D;}
+
+/* Va DESPUÉS de las reglas de franjas y columnas fijas de .tabla-expedientes
+   (misma especificidad: gana el último) para que el color se vea también en
+   las columnas fijas y en los renglones pares. */
+.tabla-expedientes tbody tr.fila-cta td,
+.tabla-expedientes tbody tr.fila-cta td.col-frozen,
+.tabla-expedientes tbody tr.fila-cta:nth-child(even) td.col-frozen{background:var(--cta-bg);}
+.tabla-expedientes tbody tr.fila-cta,
+.tabla-expedientes tbody tr.fila-cta:nth-child(even){background:var(--cta-bg);}
+.tabla-expedientes tbody tr.fila-cta:hover{background:color-mix(in srgb, var(--cta-bg) 88%, #000 6%);}
+.tabla-expedientes tbody tr.fila-cta:hover td,
+.tabla-expedientes tbody tr.fila-cta:hover td.col-frozen{background:color-mix(in srgb, var(--cta-bg) 88%, #000 6%);}
+/* Acento a la izquierda: con el tinte tan tenue, esta barra ayuda a verlo de lejos. */
+.tabla-expedientes tbody tr.fila-cta td:first-child{box-shadow:inset 4px 0 0 var(--cta-fuerte);}
+
+.cta-chip{
+  display:inline-block;padding:1px 8px;border-radius:9px;font-size:11px;font-weight:700;
+  background:rgba(255,255,255,.8);border:1px solid var(--cta-fuerte);color:var(--cta-texto);
+  line-height:1.5;white-space:nowrap;
+}
+.cta-celda{display:inline-flex;align-items:center;gap:6px;max-width:216px;}
+.cta-nombre{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+
+/* Módulo del Administrador */
+.cc-seleccionada{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;
+  padding:8px 12px;background:var(--white);border:1px solid var(--gray-border);border-radius:var(--radius);font-size:13px;
+}
+.cc-fila{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start;}
+.cc-prefijo{width:230px;max-width:100%;}
+.cc-paleta{display:flex;gap:8px;flex-wrap:wrap;padding-top:2px;}
+.cta-swatch{
+  width:30px;height:30px;border-radius:50%;cursor:pointer;padding:0;
+  background:var(--cta-bg);border:2px solid var(--cta-fuerte);
+}
+.cta-swatch:hover{transform:scale(1.08);}
+.cta-swatch.activo{box-shadow:0 0 0 3px var(--white), 0 0 0 5px var(--cta-fuerte);}
+.cc-vista-previa{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:6px;font-size:12px;}
+.cc-muestra{
+  display:inline-flex;align-items:center;gap:8px;min-width:240px;padding:9px 14px;
+  background:var(--cta-bg, var(--gray-bg));border:1px solid var(--gray-border);border-radius:var(--radius);
+  box-shadow:inset 4px 0 0 var(--cta-fuerte, var(--gray-mid));font-size:13px;color:var(--navy);
+}
+.mini-table tr.fila-cta td{background:var(--cta-bg);}
+.mini-table tr.fila-cta td:first-child{box-shadow:inset 4px 0 0 var(--cta-fuerte);}

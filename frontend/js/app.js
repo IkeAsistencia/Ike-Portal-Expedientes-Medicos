@@ -19,6 +19,7 @@ import * as seguimiento from "./pantallas/seguimiento.js";
 import * as configuracionCuentas from "./pantallas/configuracion-cuentas.js";
 import * as usuariosAccesos from "./pantallas/usuarios-accesos.js";
 import * as historialCorreos from "./pantallas/historial-correos.js";
+import * as coloresCuentas from "./pantallas/colores-cuentas.js";
 import * as corte from "./pantallas/corte.js";
 import * as directorioProveedores from "./pantallas/directorio-proveedores.js";
 import * as directorioProveedoresCarga from "./pantallas/directorio-proveedores-carga.js";
@@ -30,6 +31,7 @@ const PANTALLAS = {
   "configuracion": { modulo: configuracionCuentas, titulo: "Configuración Cuentas" },
   "accesos": { modulo: usuariosAccesos, titulo: "Usuarios y Accesos" },
   "historial-correos": { modulo: historialCorreos, titulo: "Historial de Correos" },
+  "colores-cuentas": { modulo: coloresCuentas, titulo: "Colores de Cuentas" },
   "directorio-proveedores": { modulo: directorioProveedores, titulo: "Directorio de Proveedores" },
   "directorio-proveedores-carga": { modulo: directorioProveedoresCarga, titulo: "Carga catálogo proveedores Core" },
 };
@@ -54,9 +56,11 @@ function pantallaPermitida(nombre) {
     // trabaja en otra iteración. El código sigue en
     // pantallas/configuracion-cuentas.js y en la API; solo nadie llega a ella.
     case "configuracion": return false;
-    // Usuarios y Accesos e Historial de Correos son exclusivos de Administrador.
+    // Usuarios y Accesos, Historial de Correos y Colores de Cuentas son
+    // exclusivos de Administrador.
     case "accesos":
-    case "historial-correos": return admin;
+    case "historial-correos":
+    case "colores-cuentas": return admin;
     // Directorio de Proveedores: maqueta (datos simulados, sin conexión al
     // backend), para el perfil Proveedor y también para Administrador.
     case "directorio-proveedores": return esPerfilProveedor() || admin;

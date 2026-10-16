@@ -18,6 +18,7 @@ from app.routers import (
     catalogos,
     configuracion_cuentas,
     correos_enviados,
+    cuentas_etiquetas,
     expedientes,
     proveedores_catalogo,
     seguimiento,
@@ -115,6 +116,7 @@ app.include_router(configuracion_cuentas.router)
 app.include_router(admin_accesos.router)
 app.include_router(correos_enviados.router)
 app.include_router(proveedores_catalogo.router)
+app.include_router(cuentas_etiquetas.router)
 app.include_router(graphql_router, prefix="/graphql", tags=["GraphQL"])
 
 

@@ -2,7 +2,7 @@ import calendar
 from datetime import date
 
 from app.db.connection import as_tvp_rows, call_procedure
-from app.repositories import estatus_repo
+from app.repositories import cuentas_etiqueta_repo, estatus_repo
 from app.schemas.expediente import Expediente, ExpedienteFiltro, EstatusExpediente
 from app.services import semaforo_service
 
@@ -99,8 +99,10 @@ def listar_expedientes(filtro: ExpedienteFiltro) -> list[Expediente]:
         },
     )
 
+    etiquetas = cuentas_etiqueta_repo.BuscadorDeEtiquetas()  # una sola lectura por consulta
     resultado: list[Expediente] = []
     for row in rows:
+        etiqueta = etiquetas.buscar(row.get("ClCuenta"), row["Cuenta"])
         estatus, fecha_cambio_estatus = _obtener_estatus_y_fecha_cambio(row["Expediente"])
         color_semaforo = semaforo_service.calcular_color(
             cl_sub_servicio=row["ClSubServicio"],
@@ -132,6 +134,8 @@ def listar_expedientes(filtro: ExpedienteFiltro) -> list[Expediente]:
                     fecha_apertura=row["FechaAperturaCompleta"],
                     fecha_cambio_estatus=fecha_cambio_estatus,
                 ),
+                cuenta_color=etiqueta["color"] if etiqueta else None,
+                cuenta_prefijo=(etiqueta["prefijo"] or None) if etiqueta else None,
             )
         )
     return resultado
