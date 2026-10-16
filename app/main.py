@@ -23,6 +23,7 @@ from app.routers import (
     expedientes,
     proveedores_catalogo,
     seguimiento,
+    solicitudes_alta_medico,
 )
 
 
@@ -118,6 +119,7 @@ app.include_router(admin_accesos.router)
 app.include_router(correos_enviados.router)
 app.include_router(proveedores_catalogo.router)
 app.include_router(directorio_proveedores.router)
+app.include_router(solicitudes_alta_medico.router)
 app.include_router(cuentas_etiquetas.router)
 app.include_router(graphql_router, prefix="/graphql", tags=["GraphQL"])
 

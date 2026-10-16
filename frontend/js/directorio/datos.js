@@ -60,13 +60,6 @@ export function hash(str) {
 export const pick = (arr, seed, salt) => arr[hash(seed + "|" + salt) % arr.length];
 export const num = (seed, salt, min, max) => min + (hash(seed + "#" + salt) % (max - min + 1));
 
-export const SEED_REQUESTS = [
-  { folio: "ALT-40218", name: "Dr. Óscar Palomino Reyes", specialty: "Traumatología", zone: "Monterrey, Nuevo León", cedula: "7412985", rfc: "PARO790612K41", status: "En revisión" },
-  { folio: "ALT-40219", name: "Dra. Itzel Guerra Domínguez", specialty: "Pediatría", zone: "Mérida, Yucatán", cedula: "10238471", rfc: "GUDI880903M12", status: "Validada" },
-  { folio: "ALT-40221", name: "Dr. Fabián Cortés Núñez", specialty: "Dermatología", zone: "Zapopan, Jalisco", cedula: "553219", rfc: "CONF830127P08", status: "Cédula no localizada" },
-  { folio: "ALT-40224", name: "Dra. Sandra Uribe Lozano", specialty: "Endocrinología", zone: "Puebla, Puebla", cedula: "9081726", rfc: "URLS910418D55", status: "En revisión" }
-];
-
 /* Formulario de alta vacío (el mismo con el que arranca el original y al
    que regresa "Registrar otro médico"). */
 export function formularioVacio() {
@@ -79,8 +72,12 @@ let catalogoReal = null;
 
 function mapearProveedor(row) {
   const costo = parseFloat(row.costo_consulta);
+  const esPortal = row.origen === "portal";
   return {
-    id: String(row.cl_proveedor),
+    // "core" (catálogo Excel) se identifica por cl_proveedor; "portal"
+    // (alta de médico aprobada, ver solicitudes_alta_medico_repo.py) no
+    // tiene cl_proveedor real -- se identifica por su folio.
+    id: String(row.cl_proveedor ?? row.folio ?? ""),
     name: row.nombre,
     specialty: row.especialidad || "Sin especialidad",
     estado: row.estado || "",
@@ -100,7 +97,10 @@ function mapearProveedor(row) {
     convenio: row.convenio || "Sin convenio",
     phone: row.telefono || "",
     email: row.email || "",
-    source: "Catálogo cargado",
+    codigoPostal: row.codigo_postal || "",
+    latitud: row.latitud ?? null,
+    longitud: row.longitud ?? null,
+    source: esPortal ? "Alta desde el portal" : "Catálogo cargado",
     fromPlaces: false,
   };
 }
@@ -117,6 +117,43 @@ export async function cargarCatalogoReal() {
     catalogoReal = [];
   }
   return catalogoReal;
+}
+
+/* ---------- Alta de médico (ver pantallas/directorio-proveedores.js) ----------
+   La solicitud y su estatus quedan SOLO en este portal (nunca se mandan a
+   Core) -- la validación de cédula sigue siendo simulada en el frontend,
+   solo el registro de la solicitud y el flujo de aprobar/rechazar son
+   reales. Un médico aprobado se vuelve visible en cargarCatalogoReal()
+   (ver origen="portal" en mapearProveedor) sin tocar el catálogo de Excel. */
+export async function cargarSolicitudesReales() {
+  try {
+    const filas = await api("/solicitudes-alta-medico");
+    return filas.map(f => ({
+      folio: f.folio, name: f.nombre, specialty: f.especialidad,
+      zone: [f.municipio, f.estado].filter(Boolean).join(", "),
+      cedula: f.cedula, rfc: f.rfc || "—", status: f.estatus,
+    }));
+  } catch (err) {
+    return [];
+  }
+}
+
+export function enviarSolicitudAlta(form) {
+  return api("/solicitudes-alta-medico", {
+    method: "POST",
+    body: {
+      nombre: form.name, especialidad: form.specialty, cedula: form.cedula, rfc: form.rfc || null,
+      estado: form.estado || null, municipio: form.municipio || null, direccion: form.address || null,
+      telefono: form.phone || null, email: form.email || null,
+    },
+  });
+}
+
+export function actualizarEstatusSolicitud(folio, estatus) {
+  return api("/solicitudes-alta-medico/" + encodeURIComponent(folio) + "/estatus", {
+    method: "POST",
+    body: { estatus },
+  });
 }
 
 function normalizar(texto) {

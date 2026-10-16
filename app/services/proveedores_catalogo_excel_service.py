@@ -36,6 +36,9 @@ COLUMNAS = [
     ("Costo de consulta", "costo_consulta", 18, False),
     ("Convenio (aseguradora)", "convenio", 22, False),
     ("Teleconsulta (Sí/No)", "teleconsulta", 18, False),
+    ("Código Postal", "codigo_postal", 16, False),
+    ("Latitud", "latitud", 14, False),
+    ("Longitud", "longitud", 14, False),
 ]
 
 FILA_ENCABEZADO = 1
@@ -46,6 +49,7 @@ _FILA_EJEMPLO = {
     "direccion": "Av. Vallarta 1450, Col. Americana", "consultorio": "Consultorio 302",
     "telefono": "33 1234 5678", "email": "consultorio@correo.mx", "horario": "Lun-Vie 09:00-14:00",
     "costo_consulta": "800", "convenio": "GNP", "teleconsulta": "No",
+    "codigo_postal": "44100", "latitud": 20.6736, "longitud": -103.344,
 }
 
 
@@ -146,6 +150,17 @@ def leer_catalogo_excel(contenido: bytes) -> list[dict]:
 
         valor_tele = str(registro.get("teleconsulta") or "").strip().lower()
         registro["teleconsulta"] = 1 if valor_tele in ("si", "sí", "1", "true", "x") else 0
+
+        # Opcionales -- si no hay geolocalización/CP todavía, se deja en NULL
+        # (no bloquea la carga, a diferencia de cl_proveedor/nombre).
+        for campo, etiqueta in (("latitud", "Latitud"), ("longitud", "Longitud")):
+            if registro.get(campo) in (None, ""):
+                registro[campo] = None
+                continue
+            try:
+                registro[campo] = float(registro[campo])
+            except (TypeError, ValueError):
+                raise ErrorCatalogoExcel(f'Fila {num_fila}: "{etiqueta}" debe ser un número (ej. 20.6736).')
 
         registros.append(registro)
 

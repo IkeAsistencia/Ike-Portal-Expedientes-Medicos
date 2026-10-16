@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.security import usuario_actual
-from app.repositories import proveedores_catalogo_repo
+from app.repositories import proveedores_catalogo_repo, solicitudes_alta_medico_repo
 from app.repositories.accesos_repo import PERFIL_CABINA
 
 
@@ -25,9 +25,17 @@ router = APIRouter(
 @router.get("")
 def listar():
     """
-    Catálogo completo cargado por Administrador (ver
-    app/routers/proveedores_catalogo.py) -- el frontend busca/filtra sobre
-    esta lista en el navegador, igual que ya hacía antes con los datos
-    simulados (ver frontend/js/directorio/datos.js).
+    Une dos fuentes, cada una marcada con su "origen" para distinguirlas en
+    el frontend (ver mapearProveedor en frontend/js/directorio/datos.js):
+      - "core": el catálogo que carga Administrador desde Excel (ver
+        app/routers/proveedores_catalogo.py) -- tiene cl_proveedor real.
+      - "portal": médicos dados de alta desde esta misma pantalla y ya
+        aprobados (ver app/routers/solicitudes_alta_medico.py) -- no vienen
+        de Core, por eso no tienen cl_proveedor y se identifican por folio.
+    El frontend busca/filtra sobre esta lista unida en el navegador, igual
+    que ya hacía antes con los datos simulados.
     """
-    return proveedores_catalogo_repo.listar_catalogo()
+    core = proveedores_catalogo_repo.listar_catalogo()
+    for fila in core:
+        fila["origen"] = "core"
+    return core + solicitudes_alta_medico_repo.listar_aprobados_como_directorio()

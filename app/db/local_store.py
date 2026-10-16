@@ -19,6 +19,9 @@ se persisten en SQL Server:
     Proveedores (pantalla "Carga catálogo proveedores Core", exclusiva de
     Administrador) -- se carga completo desde un Excel, vive SOLO aquí,
     no existe en SQL Server/Core.
+  - solicitudes_alta_medico: solicitudes de "Alta de médico" (pantalla
+    "Proveedores" del Directorio de Proveedores) -- igual que el catálogo,
+    vive SOLO en este portal, nunca en SQL Server/Core.
 
 Este archivo vive junto al API (ver LOCAL_DB_PATH en .env) y no requiere
 ningún permiso especial en SQL Server.
@@ -195,7 +198,10 @@ CREATE TABLE IF NOT EXISTS proveedores_catalogo (
     horario        TEXT,
     costo_consulta TEXT,
     convenio       TEXT,
-    teleconsulta   INTEGER NOT NULL DEFAULT 0
+    teleconsulta   INTEGER NOT NULL DEFAULT 0,
+    codigo_postal  TEXT,
+    latitud        REAL,
+    longitud       REAL
 );
 
 -- Bitácora de cada carga del catálogo de proveedores -- cada carga
@@ -207,6 +213,27 @@ CREATE TABLE IF NOT EXISTS proveedores_catalogo_cargas (
     rfc         TEXT NOT NULL,
     total_filas INTEGER NOT NULL,
     fecha       TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+-- Solicitudes de "Alta de médico" (pantalla "Proveedores" del Directorio
+-- de Proveedores) -- queda SOLO en el portal, nunca se manda a Core. La
+-- validación de cédula sigue siendo simulada (ver frontend); aquí solo se
+-- guarda la solicitud y su estatus para que Administrador la revise.
+CREATE TABLE IF NOT EXISTS solicitudes_alta_medico (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    folio        TEXT NOT NULL UNIQUE,
+    nombre       TEXT NOT NULL,
+    especialidad TEXT NOT NULL,
+    cedula       TEXT NOT NULL,
+    rfc          TEXT,
+    estado       TEXT,
+    municipio    TEXT,
+    direccion    TEXT,
+    telefono     TEXT,
+    email        TEXT,
+    estatus      TEXT NOT NULL DEFAULT 'En revisión',
+    rfc_solicito TEXT NOT NULL,
+    fecha        TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 """
 
@@ -231,6 +258,14 @@ def _migrar_columnas_faltantes(conn: sqlite3.Connection) -> None:
     columnas_comentarios = {row["name"] for row in conn.execute("PRAGMA table_info(comentarios_seguimiento)")}
     if "origen" not in columnas_comentarios:
         conn.execute("ALTER TABLE comentarios_seguimiento ADD COLUMN origen TEXT NOT NULL DEFAULT 'proveedor'")
+
+    columnas_catalogo = {row["name"] for row in conn.execute("PRAGMA table_info(proveedores_catalogo)")}
+    if "codigo_postal" not in columnas_catalogo:
+        conn.execute("ALTER TABLE proveedores_catalogo ADD COLUMN codigo_postal TEXT")
+    if "latitud" not in columnas_catalogo:
+        conn.execute("ALTER TABLE proveedores_catalogo ADD COLUMN latitud REAL")
+    if "longitud" not in columnas_catalogo:
+        conn.execute("ALTER TABLE proveedores_catalogo ADD COLUMN longitud REAL")
 
 
 def init_local_db() -> None:

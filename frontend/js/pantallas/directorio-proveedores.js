@@ -1,9 +1,17 @@
-/* Pantalla: Directorio de Proveedores (solo perfil Proveedor).
+/* Pantalla: Directorio de Proveedores (perfiles Proveedor y Administrador).
    Es la maqueta del prototipo "Directorio de Proveedores" (búsqueda de
    especialistas por zona y especialidad) metida dentro del portal: mismos
-   textos, mismos datos simulados y mismo comportamiento que el original,
-   con el diseño del portal. NO tiene conexión con el backend: no llama a la
-   API ni toca expedientes, correos o usuarios; todo vive en el navegador.
+   textos y mismo comportamiento que el original, con el diseño del portal.
+   NO toca expedientes, correos ni usuarios -- pero SÍ tiene conexión real
+   con el backend para dos cosas (ver js/directorio/datos.js):
+     - Búsqueda/resultados: leen del catálogo real cargado por
+       Administrador (pantalla "Carga catálogo proveedores Core").
+     - Alta de médico / Solicitudes: la solicitud, su estatus y su
+       aprobación quedan guardados en este portal (nunca en Core) -- un
+       médico aprobado se vuelve buscable en el Directorio.
+   El resto (reservar cita, comparador, panel de Métricas, validación de
+   cédula) se queda simulado: no hay horarios/calificaciones reales ni
+   validación real de cédula todavía.
 
    Sub-pantallas internas (por estado, no por hash): home, zone, results,
    compare, metrics, admin (Solicitudes) y register (Alta de médico), más la
@@ -12,10 +20,12 @@
    js/directorio/vistas.js. */
 import { crearModal } from "../componentes/modal.js";
 import {
-  ESTADOS, RECENT_KEY, SEED_REQUESTS, PROPS,
-  num, visible, formularioVacio, cargarCatalogoReal,
+  ESTADOS, RECENT_KEY, PROPS,
+  visible, formularioVacio, cargarCatalogoReal,
+  cargarSolicitudesReales, enviarSolicitudAlta, actualizarEstatusSolicitud,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
+import { toast } from "../core/toast.js";
 
 const PLANTILLA = `
   <div class="dp-directorio" id="dp-raiz">
@@ -47,7 +57,7 @@ function estadoInicial() {
     filters: { maxPrice: 9999, hoy: false, tele: false, seguro: false, soloVerificados: false, orden: "rating" },
     compare: [],
     detail: null, bookingStep: "idle", bookingDay: null, bookingSlot: null,
-    cedulaStatus: "idle", registered: null, requests: SEED_REQUESTS.slice(),
+    cedulaStatus: "idle", registered: null, requests: [],
     form: formularioVacio(),
   };
 }
@@ -250,18 +260,40 @@ function verificarCedula() {
   }, 1200);
 }
 
-function enviarAlta() {
+/* La solicitud SÍ se guarda de verdad en el portal (ver
+   enviarSolicitudAlta en datos.js) -- la validación de cédula de arriba
+   sigue siendo simulada, pero el registro y su folio ya no se pierden al
+   recargar la página. */
+async function enviarAlta() {
   if (estado.cedulaStatus !== "valid") { irA({ cedulaStatus: "invalid" }); return; }
   const fm = estado.form;
-  const folio = "ALT-" + num(fm.cedula, "f", 10000, 99999);
-  irA({
-    registered: { name: fm.name || "El médico", folio },
-    requests: [{ folio, name: fm.name || "Solicitante sin nombre", specialty: fm.specialty, zone: fm.municipio + ", " + fm.estado, cedula: fm.cedula, rfc: fm.rfc || "—", status: "En revisión" }].concat(estado.requests),
-  });
+  try {
+    const { folio } = await enviarSolicitudAlta(fm);
+    irA({ registered: { name: fm.name || "El médico", folio } });
+    cargarSolicitudes();
+  } catch (err) {
+    toast(err.message, "error");
+  }
 }
 
-function cambiarEstatusSolicitud(indice, estatus) {
-  irA({ requests: estado.requests.map((x, j) => (j === indice ? Object.assign({}, x, { status: estatus }) : x)) });
+/* Aprobar/Rechazar sí actualiza el estatus real de la solicitud -- un
+   médico recién aprobado se vuelve buscable en el Directorio en cuanto
+   cargarCatalogoReal() lo vuelva a pedir (ver mapearProveedor, origen
+   "portal"). */
+async function cambiarEstatusSolicitud(indice, estatus) {
+  const solicitud = estado.requests[indice];
+  if (!solicitud) return;
+  try {
+    await actualizarEstatusSolicitud(solicitud.folio, estatus);
+    await cargarSolicitudes();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+async function cargarSolicitudes() {
+  estado.requests = await cargarSolicitudesReales();
+  pintar();
 }
 
 const medicoVisible = (id) => visible(estado).find(x => x.id === id) || null;
@@ -422,10 +454,11 @@ export function montar(contenedor) {
 
 export function alEntrar() {
   pintar();
-  // El catálogo real puede haber cambiado desde la última visita (ej.
-  // Administrador cargó uno nuevo) -- se vuelve a pedir cada vez que se
-  // entra a la pantalla, y se repinta si ya había una búsqueda en curso.
+  // El catálogo y las solicitudes pueden haber cambiado desde la última
+  // visita (ej. Administrador cargó un catálogo nuevo, o aprobó una
+  // solicitud) -- se vuelven a pedir cada vez que se entra a la pantalla.
   cargarCatalogoReal().then(() => pintar());
+  cargarSolicitudes();
 }
 
 export function reiniciar() {

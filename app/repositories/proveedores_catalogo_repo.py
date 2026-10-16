@@ -3,7 +3,7 @@ from app.db.local_store import ahora_local, get_local_connection
 _COLUMNAS_CATALOGO = (
     "cl_proveedor", "nombre", "especialidad", "cedula", "rfc", "estado", "municipio",
     "direccion", "consultorio", "telefono", "email", "horario", "costo_consulta",
-    "convenio", "teleconsulta",
+    "convenio", "teleconsulta", "codigo_postal", "latitud", "longitud",
 )
 
 
