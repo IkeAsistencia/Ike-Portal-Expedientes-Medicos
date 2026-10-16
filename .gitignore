@@ -14,3 +14,7 @@ venv/
 # se depositan en la raíz del proyecto pero no son parte del código.
 *.docx
 *.pdf
+
+# Paquetes zip para solicitar escaneos de seguridad (SGI/Checkmarx) -- se
+# regeneran con `git archive` cuando hagan falta, no es código fuente.
+*.zip
