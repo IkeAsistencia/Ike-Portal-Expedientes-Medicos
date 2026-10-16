@@ -5,6 +5,50 @@ import { esPerfilAdministrador } from "../core/sesion.js";
 
 export const COLUMNAS_TABLA = 18;
 
+/* Columnas de la tabla, en orden. La tabla usa anchos FIJOS (table-layout:
+   fixed): así cada columna mide exactamente lo que dice aquí y el
+   desplazamiento "left" de las columnas fijas (las primeras, que se quedan
+   al hacer scroll horizontal) coincide con su posición real -- si no,
+   quedaban huecos entre ellas y la primera columna que sigue (Titular)
+   quedaba tapada por las fijas. Solo se fijan hasta Cuenta para dejar
+   espacio a Titular y al resto. */
+const COLUMNAS = [
+  { w: 40, fija: true },    // #
+  { w: 36, fija: true },    // casilla
+  { w: 135, fija: true },   // Fecha Apertura
+  { w: 95, fija: true },    // Expediente
+  { w: 115, fija: true },   // ⏱ Tiempo
+  { w: 240, fija: true },   // Cuenta
+  { w: 135 },               // Servicio
+  { w: 150 },               // Subservicio
+  { w: 340 },               // Titular
+  { w: 230 },               // Paciente
+  { w: 150 },               // Especialidad
+  { w: 130 },               // Entidad
+  { w: 150 },               // Municipio
+  { w: 200 },               // Fecha Asignación Proveedor
+  { w: 105 },               // Fecha Cita
+  { w: 120 },               // Teléfono
+  { w: 230 },               // Correo
+  { w: 175 },               // Estado
+];
+const ULTIMA_FIJA = COLUMNAS.reduce((u, c, i) => (c.fija ? i : u), 0);
+const IZQUIERDA = [];
+let anchoTotal = 0;
+COLUMNAS.forEach((c) => { IZQUIERDA.push(anchoTotal); anchoTotal += c.w; });
+
+/* Clases y estilo de una celda según su columna (las fijas llevan su "left"). */
+function celda(i) {
+  if (!COLUMNAS[i].fija) return "";
+  return ` class="col-frozen${i === ULTIMA_FIJA ? " col-frozen-last" : ""}" style="left:${IZQUIERDA[i]}px;"`;
+}
+
+/* Celda de texto: se corta con "…" si no cabe y el valor completo sale al pasar el cursor. */
+function celdaTexto(i, texto) {
+  const t = texto == null ? "" : String(texto);
+  return `<td${celda(i)} title="${escapeHtml(t)}">${escapeHtml(t)}</td>`;
+}
+
 export function badgeEstatus(estatus) {
   const map = {
     "Abierto": "pendiente",
@@ -34,6 +78,18 @@ export function puntoSemaforo(color, tiempo) {
   return `<span class="semaforo-celda" title="${titulo}${tiempo ? " · " + escapeHtml(tiempo) : ""}"><span class="semaforo-punto ${clase}"></span>${texto}</span>`;
 }
 
+/* Color y prefijo de la cuenta (módulo "Colores de Cuentas"): el renglón se
+   pinta del color de la cuenta y el prefijo sale junto a su nombre. */
+function claseFila(r) {
+  return r.cuenta_color ? ` class="fila-cta cta-${escapeHtml(String(r.cuenta_color).replace(/[^a-z]/g, ""))}"` : "";
+}
+
+function celdaCuenta(r) {
+  const chip = r.cuenta_prefijo ? `<span class="cta-chip">${escapeHtml(r.cuenta_prefijo)}</span>` : "";
+  if (!chip) return escapeHtml(r.cuenta);
+  return `<span class="cta-celda" title="${escapeHtml(r.cuenta)}">${chip}<span class="cta-nombre">${escapeHtml(r.cuenta)}</span></span>`;
+}
+
 function celdaExpediente(numeroExpediente) {
   // Administrador solo busca/selecciona para el corte -- no entra al detalle
   // de Seguimiento (esa pantalla es trabajo operativo de Cabina/Proveedor).
@@ -43,20 +99,21 @@ function celdaExpediente(numeroExpediente) {
 
 export function tablaExpedientesHtml({ idTabla, idChkTodos, idTbody, mensajeInicial }) {
   return `
-    <table class="tabla-expedientes" id="${idTabla}">
+    <table class="tabla-expedientes" id="${idTabla}" style="width:${anchoTotal}px;">
+      <colgroup>${COLUMNAS.map(c => `<col style="width:${c.w}px;">`).join("")}</colgroup>
       <thead>
         <tr>
-          <th class="col-frozen" style="width:40px;left:0;">#</th>
-          <th class="col-frozen" style="width:32px;left:40px;"><input type="checkbox" id="${idChkTodos}"></th>
-          <th class="col-frozen" style="width:140px;left:72px;">Fecha Apertura</th>
-          <th class="col-frozen" style="width:100px;left:212px;">Expediente</th>
-          <th class="col-frozen" style="width:120px;left:312px;" title="Semáforo del expediente y tiempo transcurrido">⏱ Tiempo</th>
-          <th class="col-frozen" style="width:190px;left:432px;">Cuenta</th>
-          <th class="col-frozen" style="width:130px;left:622px;">Servicio</th>
-          <th class="col-frozen col-frozen-last" style="width:150px;left:752px;">Subservicio</th>
-          <th>Titular</th><th>Paciente</th><th>Especialidad</th>
-          <th>Entidad</th><th>Municipio</th><th>Fecha Asignación Proveedor</th>
-          <th>Fecha Cita</th><th>Teléfono</th><th>Correo</th><th>Estado</th>
+          <th${celda(0)}>#</th>
+          <th${celda(1)}><input type="checkbox" id="${idChkTodos}"></th>
+          <th${celda(2)}>Fecha Apertura</th>
+          <th${celda(3)}>Expediente</th>
+          <th${celda(4)} title="Semáforo del expediente y tiempo transcurrido">⏱ Tiempo</th>
+          <th${celda(5)}>Cuenta</th>
+          <th${celda(6)}>Servicio</th>
+          <th${celda(7)}>Subservicio</th>
+          <th${celda(8)}>Titular</th><th${celda(9)}>Paciente</th><th${celda(10)}>Especialidad</th>
+          <th${celda(11)}>Entidad</th><th${celda(12)}>Municipio</th><th${celda(13)}>Fecha Asignación Proveedor</th>
+          <th${celda(14)}>Fecha Cita</th><th${celda(15)}>Teléfono</th><th${celda(16)}>Correo</th><th${celda(17)}>Estado</th>
         </tr>
       </thead>
       <tbody id="${idTbody}">
@@ -77,25 +134,25 @@ export function filaMensaje(tbody, mensaje, clase = "empty") {
    - alCambiarSeleccion(): se marcó/desmarcó alguna casilla. */
 export function renderFilasExpedientes(tbody, filas, { inicio, seleccionados, alAbrir, alCambiarSeleccion }) {
   tbody.innerHTML = filas.map((r, i) => `
-    <tr>
-      <td class="col-frozen" style="left:0;">${inicio + i + 1}</td>
-      <td class="col-frozen" style="left:40px;"><input type="checkbox" class="chk-expediente" data-exp="${r.expediente}" ${seleccionados.has(r.expediente) ? "checked" : ""}></td>
-      <td class="col-frozen" style="left:72px;">${formatDateTime(r.fecha_apertura_completa)}</td>
-      <td class="col-frozen" style="left:212px;">${celdaExpediente(r.expediente)}</td>
-      <td class="col-frozen" style="left:312px;">${puntoSemaforo(r.color_semaforo, r.tiempo_semaforo)}</td>
-      <td class="col-frozen" style="left:432px;">${escapeHtml(r.cuenta)}</td>
-      <td class="col-frozen" style="left:622px;">${escapeHtml(r.tipo_servicio || "")}</td>
-      <td class="col-frozen col-frozen-last" style="left:752px;">${escapeHtml(r.tipo_subservicio || "")}</td>
-      <td>${escapeHtml(r.nombre_titular || "")}</td>
-      <td>${escapeHtml(r.nombre_paciente)}</td>
-      <td>${escapeHtml(r.especialidad || "")}</td>
-      <td>${escapeHtml(r.entidad || "")}</td>
-      <td>${escapeHtml(r.municipio || "")}</td>
-      <td>${r.fecha_asignacion_proveedor ? formatDate(r.fecha_asignacion_proveedor) : '<span class="muted">Sin asignar</span>'}</td>
-      <td>${r.fecha_cita ? formatDate(r.fecha_cita) : '<span class="muted">Sin cita</span>'}</td>
-      <td>${escapeHtml(r.telefono || "")}</td>
-      <td>${escapeHtml(r.email || "")}</td>
-      <td>${badgeEstatus(r.estatus)}</td>
+    <tr${claseFila(r)}>
+      <td${celda(0)}>${inicio + i + 1}</td>
+      <td${celda(1)}><input type="checkbox" class="chk-expediente" data-exp="${r.expediente}" ${seleccionados.has(r.expediente) ? "checked" : ""}></td>
+      <td${celda(2)}>${formatDateTime(r.fecha_apertura_completa)}</td>
+      <td${celda(3)}>${celdaExpediente(r.expediente)}</td>
+      <td${celda(4)}>${puntoSemaforo(r.color_semaforo, r.tiempo_semaforo)}</td>
+      <td${celda(5)}>${celdaCuenta(r)}</td>
+      ${celdaTexto(6, r.tipo_servicio)}
+      ${celdaTexto(7, r.tipo_subservicio)}
+      ${celdaTexto(8, r.nombre_titular)}
+      ${celdaTexto(9, r.nombre_paciente)}
+      ${celdaTexto(10, r.especialidad)}
+      ${celdaTexto(11, r.entidad)}
+      ${celdaTexto(12, r.municipio)}
+      <td${celda(13)}>${r.fecha_asignacion_proveedor ? formatDate(r.fecha_asignacion_proveedor) : '<span class="muted">Sin asignar</span>'}</td>
+      <td${celda(14)}>${r.fecha_cita ? formatDate(r.fecha_cita) : '<span class="muted">Sin cita</span>'}</td>
+      ${celdaTexto(15, r.telefono)}
+      ${celdaTexto(16, r.email)}
+      <td${celda(17)}>${badgeEstatus(r.estatus)}</td>
     </tr>
   `).join("");
 

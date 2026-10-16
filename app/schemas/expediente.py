@@ -51,6 +51,10 @@ class Expediente(BaseModel):
     color_semaforo: Optional[str] = None
     # Cuánto tiempo lleva en la etapa que mide el semáforo ("13 h 20 min").
     tiempo_semaforo: Optional[str] = None
+    # Color (clave de la paleta) y prefijo que el Administrador le puso a la
+    # cuenta en "Colores de Cuentas" (ver cuentas_etiqueta_repo.py). None = sin etiqueta.
+    cuenta_color: Optional[str] = None
+    cuenta_prefijo: Optional[str] = None
 
 
 class ExpedienteFiltro(BaseModel):

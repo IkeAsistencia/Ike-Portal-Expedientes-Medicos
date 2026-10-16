@@ -1621,3 +1621,61 @@ def test_seed_usuarios_prueba_rechaza_password_debil(client):
 
     with pytest.raises(SystemExit):
         ejecutar(password="debil")
+
+
+# ---------- Colores de Cuentas (color y prefijo por cuenta) ----------
+def test_colores_de_cuentas_solo_administrador(client):
+    for headers in (_auth_headers_cabina(client), _auth_headers_proveedor(client)):
+        assert client.get("/admin/cuentas-etiquetas", headers=headers).status_code == 403
+        assert client.get("/admin/cuentas-etiquetas/paleta", headers=headers).status_code == 403
+        r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}, headers=headers)
+        assert r.status_code == 403
+        assert client.delete("/admin/cuentas-etiquetas/2819", headers=headers).status_code == 403
+
+
+def test_colores_de_cuentas_alta_cambio_y_baja(client):
+    headers = _auth_headers_admin(client)
+    assert client.get("/admin/cuentas-etiquetas", headers=headers).json() == []
+    claves = [c["clave"] for c in client.get("/admin/cuentas-etiquetas/paleta", headers=headers).json()]
+    assert "rosa" in claves and "morado" in claves
+
+    r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": " DEM ", "color": "Rosa"}, headers=headers)
+    assert r.status_code == 200 and r.json()["actualizada"] is False
+    fila = client.get("/admin/cuentas-etiquetas", headers=headers).json()[0]
+    assert (fila["cl_cuenta"], fila["prefijo"], fila["color"]) == (2819, "DEM", "rosa")
+    assert fila["actualizado_por"] == "Admin de Prueba"
+
+    # Se puede cambiar en cualquier momento (misma cuenta, no se duplica)
+    r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "", "color": "azul"}, headers=headers)
+    assert r.json()["actualizada"] is True
+    filas = client.get("/admin/cuentas-etiquetas", headers=headers).json()
+    assert len(filas) == 1 and filas[0]["color"] == "azul" and filas[0]["prefijo"] == ""
+
+    assert client.delete("/admin/cuentas-etiquetas/2819", headers=headers).status_code == 200
+    assert client.delete("/admin/cuentas-etiquetas/2819", headers=headers).status_code == 404
+
+
+def test_colores_de_cuentas_rechaza_color_y_prefijo_invalidos(client):
+    headers = _auth_headers_admin(client)
+    base = {"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}
+    assert client.put("/admin/cuentas-etiquetas", json={**base, "color": "#ff0000"}, headers=headers).status_code == 422
+    assert client.put("/admin/cuentas-etiquetas", json={**base, "color": "rojo-fuerte"}, headers=headers).status_code == 422
+    assert client.put("/admin/cuentas-etiquetas", json={**base, "prefijo": "<b>x</b>"}, headers=headers).status_code == 422
+    assert client.put("/admin/cuentas-etiquetas", json={**base, "prefijo": "A" * 13}, headers=headers).status_code == 422
+    assert client.get("/admin/cuentas-etiquetas", headers=headers).json() == []
+
+
+def test_expedientes_traen_color_y_prefijo_de_su_cuenta(client):
+    admin = _auth_headers_admin(client)
+    cabina = _auth_headers_cabina(client)
+    sin = client.get("/expedientes", headers=cabina).json()
+    assert sin and all(e["cuenta_color"] is None and e["cuenta_prefijo"] is None for e in sin)
+
+    client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "cuenta  DEMO", "prefijo": "DEM", "color": "morado"}, headers=admin)
+    con = client.get("/expedientes", headers=cabina).json()
+    # el nombre se compara sin importar mayúsculas ni espacios de más
+    assert all(e["cuenta_color"] == "morado" and e["cuenta_prefijo"] == "DEM" for e in con)
+
+    client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "", "color": "azul"}, headers=admin)
+    sin_prefijo = client.get("/expedientes", headers=cabina).json()
+    assert all(e["cuenta_color"] == "azul" and e["cuenta_prefijo"] is None for e in sin_prefijo)
