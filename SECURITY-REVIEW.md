@@ -298,3 +298,52 @@ redundantes (un `if` visible en el cuerpo de la función, además del
 `Query`/`Field` de Pydantic) solo para que el motor de análisis estático
 las reconozca -- no aportan protección adicional real, ya que FastAPI
 rechaza la petición antes de llegar a ese código.
+
+---
+
+# Autorrevisión previa a nueva solicitud a SGI — 2026-10-16
+
+Barrido propio (SCA + SAST local) antes de mandar un nuevo paquete a SGI
+para la siguiente corrida de Checkmarx -- desde el último escaneo
+(2026-10-13) se agregaron la alerta de respuesta de proveedor, el
+paginador con números de página, ajustes al semáforo de tiempos, un
+script de generación de INSERTs de prueba (`sql/pruebas/`) y la maqueta
+del Directorio de Proveedores.
+
+## SCA — `pip-audit` sobre `requirements.txt`
+
+Sin vulnerabilidades conocidas en ninguna de las dependencias pinneadas
+(`fastapi 0.141.1`, `starlette 1.8.0`, `pyodbc 5.2.0`, `pydantic 2.9.2`,
+`PyJWT 2.15.0`, `strawberry-graphql 0.327.7`, `openpyxl 3.1.5`, `httpx
+0.27.2` y sus transitivas). Las correcciones de Starlette del escaneo del
+2026-10-13 se mantienen vigentes.
+
+## SAST — `bandit` sobre `app/`, `scripts/`, `dev_server_datos_prueba.py`
+
+3 hallazgos, los 3 LOW/falsos positivos del detector genérico de
+"posible contraseña hardcodeada" (`B105`/`B106`), ninguno es una
+credencial real:
+
+| Archivo | Línea | Qué detectó | Por qué no aplica |
+|---|---|---|---|
+| `dev_server_datos_prueba.py` | 135 | Cadena `'Qwer1234$'` | Es la contraseña de los usuarios semilla de **desarrollo** (`scripts/seed_usuarios_prueba.py`), nunca se usa en QA/producción |
+| `app/config.py` | 25 | Cadena `'CAMBIA-ESTE-VALOR-EN-TU-.env'` | Es el valor por defecto que obliga a fallar visiblemente si alguien olvida definir `JWT_SECRET_KEY` en su `.env` -- no es un secreto real |
+| `app/schemas/acceso.py` | 9 | Mensaje de error que contiene la palabra "contraseña" | Es el texto del `ValueError` de validación ("La contraseña debe tener..."), no un valor de contraseña |
+
+## Qué se excluyó de este paquete
+
+El módulo **Directorio de Proveedores** (`frontend/css/directorio.css`,
+`frontend/js/directorio/*`, `frontend/js/pantallas/directorio-proveedores.js`)
+se dejó fuera del zip para SGI. Es una maqueta de frontend puro, con datos
+simulados vía hash (ver encabezado de `frontend/js/directorio/datos.js`),
+sin conexión a ningún backend ni dato real todavía -- el desarrollo real
+contra datos/API propios apenas va a empezar, así que no tiene sentido
+que un escaneo le abra hallazgos sobre código que se va a reescribir.
+Se incluirá en el próximo paquete una vez que tenga lógica de verdad
+detrás.
+
+## Paquete generado
+
+`portal-promedico-20261016.zip` (146 archivos, árbol de `git archive` de
+la rama `dev` menos los 5 archivos del Directorio de Proveedores) --
+listo para subir a SGI y solicitar la siguiente corrida de Checkmarx.
