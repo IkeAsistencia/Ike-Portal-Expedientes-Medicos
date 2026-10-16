@@ -21,6 +21,7 @@ import * as usuariosAccesos from "./pantallas/usuarios-accesos.js";
 import * as historialCorreos from "./pantallas/historial-correos.js";
 import * as corte from "./pantallas/corte.js";
 import * as directorioProveedores from "./pantallas/directorio-proveedores.js";
+import * as directorioProveedoresCarga from "./pantallas/directorio-proveedores-carga.js";
 
 const PANTALLAS = {
   "expedientes": { modulo: expedientes, titulo: "Expedientes" },
@@ -30,6 +31,7 @@ const PANTALLAS = {
   "accesos": { modulo: usuariosAccesos, titulo: "Usuarios y Accesos" },
   "historial-correos": { modulo: historialCorreos, titulo: "Historial de Correos" },
   "directorio-proveedores": { modulo: directorioProveedores, titulo: "Directorio de Proveedores" },
+  "directorio-proveedores-carga": { modulo: directorioProveedoresCarga, titulo: "Carga catálogo proveedores Core" },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -58,6 +60,9 @@ function pantallaPermitida(nombre) {
     // Directorio de Proveedores: maqueta (datos simulados, sin conexión al
     // backend), solo para el perfil Proveedor.
     case "directorio-proveedores": return esPerfilProveedor();
+    // Carga del catálogo de proveedores (desde Excel): exclusiva de
+    // Administrador -- vive solo en este portal, no en Core.
+    case "directorio-proveedores-carga": return admin;
     default: return false;
   }
 }
@@ -71,6 +76,14 @@ function pantallaInicial() {
 function aplicarPermisos() {
   document.querySelectorAll(".nav-item[data-pantalla]").forEach(item => {
     item.classList.toggle("hidden-perfil", !pantallaPermitida(item.dataset.pantalla));
+  });
+  // Grupos del menú con sub-opciones (ej. "Directorio de Proveedores"): el
+  // encabezado del grupo se oculta solo si NINGUNA de sus sub-opciones le
+  // aplica al perfil actual (cada una puede tener su propia regla -- ej.
+  // "Proveedores" es solo de Proveedor y "Carga catálogo..." solo de Administrador).
+  document.querySelectorAll(".nav-grupo[data-subitems]").forEach(grupo => {
+    const subitems = grupo.dataset.subitems.split(",");
+    grupo.classList.toggle("hidden-perfil", !subitems.some(pantallaPermitida));
   });
   Object.values(PANTALLAS).forEach(({ modulo }) => modulo.aplicarPermisos?.());
 }

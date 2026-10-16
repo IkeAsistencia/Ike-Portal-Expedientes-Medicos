@@ -15,6 +15,10 @@ se persisten en SQL Server:
   - seguimiento_core_fallidos: bitácora PROPIA del portal para los intentos
     de "Actualizar Core"/"Regresar a Proveedor" que no se pudieron
     insertar en dbo.Seguimiento por un error de base de datos.
+  - proveedores_catalogo: catálogo de proveedores del Directorio de
+    Proveedores (pantalla "Carga catálogo proveedores Core", exclusiva de
+    Administrador) -- se carga completo desde un Excel, vive SOLO aquí,
+    no existe en SQL Server/Core.
 
 Este archivo vive junto al API (ver LOCAL_DB_PATH en .env) y no requiere
 ningún permiso especial en SQL Server.
@@ -157,6 +161,42 @@ CREATE TABLE IF NOT EXISTS correos_enviados (
     rfc_envio     TEXT NOT NULL,
     simulado      INTEGER NOT NULL DEFAULT 0,
     fecha         TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+-- Catálogo de proveedores del Directorio de Proveedores -- se carga
+-- completo desde un Excel (pantalla "Carga catálogo proveedores Core",
+-- exclusiva de Administrador, ver app/routers/proveedores_catalogo.py).
+-- cl_proveedor es la clave del proveedor en Core (viene en el Excel, el
+-- portal no la genera) -- se deja como INTEGER NOT NULL (segundo campo de
+-- la tabla) a propósito, para distinguirla del "id" interno autoincrement.
+CREATE TABLE IF NOT EXISTS proveedores_catalogo (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    cl_proveedor   INTEGER NOT NULL,
+    nombre         TEXT NOT NULL,
+    especialidad   TEXT,
+    cedula         TEXT,
+    rfc            TEXT,
+    estado         TEXT,
+    municipio      TEXT,
+    direccion      TEXT,
+    consultorio    TEXT,
+    telefono       TEXT,
+    email          TEXT,
+    horario        TEXT,
+    costo_consulta TEXT,
+    convenio       TEXT,
+    teleconsulta   INTEGER NOT NULL DEFAULT 0
+);
+
+-- Bitácora de cada carga del catálogo de proveedores -- cada carga
+-- REEMPLAZA el catálogo completo (decisión del usuario, 2026-10-16: el
+-- Excel debe traer siempre TODOS los proveedores, no solo los nuevos),
+-- así que esto es lo único que queda de las cargas anteriores.
+CREATE TABLE IF NOT EXISTS proveedores_catalogo_cargas (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    rfc         TEXT NOT NULL,
+    total_filas INTEGER NOT NULL,
+    fecha       TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 """
 
