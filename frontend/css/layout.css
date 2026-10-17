@@ -50,11 +50,16 @@
 .nav-item.active{background:rgba(255,255,255,.10);border-left:3px solid var(--blue);color:#fff;font-weight:600;}
 .nav-spacer{flex:1;}
 /* Grupo del menú con sub-opciones (ej. "Directorio de Proveedores" ->
-   Proveedores / Carga catálogo proveedores Core). El encabezado del grupo
-   no navega a ninguna pantalla (no tiene data-pantalla) -- solo agrupa. */
-.nav-item-grupo{cursor:default;opacity:.75;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;padding-bottom:6px;}
+   Proveedores / Carga catálogo proveedores Core): un fondo propio y una
+   guía vertical conectando las sub-opciones dejan claro que son parte del
+   mismo grupo y no opciones sueltas. El encabezado del grupo no navega a
+   ninguna pantalla (no tiene data-pantalla) -- solo agrupa. */
+.nav-grupo{background:rgba(255,255,255,.04);padding-bottom:4px;}
+.nav-item-grupo{cursor:default;font-weight:600;}
 .nav-item-grupo:hover{background:transparent;}
-.nav-subitem{padding-left:30px;font-size:12.5px;}
+.nav-subitem{position:relative;padding-left:44px;font-size:12.5px;}
+.nav-subitem::before{content:"";position:absolute;left:28px;top:0;bottom:0;width:1px;background:rgba(255,255,255,.18);}
+.nav-subitem.active::before{background:var(--blue);}
 .nav-user{padding:10px 16px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.12);flex-shrink:0;}
 
 .main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--gray-bg);height:100vh;overflow:hidden;}
@@ -75,6 +80,9 @@
   .sidebar-brand{flex-shrink:0;border-bottom:none;border-right:1px solid rgba(255,255,255,.12);white-space:nowrap;}
   .nav-item{flex-shrink:0;border-left:none;border-bottom:3px solid transparent;}
   .nav-item.active{border-left:none;border-bottom:3px solid var(--blue);}
+  .nav-grupo{flex-shrink:0;display:flex;background:none;}
+  .nav-subitem{padding-left:16px;}
+  .nav-subitem::before{left:0;top:auto;bottom:0;right:0;width:auto;height:1px;}
   .nav-spacer{display:none;}
   .nav-user{display:none;}
   .main{height:auto;overflow:visible;}
