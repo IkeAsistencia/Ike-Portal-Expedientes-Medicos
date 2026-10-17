@@ -31,7 +31,7 @@ const PANTALLAS = {
   "configuracion": { modulo: configuracionCuentas, titulo: "Configuración Cuentas" },
   "accesos": { modulo: usuariosAccesos, titulo: "Usuarios y Accesos" },
   "historial-correos": { modulo: historialCorreos, titulo: "Historial de Correos" },
-  "colores-cuentas": { modulo: coloresCuentas, titulo: "Colores de Cuentas" },
+  "colores-cuentas": { modulo: coloresCuentas, titulo: "Cuentas Especiales" },
   "directorio-proveedores": { modulo: directorioProveedores, titulo: "Directorio de Proveedores" },
   "directorio-proveedores-carga": { modulo: directorioProveedoresCarga, titulo: "Carga catálogo proveedores Core" },
 };
@@ -56,7 +56,7 @@ function pantallaPermitida(nombre) {
     // trabaja en otra iteración. El código sigue en
     // pantallas/configuracion-cuentas.js y en la API; solo nadie llega a ella.
     case "configuracion": return false;
-    // Usuarios y Accesos, Historial de Correos y Colores de Cuentas son
+    // Usuarios y Accesos, Historial de Correos y Cuentas Especiales son
     // exclusivos de Administrador.
     case "accesos":
     case "historial-correos":
