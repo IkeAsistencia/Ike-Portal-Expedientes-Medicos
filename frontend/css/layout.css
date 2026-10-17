@@ -55,11 +55,17 @@
    mismo grupo y no opciones sueltas. El encabezado del grupo no navega a
    ninguna pantalla (no tiene data-pantalla) -- solo agrupa. */
 .nav-grupo{background:rgba(255,255,255,.04);padding-bottom:4px;}
-.nav-item-grupo{cursor:default;font-weight:600;}
-.nav-item-grupo:hover{background:transparent;}
+.nav-item-grupo{font-weight:600;}
+.nav-item-grupo-texto{flex:1;}
+.nav-item-grupo-flecha{width:14px;height:14px;flex-shrink:0;opacity:.7;transition:transform .15s ease;}
 .nav-subitem{position:relative;padding-left:44px;font-size:12.5px;}
 .nav-subitem::before{content:"";position:absolute;left:28px;top:0;bottom:0;width:1px;background:rgba(255,255,255,.18);}
 .nav-subitem.active::before{background:var(--blue);}
+/* Contraído (clic en el encabezado del grupo): se ocultan las sub-opciones
+   y la flecha apunta hacia el lado en vez de hacia abajo. */
+.nav-grupo.colapsado{padding-bottom:0;}
+.nav-grupo.colapsado .nav-subitem{display:none;}
+.nav-grupo.colapsado .nav-item-grupo-flecha{transform:rotate(-90deg);}
 .nav-user{padding:10px 16px;font-size:11px;opacity:.75;border-top:1px solid rgba(255,255,255,.12);flex-shrink:0;}
 
 .main{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--gray-bg);height:100vh;overflow:hidden;}

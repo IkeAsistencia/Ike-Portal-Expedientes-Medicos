@@ -150,6 +150,11 @@ function montarPantallas() {
     const { alClicMenu } = PANTALLAS[item.dataset.pantalla];
     item.addEventListener("click", () => (alClicMenu ? alClicMenu() : navegar(item.dataset.pantalla)));
   });
+  // Encabezado de un grupo del menú (ej. "Directorio de Proveedores"): no
+  // navega a ninguna pantalla, solo contrae/expande sus sub-opciones.
+  document.querySelectorAll(".nav-item-grupo").forEach(item => {
+    item.addEventListener("click", () => item.closest(".nav-grupo").classList.toggle("colapsado"));
+  });
   $("nav-salir").addEventListener("click", async () => {
     const ok = await confirmar({
       titulo: "Cerrar sesión",
