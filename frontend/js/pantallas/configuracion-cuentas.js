@@ -1,5 +1,6 @@
 /* Pantalla: Agregar cuenta (Configuración Cuentas, solo Administrador).
-   Se buscan cuentas de Core y se agregan a la lista de cuentas configuradas
+   Se buscan cuentas de Core y se agregan como cuentas ADICIONALES a las que ya
+   se jalan en Expedientes
    (se pueden elegir varias a la vez). La lista se puede buscar, paginar,
    y quitar de una en una o todas (siempre con confirmación). */
 import { api } from "../core/api.js";
@@ -21,6 +22,7 @@ const PLANTILLA = `
         </div>
         <div class="cfg-panel hidden" id="cfg-panel"></div>
       </div>
+      <div class="hint cfg-nota">Las cuentas que agregues se suman a las que ya aparecen en el filtro de Cuenta de Expedientes, y también podrás darles color en Cuentas Especiales.</div>
       <div class="cfg-seleccion hidden" id="cfg-seleccion">
         <div class="cfg-seleccion-titulo">Por agregar (<span id="cfg-sel-n">0</span>)</div>
         <div class="cfg-chips" id="cfg-chips"></div>
@@ -34,7 +36,7 @@ const PLANTILLA = `
 
   <div class="card tono-verdeazul">
     <div class="card-header">
-      <h2>Cuentas configuradas (<span id="cfgCount">0</span>)</h2>
+      <h2>Cuentas adicionales (<span id="cfgCount">0</span>)</h2>
       <div class="cfg-filtro">
         ${ICONOS.lupa}
         <input type="text" id="cfg-filtro" placeholder="Filtrar por clave o nombre" autocomplete="off">
@@ -210,13 +212,13 @@ function renderGrid() {
   const tbody = $("cfg-tbody");
   const lista = filtradas();
   $("cfg-pie-texto").textContent = configuradas.length
-    ? "Cada cuenta se guarda al agregarla; no hace falta un paso final."
+    ? "Estas cuentas se suman a las de siempre en el filtro de Cuenta de Expedientes y en Cuentas Especiales."
     : "";
 
   if (!configuradas.length) {
     tbody.innerHTML = `<tr><td colspan="3" class="mini-empty cfg-vacio">
       <div class="cfg-vacio-icono">${ICONOS.tarjeta}</div>
-      <strong>Aún no hay cuentas configuradas</strong>
+      <strong>Aún no hay cuentas adicionales</strong>
       <div>Busca una cuenta arriba y agrégala a la lista.</div></td></tr>`;
     $("cfg-pager").innerHTML = "";
     return;
@@ -259,8 +261,8 @@ async function cargarGrid() {
 async function eliminarCuenta(clCuenta) {
   const c = configuradas.find(x => x.cl_cuenta === clCuenta);
   const ok = await confirmar({
-    titulo: "Eliminar cuenta",
-    mensaje: `¿Eliminar ${c ? c.nombre : "esta cuenta"} de las cuentas configuradas?`,
+    titulo: "Quitar cuenta",
+    mensaje: `¿Quitar ${c ? c.nombre : "esta cuenta"} de las cuentas adicionales?`,
     textoConfirmar: "Eliminar",
     peligro: true,
   });
@@ -279,7 +281,7 @@ async function quitarTodas() {
   if (!n) return;
   const ok = await confirmar({
     titulo: "Quitar todas las cuentas",
-    mensaje: `Se van a quitar las ${n} cuentas configuradas. Esta acción no se puede deshacer. ¿Continuar?`,
+    mensaje: `Se van a quitar las ${n} cuentas adicionales (las de siempre no se tocan). Esta acción no se puede deshacer. ¿Continuar?`,
     textoConfirmar: "Quitar todas",
     peligro: true,
   });

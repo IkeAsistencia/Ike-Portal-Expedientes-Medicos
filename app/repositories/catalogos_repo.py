@@ -1,5 +1,6 @@
 from app.config import get_settings
 from app.db.connection import as_tvp_rows, call_procedure, get_connection
+from app.repositories import cuentas_config_repo
 from app.schemas.catalogo import CatalogoItem, CatalogoItemTexto
 
 
@@ -35,8 +36,20 @@ def listar_subservicios(cl_servicio: int = 4) -> list[CatalogoItem]:
 
 
 def listar_cuentas() -> list[CatalogoItem]:
+    """
+    Combo Cuenta (filtro de Expedientes) y lista de Cuentas Especiales: son las
+    cuentas que ya se jalaban (lista fija CUENTAS_PERMITIDAS del .env) MÁS las
+    adicionales que el Administrador agregó en "Agregar cuenta". Los nombres
+    se leen de Core. Si CUENTAS_PERMITIDAS está vacía no hay restricción (salen
+    todas las de Core) y las adicionales no cambian nada.
+    """
     settings = get_settings()
-    permitidos = as_tvp_rows(settings.parse_int_list(settings.cuentas_permitidas))
+    base = settings.parse_int_list(settings.cuentas_permitidas)
+    if base:
+        adicionales = [c["cl_cuenta"] for c in cuentas_config_repo.listar_cuentas_configuradas()]
+        permitidos = as_tvp_rows(base + [c for c in adicionales if c not in base])
+    else:
+        permitidos = as_tvp_rows([])
     rows = call_procedure(
         "dbo.ST_CP_ObtenerCatalogoCuentas",
         {"CuentasPermitidas": permitidos},
