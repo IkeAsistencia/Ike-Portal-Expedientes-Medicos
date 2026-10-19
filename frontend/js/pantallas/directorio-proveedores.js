@@ -23,10 +23,11 @@
    js/directorio/vistas.js. */
 import { crearModal } from "../componentes/modal.js";
 import {
-  ESTADOS, RECENT_KEY, PROPS,
+  RECENT_KEY, PROPS,
   visible, formularioVacio, cargarCatalogoReal,
   cargarSolicitudesReales, enviarSolicitudAlta, actualizarEstatusSolicitud,
   cargarAgenda, agendarCita,
+  cargarEntidadesAltaReal, cargarMunicipiosAltaReal,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
 import { toast } from "../core/toast.js";
@@ -422,16 +423,20 @@ function alCambiar(e) {
   }
 }
 
-function cambiarCombo(el) {
+async function cambiarCombo(el) {
   const campo = el.dataset.campo;
   if (campo === "estado") {
-    const est = ESTADOS.find(x => x.name === el.value);
-    ponerFormulario({ estado: el.value, municipio: est.municipios[0] });
-    $("dp-mun-sel").innerHTML = V.opcionesMunicipio(V.calcular(estado));
+    // Estado/Municipio del Alta de médico ya NO son el catálogo simulado de
+    // Zona -- el municipio sale de dbo.sp_GetMun para la entidad elegida
+    // (ver cargarMunicipiosAltaReal en datos.js), cacheado por entidad.
+    ponerFormulario({ estado: el.value, municipio: "" });
+    pintarDependientesAlta();
+    await cargarMunicipiosAltaReal(el.value);
+    pintarDependientesAlta();
   } else {
     ponerFormulario({ [campo]: el.value });
+    pintarDependientesAlta();
   }
-  pintarDependientesAlta();
 }
 
 function alEscribir(e) {
@@ -501,6 +506,11 @@ export function alEntrar() {
   // solicitud) -- se vuelven a pedir cada vez que se entra a la pantalla.
   cargarCatalogoReal().then(() => pintar());
   cargarSolicitudes();
+  // Catálogo de Entidad para el combo del Alta de médico -- se precarga al
+  // entrar a la pantalla para que ya esté listo si el usuario navega a
+  // "Alta de médico" (los municipios de la entidad elegida se piden aparte,
+  // al cambiar el combo, ver cambiarCombo).
+  cargarEntidadesAltaReal().then(() => pintar());
 }
 
 export function reiniciar() {

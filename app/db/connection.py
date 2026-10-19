@@ -1,6 +1,10 @@
 """
-Capa de acceso a SQL Server vía pyodbc, exclusivamente a través de
-Stored Procedures (nunca se arma SQL dinámico contra tablas desde Python).
+Capa de acceso a SQL Server vía pyodbc, casi siempre a través de Stored
+Procedures (nunca se arma SQL dinámico con datos del usuario). ÚNICA
+excepción: app.repositories.catalogos_repo.listar_entidades() consulta
+dbo.cEntFed directo con un SELECT estático (sin ningún valor interpolado)
+porque no existe un SP de catálogo equivalente a sp_GetMun para entidades
+-- decisión del usuario, 2026-10-19.
 
 Se usa sintaxis "EXEC sp @param=?, ..." (parámetros con nombre) en vez de
 la sintaxis ODBC "{CALL sp(?,?)}", porque esta última tiene problemas

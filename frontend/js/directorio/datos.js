@@ -62,14 +62,56 @@ export const num = (seed, salt, min, max) => min + (hash(seed + "#" + salt) % (m
 
 /* Formulario de alta vacío (el de arranque y al que regresa "Registrar otro
    médico"). El domicilio va desglosado: es el del lugar DONDE DA LA
-   CONSULTA, igual que en la carga de Excel. */
+   CONSULTA, igual que en la carga de Excel. Estado/Municipio arrancan
+   vacíos a propósito: ya no son el catálogo simulado de Zona, hay que
+   elegirlos del catálogo real (ver cargarEntidadesAltaReal). */
 export function formularioVacio() {
   return {
     name: "", specialty: SPECIALTIES[0], cedula: "", rfc: "",
-    estado: ESTADOS[0].name, municipio: ESTADOS[0].municipios[0],
+    estado: "", municipio: "",
     calleNumExtInt: "", colonia: "", codigoPostal: "",
     phone: "", email: "",
   };
+}
+
+/* ---------- Entidad/Municipio del Alta de médico ----------
+   Mismo catálogo de Entidad que usa Seguimiento/Expedientes (32 entidades),
+   pero con su CodEnt real (GET /catalogos/entidades, ver
+   app/repositories/catalogos_repo.py) y SIN la opción "Todas" -- aquí
+   siempre se está dando de alta a un médico puntual. El municipio sale de
+   dbo.sp_GetMun (GET /catalogos/municipios?cod_ent=...), cacheado por
+   entidad para no volver a pedirlo si el usuario va y viene. */
+let entidadesAlta = null;
+const municipiosPorEntidad = new Map();
+
+export async function cargarEntidadesAltaReal() {
+  if (entidadesAlta) return entidadesAlta;
+  try {
+    entidadesAlta = await api("/catalogos/entidades");
+  } catch (err) {
+    entidadesAlta = [];
+  }
+  return entidadesAlta;
+}
+
+export function entidadesAltaCache() {
+  return entidadesAlta || [];
+}
+
+export async function cargarMunicipiosAltaReal(codEnt) {
+  if (!codEnt) return [];
+  if (municipiosPorEntidad.has(codEnt)) return municipiosPorEntidad.get(codEnt);
+  try {
+    const municipios = await api("/catalogos/municipios", { params: { cod_ent: codEnt } });
+    municipiosPorEntidad.set(codEnt, municipios);
+    return municipios;
+  } catch (err) {
+    return [];
+  }
+}
+
+export function municipiosAltaCache(codEnt) {
+  return municipiosPorEntidad.get(codEnt) || [];
 }
 
 /* Catálogo real (cargado por Administrador, ver GET /directorio-proveedores)
@@ -168,11 +210,17 @@ export async function cargarSolicitudesReales() {
 }
 
 export function enviarSolicitudAlta(form) {
+  // form.estado/form.municipio guardan el CodEnt/CodMD (para encadenar el
+  // combo) -- lo que se manda a guardar es el NOMBRE, igual que el resto
+  // del padrón (carga de Excel, búsqueda libre por texto).
+  const entidad = entidadesAltaCache().find(e => e.clave === form.estado);
+  const municipio = municipiosAltaCache(form.estado).find(m => m.clave === form.municipio);
   return api("/solicitudes-alta-medico", {
     method: "POST",
     body: {
       nombre: form.name, especialidad: form.specialty, cedula: form.cedula, rfc: form.rfc || null,
-      estado: form.estado || null, municipio: form.municipio || null,
+      estado: entidad ? entidad.descripcion : (form.estado || null),
+      municipio: municipio ? municipio.descripcion : (form.municipio || null),
       calle_num_ext_int: form.calleNumExtInt || null,
       colonia: form.colonia || null,
       codigo_postal: form.codigoPostal || null,

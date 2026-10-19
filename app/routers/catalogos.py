@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.security import usuario_actual
 from app.repositories import catalogos_repo
-from app.schemas.catalogo import CatalogoItem, CuentaBusqueda
+from app.schemas.catalogo import CatalogoItem, CatalogoItemTexto, CuentaBusqueda
 
 router = APIRouter(
     prefix="/catalogos",
@@ -36,6 +36,20 @@ def subservicios(cl_servicio: int = Query(4, ge=CL_SERVICIO_MINIMO, le=CL_SERVIC
 @router.get("/cuentas", response_model=list[CatalogoItem])
 def cuentas():
     return catalogos_repo.listar_cuentas()
+
+
+@router.get("/entidades", response_model=list[CatalogoItemTexto])
+def entidades():
+    """Combo Entidad del Alta de médico (Directorio de Proveedores) -- con
+    CodEnt real, para después pedir municipios (ver /catalogos/municipios).
+    Sin opción "Todas": a diferencia del filtro de Expedientes, aquí se
+    está dando de alta a UN médico, siempre hace falta una entidad puntual."""
+    return catalogos_repo.listar_entidades()
+
+
+@router.get("/municipios", response_model=list[CatalogoItemTexto])
+def municipios(cod_ent: str = Query(..., min_length=1, max_length=2)):
+    return catalogos_repo.listar_municipios(cod_ent)
 
 
 @router.get("/cuentas/buscar", response_model=list[CuentaBusqueda])

@@ -1,6 +1,6 @@
 from app.config import get_settings
-from app.db.connection import as_tvp_rows, call_procedure
-from app.schemas.catalogo import CatalogoItem
+from app.db.connection import as_tvp_rows, call_procedure, get_connection
+from app.schemas.catalogo import CatalogoItem, CatalogoItemTexto
 
 
 # Únicos subservicios que trabaja dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
@@ -42,6 +42,39 @@ def listar_cuentas() -> list[CatalogoItem]:
         {"CuentasPermitidas": permitidos},
     )
     return [CatalogoItem(clave=r["clCuenta"], descripcion=r["Nombre"]) for r in rows]
+
+
+def listar_entidades() -> list[CatalogoItemTexto]:
+    """
+    Combo Entidad del Alta de médico (Directorio de Proveedores) -- mismas
+    32 entidades que ya usa Seguimiento/Expedientes, pero con su CodEnt real
+    (dbo.cEntFed), necesario para después pedir los municipios de esa
+    entidad a dbo.sp_GetMun (ver listar_municipios).
+
+    ÚNICA excepción a "solo Stored Procedures" de este módulo: cEntFed es
+    una tabla de catálogo de solo lectura, sin ningún valor interpolado en
+    la consulta (0% superficie de inyección) -- no existe un SP equivalente
+    a sp_GetMun para entidades (confirmado con el usuario, 2026-10-19).
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT CodEnt, dsEntFed FROM dbo.cEntFed ORDER BY dsEntFed")
+        filas = cursor.fetchall()
+    return [CatalogoItemTexto(clave=f.CodEnt.strip(), descripcion=f.dsEntFed) for f in filas]
+
+
+def listar_municipios(cod_ent: str) -> list[CatalogoItemTexto]:
+    """
+    Municipios de una entidad, vía el SP legado dbo.sp_GetMun -- @clExpediente
+    siempre en 0 (no aplica para este catálogo, confirmado con el usuario,
+    2026-10-19). OJO: no hay una definición de este SP en sql/*.sql para
+    confirmar sus columnas de salida -- CodMD/dsMunDel es lo que usa
+    dbo.cMunDel en el resto del proyecto (ver
+    sql/01_ST_CP_ObtenerExpedientesSinProveedorMedico.sql), pendiente de
+    confirmar contra el SP real la primera vez que se pruebe.
+    """
+    filas = call_procedure("dbo.sp_GetMun", {"CodEnt": cod_ent, "clExpediente": 0})
+    return [CatalogoItemTexto(clave=str(f["CodMD"]).strip(), descripcion=f["dsMunDel"]) for f in filas]
 
 
 def buscar_cuentas(texto: str) -> list[dict]:

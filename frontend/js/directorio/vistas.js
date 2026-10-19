@@ -12,6 +12,7 @@ import { ICONOS } from "../componentes/iconos.js";
 import {
   SPECIALTIES, ESTADOS, PRICE_OPTIONS, PROPS,
   num, pick, raw, visible, valoresUnicosCatalogo,
+  entidadesAltaCache, municipiosAltaCache,
 } from "./datos.js";
 
 const svg = (contenido) =>
@@ -55,7 +56,6 @@ function _domicilioResto(x) {
 export function calcular(s) {
   const f = s.filters;
   const estadoObj = ESTADOS.find(x => x.name === s.estado);
-  const formEstado = ESTADOS.find(x => x.name === s.form.estado) || ESTADOS[0];
   const info = s.screen === "results" || s.screen === "compare" ? raw(s) : { list: [], label: "", sub: "" };
   const listed = s.screen === "results" ? visible(s) : [];
   const d = s.detail;
@@ -188,7 +188,8 @@ export function calcular(s) {
     registered: !!s.registered,
     regName: s.registered ? s.registered.name : "", regFolio: s.registered ? s.registered.folio : "",
     form: s.form,
-    formMunicipios: formEstado.municipios,
+    formEntidades: entidadesAltaCache(),
+    formMunicipios: municipiosAltaCache(s.form.estado),
     verifyLabel: vs === "loading" ? "Consultando…" : vs === "valid" ? "Cédula verificada" : "Verificar cédula profesional",
     verifyMessage: { idle: "Sin verificar", loading: "Consultando registro…", valid: "Cédula localizada en el registro", invalid: "Formato inválido: debe tener 7 u 8 dígitos" }[vs],
     verifyClase: vs === "valid" ? "dp-ok" : vs === "invalid" ? "dp-error" : "dp-neutro",
@@ -607,8 +608,23 @@ export function altaNota(v) {
   return e(v.submitNote);
 }
 
+/* Entidad/Municipio del Alta de médico vienen del catálogo real como
+   {clave, descripcion} (CodEnt/dsEntFed, CodMD/dsMunDel) -- el value del
+   <option> es la clave (para encadenar el combo), el texto es la
+   descripción. Sin opción "Todas": aquí siempre hace falta una entidad
+   puntual (a diferencia del filtro de Expedientes). */
+function opcionesCatalogoTexto(lista, elegido) {
+  return lista.map(it => `<option value="${e(it.clave)}"${it.clave === elegido ? " selected" : ""}>${e(it.descripcion)}</option>`).join("");
+}
+
+export function opcionesEntidadAlta(v) {
+  return opcionesCatalogoTexto(v.formEntidades, v.form.estado);
+}
+
 export function opcionesMunicipio(v) {
-  return v.formMunicipios.map(m => `<option value="${e(m)}"${m === v.form.municipio ? " selected" : ""}>${e(m)}</option>`).join("");
+  if (!v.form.estado) return `<option value="">Elige un estado primero</option>`;
+  if (!v.formMunicipios.length) return `<option value="">Cargando…</option>`;
+  return opcionesCatalogoTexto(v.formMunicipios, v.form.municipio);
 }
 
 export function pantallaAlta(v) {
@@ -659,7 +675,10 @@ export function pantallaAlta(v) {
           <div class="dp-grid-campos">
             <div class="field dp-campo">
               <label for="dp-estado-sel">Estado</label>
-              <select id="dp-estado-sel" data-campo="estado">${opciones(ESTADOS.map(x => x.name), f.estado)}</select>
+              <select id="dp-estado-sel" data-campo="estado">
+                <option value="">Selecciona un estado</option>
+                ${opcionesEntidadAlta(v)}
+              </select>
             </div>
             <div class="field dp-campo">
               <label for="dp-mun-sel">Municipio</label>
