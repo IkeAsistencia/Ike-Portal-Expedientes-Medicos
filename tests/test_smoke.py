@@ -1635,6 +1635,7 @@ def test_colores_de_cuentas_solo_administrador(client):
 
 def test_colores_de_cuentas_alta_cambio_y_baja(client):
     headers = _auth_headers_admin(client)
+    client.post("/configuracion/cuentas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo"}, headers=headers)
     assert client.get("/admin/cuentas-etiquetas", headers=headers).json() == []
     claves = [c["clave"] for c in client.get("/admin/cuentas-etiquetas/paleta", headers=headers).json()]
     assert "rosa" in claves and "morado" in claves
@@ -1668,6 +1669,7 @@ def test_colores_de_cuentas_rechaza_color_y_prefijo_invalidos(client):
 def test_expedientes_traen_color_y_prefijo_de_su_cuenta(client):
     admin = _auth_headers_admin(client)
     cabina = _auth_headers_cabina(client)
+    client.post("/configuracion/cuentas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo"}, headers=admin)
     sin = client.get("/expedientes", headers=cabina).json()
     assert sin and all(e["cuenta_color"] is None and e["cuenta_prefijo"] is None for e in sin)
 
@@ -1679,3 +1681,64 @@ def test_expedientes_traen_color_y_prefijo_de_su_cuenta(client):
     client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "", "color": "azul"}, headers=admin)
     sin_prefijo = client.get("/expedientes", headers=cabina).json()
     assert all(e["cuenta_color"] == "azul" and e["cuenta_prefijo"] is None for e in sin_prefijo)
+
+
+def test_colores_de_cuentas_rechaza_una_cuenta_fuera_del_catalogo(client):
+    headers = _auth_headers_admin(client)
+    # 999 no está en el catálogo simulado (solo existe la 2819)
+    r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 999, "nombre": "Cuenta Ajena", "prefijo": "AJ", "color": "rosa"}, headers=headers)
+    assert r.status_code == 400
+    assert "Agregar cuenta" in r.json()["detail"]
+    assert client.get("/admin/cuentas-etiquetas", headers=headers).json() == []
+    # una del catálogo (las que ya se jalan en Expedientes) sí, sin configurar nada antes
+    r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}, headers=headers)
+    assert r.status_code == 200
+
+
+def test_colores_de_cuentas_permite_editar_una_ya_etiquetada_aunque_salga_del_catalogo(client, monkeypatch):
+    import app.repositories.catalogos_repo as catalogos_repo
+
+    headers = _auth_headers_admin(client)
+    client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}, headers=headers)
+    monkeypatch.setattr(catalogos_repo, "call_procedure", lambda *a, **k: [])  # el catálogo ya no la trae
+    r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "azul"}, headers=headers)
+    assert r.status_code == 200
+    assert client.get("/admin/cuentas-etiquetas", headers=headers).json()[0]["color"] == "azul"
+
+
+def test_combo_de_cuentas_suma_las_adicionales_a_las_de_siempre(client, monkeypatch):
+    import app.repositories.catalogos_repo as catalogos_repo
+    from app.config import get_settings
+
+    llamadas = []
+
+    def falso(sp_name, params=None):
+        llamadas.append([c[0] for c in params["CuentasPermitidas"]])
+        return [{"clCuenta": 2819, "Nombre": "Cuenta Demo"}]
+
+    monkeypatch.setattr(catalogos_repo, "call_procedure", falso)
+    admin = _auth_headers_admin(client)
+    ajustes = get_settings()
+    base = ajustes.parse_int_list(ajustes.cuentas_permitidas)
+
+    # Sin adicionales: las de siempre (CUENTAS_PERMITIDAS)
+    assert client.get("/catalogos/cuentas", headers=admin).status_code == 200
+    assert llamadas[-1] == base
+
+    # Con adicionales: las de siempre MÁS las agregadas (sin duplicar una que ya estaba)
+    client.post("/configuracion/cuentas", json={"cl_cuenta": 555, "nombre": "Otra Cuenta"}, headers=admin)
+    client.post("/configuracion/cuentas", json={"cl_cuenta": base[0], "nombre": "Ya estaba"}, headers=admin)
+    client.get("/catalogos/cuentas", headers=admin)
+    assert llamadas[-1] == base + [555]
+
+    # Al quitar la adicional, vuelve a las de siempre
+    client.delete("/configuracion/cuentas/555", headers=admin)
+    client.get("/catalogos/cuentas", headers=admin)
+    assert llamadas[-1] == base
+
+    # Si CUENTAS_PERMITIDAS está vacía no hay restricción: se manda vacío (todas) aunque haya adicionales
+    monkeypatch.setenv("CUENTAS_PERMITIDAS", "")
+    get_settings.cache_clear()
+    client.post("/configuracion/cuentas", json={"cl_cuenta": 555, "nombre": "Otra Cuenta"}, headers=admin)
+    client.get("/catalogos/cuentas", headers=admin)
+    assert llamadas[-1] == []

@@ -734,6 +734,8 @@ export function alEntrar() {
     // Refresca la tabla con lo que ya tengamos en memoria (por si algo cambió,
     // como un estatus, mientras estabas en otra pantalla) sin pedirle nada al servidor.
     refrescarVista();
+    // Las cuentas del combo sí se vuelven a pedir: el Administrador pudo agregar o quitar alguna.
+    cargarCuentasFiltro();
     return;
   }
   // Primera vez que se entra en esta sesión: arranca con los defaults.

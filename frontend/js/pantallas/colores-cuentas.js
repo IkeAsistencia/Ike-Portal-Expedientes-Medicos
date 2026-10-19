@@ -1,13 +1,15 @@
 /* Pantalla: Colores de Cuentas (solo Administrador).
-   Se elige una cuenta que ya existe en el sistema central y se le pone un prefijo corto y
-   un color (paleta pastel fija). A partir de ahí, Expedientes pinta el
+   Se elige una de las cuentas del catálogo del portal -- las mismas del combo
+   de Cuenta de Expedientes: las que ya se jalaban más las que se agregaron en
+   "Agregar cuenta" -- y se le pone un prefijo corto y un color (paleta pastel fija). A partir de ahí, Expedientes pinta el
    renglón de ese color y muestra el prefijo junto a la cuenta (lo ven todos
    los perfiles). Se puede cambiar o quitar en cualquier momento.
-   Es independiente de Configuración Cuentas. */
+   Solo se pueden etiquetar cuentas de ese catálogo. */
 import { api } from "../core/api.js";
 import { escapeHtml, formatDateTime } from "../core/formato.js";
 import { toast } from "../core/toast.js";
 import { confirmar } from "../componentes/confirmar.js";
+import { navegar } from "../core/router.js";
 
 const LARGO_MAXIMO_PREFIJO = 12;
 
@@ -16,8 +18,10 @@ const PLANTILLA = `
     <div class="card-header"><h2 id="cc-titulo-form">Etiquetar una cuenta</h2></div>
     <div class="card-body">
       <div class="field autocomplete" id="cc-campo-buscar">
-        <label for="cc-buscar">Cuenta (escribe al menos 3 letras)</label>
-        <input type="text" id="cc-buscar" placeholder="Nombre de la cuenta" autocomplete="off">
+        <label for="cc-buscar">Cuenta (elige una de las de Expedientes)</label>
+        <div class="hint cc-aviso-cuentas">Son las cuentas de Expedientes y las que agregues en «Agregar cuenta».
+          <button type="button" class="btn-link-semaforo" id="cc-ir-agregar">Ir a Agregar cuenta</button></div>
+        <input type="text" id="cc-buscar" placeholder="Busca entre las cuentas" autocomplete="off">
         <div class="suggestions hidden" id="cc-sugerencias"></div>
       </div>
       <div class="cc-seleccionada hidden" id="cc-seleccionada">
@@ -71,7 +75,7 @@ let paleta = [];          // [{clave, nombre}] que manda el servidor
 let etiquetas = [];       // cuentas con color
 let seleccion = null;     // { cl_cuenta, nombre } de la cuenta que se está etiquetando
 let colorElegido = null;
-let debounce = null;
+let configuradas = [];    // catálogo de cuentas del portal [{cl_cuenta, nombre}] (las de Expedientes)
 
 const nombreColor = (clave) => (paleta.find(c => c.clave === clave) || {}).nombre || clave;
 // La clave viene del servidor, pero se limita a letras por si acaso (va a una clase CSS).
@@ -130,28 +134,26 @@ function elegirCuenta(clCuenta, nombre) {
   mostrarSeleccion();
 }
 
-function buscarSugerencias(e) {
-  clearTimeout(debounce);
-  const texto = e.target.value.trim();
+/* Opciones del combo: las cuentas del catálogo del portal, filtradas
+   por lo que se escriba (clave o nombre). */
+function mostrarOpciones() {
   const caja = $("cc-sugerencias");
-  if (texto.length < 3 || !/^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]*$/.test(texto)) {
-    caja.classList.add("hidden");
-    caja.innerHTML = "";
+  if (!configuradas.length) {
+    caja.innerHTML = `<div class="empty-suggestion">No se encontraron cuentas. Puedes agregar más en «Agregar cuenta».</div>`;
+    caja.classList.remove("hidden");
     return;
   }
-  debounce = setTimeout(async () => {
-    try {
-      const resultados = await api("/catalogos/cuentas/buscar", { params: { texto } });
-      caja.innerHTML = resultados.length
-        ? resultados.map(c =>
-            `<div data-cl="${c.cl_cuenta}" data-nombre="${escapeHtml(c.nombre)}">${c.cl_cuenta} — ${escapeHtml(c.nombre)}</div>`
-          ).join("")
-        : `<div class="empty-suggestion">Sin resultados.</div>`;
-      caja.classList.remove("hidden");
-    } catch (err) {
-      toast(err.message, "error");
-    }
-  }, 300);
+  const t = $("cc-buscar").value.trim().toLowerCase();
+  const lista = configuradas
+    .filter(c => !t || c.nombre.toLowerCase().includes(t) || String(c.cl_cuenta).includes(t))
+    .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  caja.innerHTML = lista.length
+    ? lista.map(c => {
+        const conColor = etiquetas.some(e => e.cl_cuenta === c.cl_cuenta);
+        return `<div data-cl="${c.cl_cuenta}" data-nombre="${escapeHtml(c.nombre)}">${c.cl_cuenta} — ${escapeHtml(c.nombre)}${conColor ? ' <span class="badge seguimiento">Con color</span>' : ""}</div>`;
+      }).join("")
+    : `<div class="empty-suggestion">Ninguna cuenta coincide.</div>`;
+  caja.classList.remove("hidden");
 }
 
 async function guardar() {
@@ -228,7 +230,12 @@ async function quitar(clCuenta) {
 /* ---------- Ciclo de vida ---------- */
 export function montar(contenedor) {
   contenedor.innerHTML = PLANTILLA;
-  $("cc-buscar").addEventListener("input", buscarSugerencias);
+  $("cc-buscar").addEventListener("input", mostrarOpciones);
+  $("cc-buscar").addEventListener("focus", mostrarOpciones);
+  $("cc-ir-agregar").addEventListener("click", () => navegar("configuracion"));
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#cc-campo-buscar")) $("cc-sugerencias").classList.add("hidden");
+  });
   $("cc-sugerencias").addEventListener("click", (e) => {
     const div = e.target.closest("div[data-cl]");
     if (div) elegirCuenta(div.dataset.cl, div.dataset.nombre);
@@ -262,6 +269,8 @@ export function montar(contenedor) {
 export async function alEntrar() {
   try {
     if (!paleta.length) paleta = await api("/admin/cuentas-etiquetas/paleta");
+    // Mismo catálogo que el combo de Cuenta de Expedientes.
+    configuradas = (await api("/catalogos/cuentas")).map(c => ({ cl_cuenta: c.clave, nombre: c.descripcion }));
   } catch (err) {
     toast(err.message, "error");
   }
@@ -271,6 +280,7 @@ export async function alEntrar() {
 
 export function reiniciar() {
   etiquetas = [];
+  configuradas = [];
   paleta = [];
   limpiarFormulario();
   $("cc-tbody").innerHTML = "";

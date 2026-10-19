@@ -504,3 +504,5 @@ tbody tr:hover{background:#FAFAFA;}
 .cfg-vacio-icono{width:44px;height:44px;margin:0 auto;border-radius:10px;display:flex;align-items:center;justify-content:center;background:var(--blue-light);color:var(--blue-dark);}
 .cfg-vacio-icono svg{width:22px;height:22px;}
 @media (max-width:640px){ .cfg-filtro{width:100%;} }
+.cfg-nota{margin-top:10px;}
+.cc-aviso-cuentas{margin:-2px 0 6px;}
