@@ -28,7 +28,7 @@ const PANTALLAS = {
   "expedientes": { modulo: expedientes, titulo: "Expedientes" },
   "pago-anticipado": { modulo: pagoAnticipado, titulo: "Expedientes PA" },
   "seguimiento": { modulo: seguimiento, titulo: "Seguimiento de expedientes", alClicMenu: seguimiento.abrirDesdeMenu },
-  "configuracion": { modulo: configuracionCuentas, titulo: "Configuración Cuentas" },
+  "configuracion": { modulo: configuracionCuentas, titulo: "Agregar cuenta" },
   "accesos": { modulo: usuariosAccesos, titulo: "Usuarios y Accesos" },
   "historial-correos": { modulo: historialCorreos, titulo: "Historial de Correos" },
   "colores-cuentas": { modulo: coloresCuentas, titulo: "Cuentas Especiales" },
@@ -52,10 +52,9 @@ function pantallaPermitida(nombre) {
     // "Seguimiento de Cita"). El código sigue en pantallas/pago-anticipado.js
     // por si se vuelve a necesitar, pero nadie debe poder llegar a esta pantalla.
     case "pago-anticipado": return false;
-    // Configuración Cuentas (agregar cuentas) queda oculta por ahora, se
-    // trabaja en otra iteración. El código sigue en
-    // pantallas/configuracion-cuentas.js y en la API; solo nadie llega a ella.
-    case "configuracion": return false;
+    // Agregar cuenta (pantalla Configuración Cuentas) y Cuentas Especiales
+    // forman el grupo "Cuentas" del menú; ambas son exclusivas de Administrador.
+    case "configuracion": return admin;
     // Usuarios y Accesos, Historial de Correos y Cuentas Especiales son
     // exclusivos de Administrador.
     case "accesos":
