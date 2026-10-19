@@ -37,6 +37,10 @@ const PLANTILLA = `
       <div class="login-error" id="login-error"></div>
       <button type="submit" class="btn btn-primary btn-block" id="login-btn">Continuar</button>
     </form>
+  </div>
+  <div class="login-equipo">
+    <img src="img/logo-atenea.png" alt="Equipo Atenea" class="login-equipo-logo">
+    <span>Desarrollado con el equipo Atenea</span>
   </div>`;
 
 const TEXTO_BOTON = {
