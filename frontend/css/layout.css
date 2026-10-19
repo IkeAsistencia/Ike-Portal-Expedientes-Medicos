@@ -54,7 +54,7 @@
 .nav-item.active{background:rgba(255,255,255,.10);border-left:3px solid var(--blue);color:#fff;font-weight:600;}
 .nav-spacer{flex:1;}
 /* Grupo del menú con sub-opciones (ej. "Directorio de Proveedores" ->
-   Proveedores / Carga catálogo proveedores Core): un fondo propio y una
+   Proveedores / Carga catálogo proveedores): un fondo propio y una
    guía vertical conectando las sub-opciones dejan claro que son parte del
    mismo grupo y no opciones sueltas. El encabezado del grupo no navega a
    ninguna pantalla (no tiene data-pantalla) -- solo agrupa. */

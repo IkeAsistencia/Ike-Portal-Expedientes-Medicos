@@ -33,7 +33,7 @@ const PANTALLAS = {
   "historial-correos": { modulo: historialCorreos, titulo: "Historial de Correos" },
   "colores-cuentas": { modulo: coloresCuentas, titulo: "Cuentas Especiales" },
   "directorio-proveedores": { modulo: directorioProveedores, titulo: "Directorio de Proveedores" },
-  "directorio-proveedores-carga": { modulo: directorioProveedoresCarga, titulo: "Carga catálogo proveedores Core" },
+  "directorio-proveedores-carga": { modulo: directorioProveedoresCarga, titulo: "Carga catálogo proveedores" },
 };
 
 const $ = (id) => document.getElementById(id);
@@ -65,7 +65,7 @@ function pantallaPermitida(nombre) {
     // backend), para el perfil Proveedor y también para Administrador.
     case "directorio-proveedores": return esPerfilProveedor() || admin;
     // Carga del catálogo de proveedores (desde Excel): exclusiva de
-    // Administrador -- vive solo en este portal, no en Core.
+    // Administrador -- vive solo en este portal, no en el sistema central.
     case "directorio-proveedores-carga": return admin;
     default: return false;
   }

@@ -12,10 +12,10 @@ from app.repositories import accesos_repo, estatus_repo, expedientes_repo, pago_
 from app.schemas.expediente import EstatusExpediente, ExpedienteFiltro
 from app.schemas.seguimiento import SeguimientoInput as SeguimientoInputPydantic
 from app.services import email_service
-from app.services.seguimiento_service import construir_observaciones_core
+from app.services.seguimiento_service import construir_observaciones_bitacora
 
 # Cabina puede regresar el expediente a Proveedor en cualquiera de estos dos
-# estatus -- ambos exigen comentario obligatorio, se escriben en Core y
+# estatus -- ambos exigen comentario obligatorio, se escriben en el sistema central y
 # disparan una notificación por correo.
 ESTATUS_DE_REGRESO = (EstatusExpediente.EN_ESPERA_RESPUESTA, EstatusExpediente.SEGUIMIENTO_CITA)
 
@@ -80,7 +80,7 @@ def actualizar_estatus(cl_expediente: int, estatus_valor: str, usuario: dict, co
     # cita aceptada en pago anticipado). Nadie más los puede asignar.
     if estatus in ESTATUS_DE_REGRESO and usuario.get("perfil") != accesos_repo.PERFIL_CABINA:
         raise HTTPException(400, f"'{estatus.value}' no se puede asignar a mano desde este perfil.")
-    # "Seguimiento Proveedor" solo se activa automático desde "Actualizar Core"
+    # "Seguimiento Proveedor" solo se activa automático desde "Actualizar Bit?cora"
     # (ver seguimiento_service.py). Cabina no puede ponerlo a mano -- no le
     # corresponde esa etapa.
     if estatus == EstatusExpediente.SEGUIMIENTO_PROVEEDOR and usuario.get("perfil") == accesos_repo.PERFIL_CABINA:
@@ -94,7 +94,7 @@ def actualizar_estatus(cl_expediente: int, estatus_valor: str, usuario: dict, co
 
     if estatus in ESTATUS_DE_REGRESO:
         # Cabina está regresando el expediente a Proveedor: exige el motivo,
-        # lo escribe en Core (igual que el comentario del Proveedor) y avisa
+        # lo escribe en el sistema central (igual que el comentario del Proveedor) y avisa
         # por correo. No es un simple cambio de estatus como los demás.
         comentario_limpio = (comentario or "").strip()
         if not comentario_limpio:
@@ -103,7 +103,7 @@ def actualizar_estatus(cl_expediente: int, estatus_valor: str, usuario: dict, co
         cl_usr_app = usuario.get("cl_usr_app")
         if cl_usr_app is None:
             cl_usr_app = accesos_repo.CL_USR_APP_PLACEHOLDER_RFC
-        observaciones = construir_observaciones_core(seguimiento_repo.ETIQUETA_CORE_CABINA, usuario, comentario_limpio)
+        observaciones = construir_observaciones_bitacora(seguimiento_repo.ETIQUETA_BITACORA_CABINA, usuario, comentario_limpio)
         nombre_usuario = usuario.get("nombre") or usuario.get("rfc") or usuario.get("usuario") or "desconocido"
         try:
             seguimiento_repo.registrar_seguimiento(
@@ -120,7 +120,7 @@ def actualizar_estatus(cl_expediente: int, estatus_valor: str, usuario: dict, co
         # proveedores" (enviar_correo_proveedores) y "Generar corte"
         # (enviar_corte_proveedores). Este aviso de regreso se retoma cuando
         # se pida su plantilla; mientras tanto, el cambio de estatus, el
-        # registro en Core y el comentario local siguen funcionando igual.
+        # registro en el sistema central y el comentario local siguen funcionando igual.
         # encontrados = expedientes_repo.listar_expedientes(ExpedienteFiltro(cl_expediente=cl_expediente))
         # if encontrados:
         #     registro = encontrados[0]

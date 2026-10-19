@@ -2,7 +2,7 @@
 Pruebas de /solicitudes-alta-medico (Alta de médico, pantalla "Proveedores"
 del Directorio de Proveedores) y de cómo una solicitud aprobada se vuelve
 visible en GET /directorio-proveedores -- NO requiere SQL Server real: todo
-vive en SQLite local, nunca se manda a Core.
+vive en SQLite local, nunca se manda al sistema central.
 """
 import pytest
 from fastapi.testclient import TestClient
@@ -69,7 +69,8 @@ def _auth_headers_cabina(client):
 SOLICITUD_VALIDA = {
     "nombre": "Dr. Nuevo Médico", "especialidad": "Cardiología", "cedula": "12345678",
     "rfc": "NUME900101AB1", "estado": "Jalisco", "municipio": "Guadalajara",
-    "direccion": "Av. Siempre Viva 123", "telefono": "33 0000 0000", "email": "nuevo@correo.mx",
+    "calle_num_ext_int": "Av. Siempre Viva 123, Int. 4", "colonia": "Centro",
+    "codigo_postal": "44100", "telefono": "33 0000 0000", "email": "nuevo@correo.mx",
 }
 
 
@@ -112,20 +113,37 @@ def test_solicitud_aprobada_no_aparece_en_el_directorio_antes_de_aprobarse(clien
     assert directorio == []
 
 
-def test_solicitud_aprobada_aparece_en_el_directorio_marcada_origen_portal(client):
+def test_solicitud_aprobada_entra_al_padron_con_clave_propia_y_origen_portal(client):
     admin = _auth_headers_admin(client)
     r = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA)
     folio = r.json()["folio"]
 
     aprobar = client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"})
     assert aprobar.status_code == 200
+    clave = aprobar.json()["clave_proveedor"]
+    assert clave.startswith("PRV-")
 
     directorio = client.get("/directorio-proveedores", headers=_auth_headers_proveedor(client)).json()
     assert len(directorio) == 1
-    assert directorio[0]["origen"] == "portal"
-    assert directorio[0]["folio"] == folio
+    assert directorio[0]["origen"] == "portal"       # "Fuera de la red"
+    assert directorio[0]["clave"] == clave
+    assert directorio[0]["folio_alta"] == folio
     assert directorio[0]["cl_proveedor"] is None
     assert directorio[0]["nombre"] == SOLICITUD_VALIDA["nombre"]
+    # El domicilio de consulta llega desglosado, igual que en la carga.
+    assert directorio[0]["calle_num_ext_int"] == SOLICITUD_VALIDA["calle_num_ext_int"]
+    assert directorio[0]["colonia"] == SOLICITUD_VALIDA["colonia"]
+    assert directorio[0]["codigo_postal"] == SOLICITUD_VALIDA["codigo_postal"]
+
+
+def test_aprobar_dos_veces_no_duplica_al_medico_en_el_padron(client):
+    admin = _auth_headers_admin(client)
+    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
+    primera = client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"})
+    segunda = client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"})
+
+    assert primera.json()["clave_proveedor"] == segunda.json()["clave_proveedor"]
+    assert len(client.get("/directorio-proveedores", headers=admin).json()) == 1
 
 
 def test_rechazar_solicitud_no_la_vuelve_visible_en_el_directorio(client):
@@ -140,40 +158,86 @@ def test_rechazar_solicitud_no_la_vuelve_visible_en_el_directorio(client):
     assert listado[0]["estatus"] == "Rechazada"
 
 
-def test_un_catalogo_de_excel_no_borra_las_solicitudes_aprobadas(client):
-    """Son tablas separadas a propósito: recargar el catálogo de Core no
-    debe perder a los médicos dados de alta desde el portal."""
+def _cargar_excel(client, headers, filas: list[dict]):
     from io import BytesIO
 
     from openpyxl import Workbook
 
-    from app.services.proveedores_catalogo_excel_service import COLUMNAS
+    from app.services.proveedores_excel_service import COLUMNAS
 
-    admin = _auth_headers_admin(client)
-    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
-    client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"})
-
-    fila_excel = {
-        "cl_proveedor": 999, "nombre": "Dr. Del Catálogo", "especialidad": "Pediatría",
-    }
     wb = Workbook()
     ws = wb.active
     for col_idx, (encabezado, _clave, _ancho, obligatorio) in enumerate(COLUMNAS, start=1):
         ws.cell(row=1, column=col_idx, value=encabezado + (" *" if obligatorio else ""))
-    for col_idx, (_encabezado, clave, _ancho, _obligatorio) in enumerate(COLUMNAS, start=1):
-        ws.cell(row=2, column=col_idx, value=fila_excel.get(clave))
+    for fila_idx, fila in enumerate(filas, start=2):
+        for col_idx, (_encabezado, clave, _ancho, _obligatorio) in enumerate(COLUMNAS, start=1):
+            ws.cell(row=fila_idx, column=col_idx, value=fila.get(clave))
     buffer = BytesIO()
     wb.save(buffer)
-
-    client.post(
-        "/proveedores-catalogo/cargar", headers=admin,
-        files={"archivo": ("catalogo.xlsx", buffer.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+    return client.post(
+        "/proveedores-catalogo/cargar", headers=headers,
+        files={"archivo": (
+            "catalogo.xlsx", buffer.getvalue(),
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )},
     )
 
+
+def test_una_carga_de_excel_no_borra_a_los_medicos_dados_de_alta_en_el_portal(client):
+    """La carga es incremental: traer el padrón del sistema central no debe
+    tirar a los médicos que se dieron de alta aquí."""
+    admin = _auth_headers_admin(client)
+    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
+    client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"})
+
+    _cargar_excel(client, admin, [
+        {"nombre": "Dr. Del Catálogo", "especialidad": "Pediatría", "cedula": "999999"},
+    ])
+
     directorio = client.get("/directorio-proveedores", headers=_auth_headers_proveedor(client)).json()
-    origenes = {d["origen"] for d in directorio}
-    assert origenes == {"core", "portal"}
+    assert {d["origen"] for d in directorio} == {"catalogo", "portal"}
     assert len(directorio) == 2
+
+
+def test_cuando_el_medico_del_portal_llega_en_la_carga_conserva_su_clave_y_pasa_a_la_red(client):
+    """Lo pidió el usuario (2026-10-19): el alta del portal "se quita" cuando
+    el médico ya llega en la carga -- pero conservando su identificador, que
+    es lo que amarra las citas ya generadas. En vez de borrarlo y crear otro,
+    el MISMO renglón pasa de origen 'portal' ("Fuera de la red") a 'catalogo'
+    ("Dentro de la red")."""
+    admin = _auth_headers_admin(client)
+    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
+    aprobar = client.post(
+        f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"}
+    )
+    clave = aprobar.json()["clave_proveedor"]
+
+    # Una cita agendada ANTES de que llegue en la carga.
+    from datetime import date
+    cita = client.post("/directorio-proveedores/citas", headers=admin, json={
+        "clave_proveedor": clave, "fecha": date.today().isoformat(), "hora": "09:00",
+    })
+    assert cita.status_code == 200, cita.text
+
+    # Ahora el mismo médico (misma cédula y especialidad) llega en el Excel.
+    r = _cargar_excel(client, admin, [{
+        "nombre": SOLICITUD_VALIDA["nombre"], "especialidad": SOLICITUD_VALIDA["especialidad"],
+        "cedula": SOLICITUD_VALIDA["cedula"], "cl_proveedor": 777, "costo_consulta": "1200",
+    }])
+    assert r.json() == {"ok": True, "total": 1, "nuevos": 0, "actualizados": 0, "absorbidos": 1}
+
+    directorio = client.get("/directorio-proveedores", headers=admin).json()
+    assert len(directorio) == 1, "no debe duplicarse"
+    assert directorio[0]["clave"] == clave, "la clave se conserva"
+    assert directorio[0]["origen"] == "catalogo", "ya quedó dentro de la red"
+    assert directorio[0]["cl_proveedor"] == 777
+    assert directorio[0]["costo_consulta"] == "1200"
+
+    # Y la cita sigue apuntando al mismo médico.
+    citas = client.get("/directorio-proveedores/citas", headers=admin).json()
+    assert len(citas) == 1
+    assert citas[0]["clave_proveedor"] == clave
+    assert citas[0]["proveedor_nombre"] == SOLICITUD_VALIDA["nombre"]
 
 
 def test_estatus_invalido_se_rechaza(client):

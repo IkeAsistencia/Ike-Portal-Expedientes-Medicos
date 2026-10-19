@@ -17,7 +17,7 @@ app/
 │   └── local_store.py          # SQLite local (estatus, config. cuentas, alertas de proveedor enviadas)
 ├── services/
 │   ├── email_service.py        # envío de correo (real si hay SMTP en .env, simulado/log si no)
-│   ├── seguimiento_service.py  # reglas de 'Actualizar Core' (rol, longitud, flujo), compartidas por REST y GraphQL
+│   ├── seguimiento_service.py  # reglas de 'Actualizar Bitácora' (rol, longitud, flujo), compartidas por REST y GraphQL
 │   └── estatus_service.py      # reglas del cambio manual de estatus (rol, flujo de regreso), compartidas por REST y GraphQL
 ├── schemas/                    # modelos Pydantic (request/response)
 ├── repositories/                # una función por cada operación de datos
@@ -59,7 +59,7 @@ prompts/
 En [`prompts/prompt-portal-expedientes-desde-cero.md`](prompts/prompt-portal-expedientes-desde-cero.md)
 está el pedido completo de este portal redactado como si se hiciera por
 primera vez: contexto, perfiles, flujo de negocio, pantallas, integración
-con Core, Stored Procedures, API, seguridad, frontend, pruebas, despliegue
+con el sistema central, Stored Procedures, API, seguridad, frontend, pruebas, despliegue
 y forma de trabajo. Sirve para dos cosas:
 
 - **Entender el proyecto de un vistazo**, sin leer todo el historial.
@@ -298,8 +298,8 @@ pytest tests/ -v
 | POST | `/expedientes/enviar-correo-proveedores` | "Enviar correo a proveedores" (Cabina) | Correo + estatus local |
 | POST / GET / POST | `/expedientes/corte` · `/expedientes/corte/{id}/descargar` · `/expedientes/corte/{id}/enviar` | Corte en Excel (Administrador) | Excel guardado en la base local + correo |
 | GET | `/catalogos/servicios` · `/catalogos/subservicios` · `/catalogos/cuentas` · `/catalogos/cuentas/buscar` | Combos y buscador de cuentas | `dbo.ST_CP_ObtenerCatalogoServicio`, `dbo.ST_CP_ObtenerServicioMedico`, `dbo.ST_CP_ObtenerCatalogoCuentas`, `dbo.sp_S2_BuscaCuenta` |
-| POST | `/seguimiento/actualizar` | "Actualizar Core" (Proveedor) | `dbo.ST_CP_RegistrarSeguimiento` + comentario y estatus locales |
-| POST | `/seguimiento/estatus` | Estado del caso (Cabina) | Estatus local; regresar/cita también escriben en Core |
+| POST | `/seguimiento/actualizar` | "Actualizar Bitácora" (Proveedor) | `dbo.ST_CP_RegistrarSeguimiento` + comentario y estatus locales |
+| POST | `/seguimiento/estatus` | Estado del caso (Cabina) | Estatus local; regresar/cita también escriben en el sistema central |
 | GET | `/seguimiento/comentarios/{exp}` | Comentarios del Proveedor y del Coordinador | Base local |
 | GET / POST | `/seguimiento/pago-anticipado/{exp}` | Casilla de pago anticipado | Base local |
 | POST / GET | `/seguimiento/comprobante` · `/seguimiento/comprobante/{exp}` · `.../archivo` | Comprobante de pago | Base local |
@@ -343,6 +343,6 @@ Ver el detalle en `sql/README.md` y `jobs/README.md`. Resumen:
 ## ✅ Ya confirmado
 
 - `ProveedorxExpediente.clEstatus = 3` = "Asignación de Proveedor" (el
-  estatus que el sistema core le da al expediente cuando se le asigna un
+  estatus que el sistema central le da al expediente cuando se le asigna un
   proveedor). Se usa tanto para `FechaAsignacionProveedor` en el listado
   como para detectar "sin respuesta" en el cron de alertas.

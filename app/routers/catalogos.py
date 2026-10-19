@@ -10,7 +10,7 @@ router = APIRouter(
     dependencies=[Depends(usuario_actual)],  # requiere login, ver /auth/login
 )
 
-# clServicio es una clave del catálogo de Core (el portal trabaja con la 4,
+# clServicio es una clave del catálogo del sistema central (el portal trabaja con la 4,
 # "Servicios Médicos"). Se acota el rango para que no llegue cualquier
 # número: sin tope, el valor pasa directo al SP y lo que regrese se recorre
 # completo del lado de la API (CWE-606, iteraciones sin límite).

@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 class SeguimientoInput(BaseModel):
     """
-    Body del POST /seguimiento/actualizar (botón 'Actualizar Core').
+    Body del POST /seguimiento/actualizar (botón 'Actualizar Bit?cora').
     El clUsrApp NO va aquí: se toma del usuario autenticado (token JWT).
 
     tipo_expediente: ya no se usa para decidir si el comprobante es
@@ -30,10 +30,10 @@ class EstatusInput(BaseModel):
 
 class ComentarioSeguimiento(BaseModel):
     """
-    Copia local de cada comentario registrado en Core: los del Proveedor
-    ('Actualizar Core') y los del Coordinador de Cabina ('Regresar a
+    Copia local de cada comentario registrado en el sistema central: los del Proveedor
+    ('Actualizar Bit?cora') y los del Coordinador de Cabina ('Regresar a
     Proveedor'). Se guarda aparte para poder consultarlos en modo lectura
-    sin depender de leer Core directamente.
+    sin depender de leer el sistema central directamente.
     """
 
     rfc: str
@@ -65,8 +65,8 @@ class PagoAnticipadoResponse(BaseModel):
 
 class SeguimientoFalloLocal(BaseModel):
     """
-    Bitácora PROPIA del portal (tabla seguimiento_core_fallidos): intentos
-    de 'Actualizar Core' / 'Regresar a Proveedor' que no se pudieron
+    Bitácora PROPIA del portal (tabla seguimiento_fallidos): intentos
+    de 'Actualizar Bit?cora' / 'Regresar a Proveedor' que no se pudieron
     insertar en dbo.Seguimiento por un error de base de datos -- ver
     app/repositories/seguimiento_repo.py:registrar_fallo_local.
     """
@@ -82,7 +82,7 @@ class SeguimientoFalloLocal(BaseModel):
 
 class SeguimientoSiseItem(BaseModel):
     """
-    Una fila del resultado de dbo.sp_S2_Seguimiento (bitácora de Core/SISE
+    Una fila del resultado de dbo.sp_S2_Seguimiento (bitácora del sistema central/SISE
     para el expediente). El SP también regresa 'Accion' y 'CSSRow' (usados
     por la pantalla original de SISE para botones/estilo de fila) -- no se
     exponen aquí, no aplican al portal.

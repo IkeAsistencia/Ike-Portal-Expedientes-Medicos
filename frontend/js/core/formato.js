@@ -58,16 +58,16 @@ export function formatDateTime(iso) {
   return `${aaaammdd(d)} ${dosDigitos(d.getHours())}:${dosDigitos(d.getMinutes())}`;
 }
 
-/* Sanitización para el HTML embebido que trae Core en algunos campos de
+/* Sanitización para el HTML embebido que trae el sistema central en algunos campos de
    texto (ej. dbo.sp_S2_Seguimiento: Estatus/Observaciones pueden incluir
    "<h3><i class='far fa-address-card'></i><br>Informacion Sobre Empresa
-   Tenedora</h3>" para mostrar íconos y encabezados -- ver captura de Core).
+   Tenedora</h3>" para mostrar íconos y encabezados -- ver captura del sistema central).
    NO se puede mostrar con escapeHtml (saldría como texto literal) ni con
    innerHTML directo (esos mismos campos también pueden traer un comentario
-   que el propio portal insertó en Core -- "Actualizar Core" --, y si
+   que el propio portal insertó en el sistema central -- "Actualizar Seguimiento" --, y si
    alguien escribe algo como "<script>" ahí, renderizarlo tal cual sería
    una vulnerabilidad XSS). Esta función es una lista blanca: solo deja
-   pasar las etiquetas de puro formato visual que usa Core (encabezados,
+   pasar las etiquetas de puro formato visual que usal sistema central (encabezados,
    íconos, negritas, saltos de línea) y solo los atributos class/style --
    cualquier otra etiqueta (script, img, a, iframe, svg, form...) o
    atributo (onclick, onerror, href, src...) se elimina por completo. */

@@ -5,7 +5,7 @@
 -- Requiere haber corrido antes 00_create_types.sql.
 --
 -- Esta pantalla trabaja 8 subservicios, cada uno con su propio
--- subsistema de datos en Core (mapeo confirmado contra la base real,
+-- subsistema de datos en el sistema central (mapeo confirmado contra la base real,
 -- "Puntos a modificar.docx" de Cabina Médica, octubre 2026):
 --   226 "Referencias Médicas"            -> dbo.S2_ReferciasMedicas
 --   376 "Segunda Opinión"                -> dbo.S2_SegundaOpinion
@@ -27,7 +27,7 @@
 --
 -- Un expediente solo se considera "sin proveedor médico" si, además de
 -- estar en dbo.Expediente con clEstatus=0, YA tiene su fila registrada
--- en el subsistema que le corresponde según su subservicio -- si Core
+-- en el subsistema que le corresponde según su subservicio -- si el sistema central
 -- todavía no la creó, el expediente no está listo para escalarse aquí.
 -- Cualquier otro subservicio (Ambulancia, Consulta Médica Virtual,
 -- Médico a Domicilio, etc.) queda fuera de esta pantalla por completo.
@@ -222,7 +222,7 @@ BEGIN
             )
         -- El expediente solo cuenta si ya tiene su fila en la tabla del
         -- subsistema que le corresponde según su subservicio (si no,
-        -- Core todavía no lo terminó de registrar del lado de ese
+        -- el sistema central todavía no lo terminó de registrar del lado de ese
         -- subsistema).
         AND (
               (E.clSubServicio = 420 AND PV.clExpediente IS NOT NULL)
@@ -233,9 +233,9 @@ BEGIN
               OR (E.clSubServicio = 432 AND EM.clExpediente IS NOT NULL)
               -- 376 (Segunda Opinión) NO exige fila en S2_SegundaOpinion: esa tabla
               -- dejó de recibir registros nuevos desde diciembre de 2021 (confirmado
-              -- contra la base real), mientras que Core sigue abriendo expedientes de
+              -- contra la base real), mientras que el sistema central sigue abriendo expedientes de
               -- este subservicio con normalidad hasta la fecha. Exigir la fila oculta
-              -- TODOS los casos actuales -- queda pendiente confirmar con negocio/Core
+              -- TODOS los casos actuales -- queda pendiente confirmar con negocio/sistema central
               -- si esos datos (NombreBeneficiario, entidad, municipio) migraron a otra
               -- tabla; mientras tanto, el expediente se muestra igual, con esos campos
               -- en NULL si no hay fila.

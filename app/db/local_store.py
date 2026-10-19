@@ -12,16 +12,19 @@ se persisten en SQL Server:
   - usuarios_acceso: accesos por RFC (perfiles Administrador/Cabina/Proveedor).
   - comentarios_seguimiento: copia local de los comentarios de Proveedor.
   - comprobantes_pago: archivo de comprobante (expedientes Pago Anticipado).
-  - seguimiento_core_fallidos: bitácora PROPIA del portal para los intentos
-    de "Actualizar Core"/"Regresar a Proveedor" que no se pudieron
+  - seguimiento_fallidos: bitácora PROPIA del portal para los intentos
+    de "Actualizar Seguimiento"/"Regresar a Proveedor" que no se pudieron
     insertar en dbo.Seguimiento por un error de base de datos.
-  - proveedores_catalogo: catálogo de proveedores del Directorio de
-    Proveedores (pantalla "Carga catálogo proveedores Core", exclusiva de
-    Administrador) -- se carga completo desde un Excel, vive SOLO aquí,
-    no existe en SQL Server/Core.
+  - proveedores: padrón ÚNICO del Directorio de Proveedores, con los dos
+    orígenes juntos ('catalogo' = llegó en la carga de Excel, 'portal' =
+    se dio de alta aquí). Cada proveedor tiene una clave propia del portal
+    (PRV-000001) que NO cambia entre cargas, para que las citas sigan
+    apuntando al mismo médico. Vive SOLO aquí, no existe en SQL Server.
+  - citas_proveedor: citas agendadas desde el Directorio de Proveedores,
+    ligadas a esa clave propia.
   - solicitudes_alta_medico: solicitudes de "Alta de médico" (pantalla
-    "Proveedores" del Directorio de Proveedores) -- igual que el catálogo,
-    vive SOLO en este portal, nunca en SQL Server/Core.
+    "Proveedores" del Directorio de Proveedores) -- igual que el padrón,
+    vive SOLO en este portal, nunca en SQL Server.
 
 Este archivo vive junto al API (ver LOCAL_DB_PATH en .env) y no requiere
 ningún permiso especial en SQL Server.
@@ -89,8 +92,8 @@ CREATE TABLE IF NOT EXISTS usuarios_acceso (
     correo        TEXT
 );
 
--- Copia local de cada comentario que se registra en Core: los del Proveedor
--- (vía "Actualizar Core") y los del Coordinador de Cabina (vía "Regresar a
+-- Copia local de cada comentario que se registra en el sistema central: los del Proveedor
+-- (vía "Actualizar Bit?cora") y los del Coordinador de Cabina (vía "Regresar a
 -- Proveedor"). "origen" distingue de quién es cada uno para mostrarlos en
 -- secciones separadas en Seguimiento de expedientes.
 CREATE TABLE IF NOT EXISTS comentarios_seguimiento (
@@ -116,12 +119,12 @@ CREATE TABLE IF NOT EXISTS comprobantes_pago (
 );
 
 -- Bitácora PROPIA del portal (NUNCA dbo.Seguimiento ni comentarios_seguimiento)
--- para cuando el insert hacia Core (dbo.Seguimiento, vía
--- dbo.ST_CP_RegistrarSeguimiento -- botón "Actualizar Core" / "Regresar a
--- Proveedor") falla por un error de base de datos: así no se pierde lo que
+-- para cuando el insert hacia el sistema central (dbo.Seguimiento, vía
+-- dbo.ST_CP_RegistrarSeguimiento -- botón "Actualizar Seguimiento" / "Regresar
+-- a Proveedor") falla por un error de base de datos: así no se pierde lo que
 -- el usuario capturó, y se puede revisar/reintentar después. "nombre" es el
 -- nombre de quien inició sesión en el portal (no RFC, no clUsrApp).
-CREATE TABLE IF NOT EXISTS seguimiento_core_fallidos (
+CREATE TABLE IF NOT EXISTS seguimiento_fallidos (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     cl_expediente INTEGER NOT NULL,
     observaciones TEXT NOT NULL,
@@ -152,7 +155,7 @@ CREATE TABLE IF NOT EXISTS cortes_generados (
 -- Si un expediente es de "pago anticipado" -- solo el Proveedor lo sabe, por
 -- eso lo marca él desde Seguimiento de expediente. "bloqueado" se activa
 -- solo (no se puede desmarcar) en cuanto Proveedor manda su primer
--- comentario por "Actualizar Core", para que no cambie después de que
+-- comentario por "Actualizar Bit?cora", para que no cambie después de que
 -- Cabina ya empezó a revisarlo con ese valor.
 CREATE TABLE IF NOT EXISTS expediente_pago_anticipado (
     cl_expediente INTEGER PRIMARY KEY,
@@ -176,64 +179,105 @@ CREATE TABLE IF NOT EXISTS correos_enviados (
     fecha         TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 
--- Catálogo de proveedores del Directorio de Proveedores -- se carga
--- completo desde un Excel (pantalla "Carga catálogo proveedores Core",
--- exclusiva de Administrador, ver app/routers/proveedores_catalogo.py).
--- cl_proveedor es la clave del proveedor en Core (viene en el Excel, el
--- portal no la genera) -- se deja como INTEGER NOT NULL (segundo campo de
--- la tabla) a propósito, para distinguirla del "id" interno autoincrement.
-CREATE TABLE IF NOT EXISTS proveedores_catalogo (
-    id             INTEGER PRIMARY KEY AUTOINCREMENT,
-    cl_proveedor   INTEGER NOT NULL,
-    nombre         TEXT NOT NULL,
-    especialidad   TEXT,
-    cedula         TEXT,
-    rfc            TEXT,
-    estado         TEXT,
-    municipio      TEXT,
-    direccion      TEXT,
-    consultorio    TEXT,
-    telefono       TEXT,
-    email          TEXT,
-    horario        TEXT,
-    costo_consulta TEXT,
-    convenio       TEXT,
-    teleconsulta   INTEGER NOT NULL DEFAULT 0,
-    codigo_postal  TEXT,
-    latitud        REAL,
-    longitud       REAL
+-- Padrón ÚNICO de proveedores del Directorio de Proveedores: aquí conviven
+-- los dos orígenes, y por eso las citas pueden apuntar siempre al mismo
+-- renglón sin importar de dónde llegó el médico.
+--   origen='catalogo' -> llegó en la carga de Excel ("Dentro de la red").
+--   origen='portal'   -> se dio de alta en el portal ("Fuera de la red").
+--
+-- clave: identificador que GENERA ESTE PORTAL (PRV-000001). Es el que usan
+-- las citas y NO cambia nunca -- antes se dependía de cl_proveedor, que ya
+-- no es obligatorio (decisión del usuario, 2026-10-19).
+--
+-- llave_identidad: con qué se reconoce al MISMO médico entre una carga y
+-- otra (ver proveedores_repo._llave_identidad). Incluye la especialidad a
+-- propósito: un médico puede tener varias y cada una es un renglón distinto
+-- del padrón, con su propia clave y su propia agenda.
+--
+-- La carga ya NO borra el padrón: solo agrega los que no existan y
+-- actualiza los datos de los que ya estaban, conservándoles su clave.
+CREATE TABLE IF NOT EXISTS proveedores (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    clave               TEXT NOT NULL UNIQUE,
+    llave_identidad     TEXT NOT NULL UNIQUE,
+    origen              TEXT NOT NULL DEFAULT 'catalogo',  -- 'catalogo' | 'portal'
+    cl_proveedor        INTEGER,            -- referencia opcional del sistema central
+    nombre              TEXT NOT NULL,
+    especialidad        TEXT,
+    cedula              TEXT,
+    rfc                 TEXT,
+    estado              TEXT,
+    municipio           TEXT,
+    -- Domicilio DONDE DA LA CONSULTA (no el fiscal ni el particular).
+    calle_num_ext_int   TEXT,
+    colonia             TEXT,
+    codigo_postal       TEXT,
+    consultorio         TEXT,
+    telefono            TEXT,
+    email               TEXT,
+    horario             TEXT,
+    costo_consulta      TEXT,
+    convenio            TEXT,
+    teleconsulta        INTEGER NOT NULL DEFAULT 0,
+    latitud             REAL,
+    longitud            REAL,
+    folio_alta          TEXT,               -- folio de la solicitud, si nació en el portal
+    fecha_alta          TEXT NOT NULL,
+    fecha_actualizacion TEXT
 );
 
--- Bitácora de cada carga del catálogo de proveedores -- cada carga
--- REEMPLAZA el catálogo completo (decisión del usuario, 2026-10-16: el
--- Excel debe traer siempre TODOS los proveedores, no solo los nuevos),
--- así que esto es lo único que queda de las cargas anteriores.
-CREATE TABLE IF NOT EXISTS proveedores_catalogo_cargas (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    rfc         TEXT NOT NULL,
-    total_filas INTEGER NOT NULL,
-    fecha       TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+-- Bitácora de cada carga del padrón. Como la carga ya es incremental, aquí
+-- se guarda el desglose de qué hizo cada una (nuevos / actualizados /
+-- absorbidos de un alta del portal).
+CREATE TABLE IF NOT EXISTS proveedores_cargas (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    rfc          TEXT NOT NULL,
+    total_filas  INTEGER NOT NULL,
+    nuevos       INTEGER NOT NULL DEFAULT 0,
+    actualizados INTEGER NOT NULL DEFAULT 0,
+    absorbidos   INTEGER NOT NULL DEFAULT 0,
+    fecha        TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+-- Citas agendadas desde el Directorio de Proveedores. Se amarran a
+-- proveedores.clave (no al id interno ni a cl_proveedor) justamente para que
+-- una carga de Excel no las deje huérfanas. El UNIQUE evita que dos
+-- personas tomen el mismo horario del mismo médico.
+CREATE TABLE IF NOT EXISTS citas_proveedor (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    folio           TEXT NOT NULL UNIQUE,
+    clave_proveedor TEXT NOT NULL,
+    fecha           TEXT NOT NULL,   -- YYYY-MM-DD
+    hora            TEXT NOT NULL,   -- HH:MM
+    paciente        TEXT,
+    rfc_agendo      TEXT NOT NULL,
+    estatus         TEXT NOT NULL DEFAULT 'Agendada',
+    fecha_registro  TEXT NOT NULL,
+    UNIQUE (clave_proveedor, fecha, hora)
 );
 
 -- Solicitudes de "Alta de médico" (pantalla "Proveedores" del Directorio
--- de Proveedores) -- queda SOLO en el portal, nunca se manda a Core. La
--- validación de cédula sigue siendo simulada (ver frontend); aquí solo se
--- guarda la solicitud y su estatus para que Administrador la revise.
+-- de Proveedores) -- queda SOLO en el portal, nunca se manda al sistema
+-- central. Al aprobarse, el médico entra al padrón de arriba con
+-- origen='portal' y su propia clave (clave_proveedor guarda cuál le tocó).
 CREATE TABLE IF NOT EXISTS solicitudes_alta_medico (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
-    folio        TEXT NOT NULL UNIQUE,
-    nombre       TEXT NOT NULL,
-    especialidad TEXT NOT NULL,
-    cedula       TEXT NOT NULL,
-    rfc          TEXT,
-    estado       TEXT,
-    municipio    TEXT,
-    direccion    TEXT,
-    telefono     TEXT,
-    email        TEXT,
-    estatus      TEXT NOT NULL DEFAULT 'En revisión',
-    rfc_solicito TEXT NOT NULL,
-    fecha        TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    folio             TEXT NOT NULL UNIQUE,
+    nombre            TEXT NOT NULL,
+    especialidad      TEXT NOT NULL,
+    cedula            TEXT NOT NULL,
+    rfc               TEXT,
+    estado            TEXT,
+    municipio         TEXT,
+    calle_num_ext_int TEXT,
+    colonia           TEXT,
+    codigo_postal     TEXT,
+    telefono          TEXT,
+    email             TEXT,
+    estatus           TEXT NOT NULL DEFAULT 'En revisión',
+    clave_proveedor   TEXT,
+    rfc_solicito      TEXT NOT NULL,
+    fecha             TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
 """
 
@@ -259,13 +303,41 @@ def _migrar_columnas_faltantes(conn: sqlite3.Connection) -> None:
     if "origen" not in columnas_comentarios:
         conn.execute("ALTER TABLE comentarios_seguimiento ADD COLUMN origen TEXT NOT NULL DEFAULT 'proveedor'")
 
-    columnas_catalogo = {row["name"] for row in conn.execute("PRAGMA table_info(proveedores_catalogo)")}
-    if "codigo_postal" not in columnas_catalogo:
-        conn.execute("ALTER TABLE proveedores_catalogo ADD COLUMN codigo_postal TEXT")
-    if "latitud" not in columnas_catalogo:
-        conn.execute("ALTER TABLE proveedores_catalogo ADD COLUMN latitud REAL")
-    if "longitud" not in columnas_catalogo:
-        conn.execute("ALTER TABLE proveedores_catalogo ADD COLUMN longitud REAL")
+    columnas_solicitudes = {row["name"] for row in conn.execute("PRAGMA table_info(solicitudes_alta_medico)")}
+    for columna in ("calle_num_ext_int", "colonia", "codigo_postal", "clave_proveedor"):
+        if columna not in columnas_solicitudes:
+            conn.execute(f"ALTER TABLE solicitudes_alta_medico ADD COLUMN {columna} TEXT")
+
+
+def _migrar_tablas_renombradas(conn: sqlite3.Connection) -> None:
+    """
+    Renombres y bajas de tablas (el CREATE TABLE de arriba solo crea las que
+    faltan, no toca las que ya existen con otro nombre).
+    """
+    def existe(tabla: str) -> bool:
+        return conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (tabla,)
+        ).fetchone() is not None
+
+    # La bitácora de fallos se renombró al salir del proyecto el nombre del
+    # sistema central (decisión del usuario, 2026-10-19). Se conserva lo ya
+    # registrado: se copian los renglones a la tabla nueva y se tira la vieja.
+    if existe("seguimiento_core_fallidos"):
+        conn.execute(
+            "INSERT INTO seguimiento_fallidos "
+            "(id, cl_expediente, observaciones, cl_usr_app, nombre, error, fecha) "
+            "SELECT id, cl_expediente, observaciones, cl_usr_app, nombre, error, fecha "
+            "FROM seguimiento_core_fallidos"
+        )
+        conn.execute("DROP TABLE seguimiento_core_fallidos")
+
+    # El padrón de proveedores cambió de layout (la dirección se separó y
+    # cl_proveedor dejó de ser obligatorio). Lo cargado con el layout
+    # anterior se descarta a propósito -- se vuelve a cargar con el nuevo
+    # (instrucción del usuario, 2026-10-19).
+    for tabla in ("proveedores_catalogo", "proveedores_catalogo_cargas"):
+        if existe(tabla):
+            conn.execute(f"DROP TABLE {tabla}")
 
 
 def init_local_db() -> None:
@@ -275,6 +347,7 @@ def init_local_db() -> None:
         conn.row_factory = sqlite3.Row
         conn.executescript(_SCHEMA)
         _migrar_columnas_faltantes(conn)
+        _migrar_tablas_renombradas(conn)
         conn.commit()
 
 

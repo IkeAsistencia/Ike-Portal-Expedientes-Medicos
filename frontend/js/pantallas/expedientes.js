@@ -441,7 +441,7 @@ function notificarRespuestaProveedor(respondidos) {
       municipio: r.municipio,
     });
     // Si Cabina tiene abierta la pantalla de Seguimiento justo de este
-    // expediente, que se vea de una vez la respuesta que Core acaba de
+    // expediente, que se vea de una vez la respuesta que el sistema central acaba de
     // registrar, sin esperar a que alguien lo busque de nuevo a mano.
     refrescarSiEsElMismo(r.expediente);
   });

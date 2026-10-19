@@ -130,12 +130,12 @@ def fake_call_procedure(sp_name, params=None):
 
 
 # Lo que cada prueba mandó a dbo.ST_CP_RegistrarSeguimiento (se limpia en el fixture).
-OBSERVACIONES_ENVIADAS_A_CORE: list[str] = []
+OBSERVACIONES_ENVIADAS_A_BITACORA: list[str] = []
 
 
 def fake_call_procedure_write(sp_name, params=None):
     if sp_name == "dbo.ST_CP_RegistrarSeguimiento":
-        OBSERVACIONES_ENVIADAS_A_CORE.append(params["Observaciones"])
+        OBSERVACIONES_ENVIADAS_A_BITACORA.append(params["Observaciones"])
         # 42 = viene de una sesión SISE legada (clUsrApp real del token);
         # 0 = placeholder para sesiones RFC (ver CL_USR_APP_PLACEHOLDER_RFC).
         assert params["clUsrApp"] in (42, 0)
@@ -189,7 +189,7 @@ def client(tmp_path, monkeypatch):
     from app.config import get_settings
 
     get_settings.cache_clear()
-    OBSERVACIONES_ENVIADAS_A_CORE.clear()
+    OBSERVACIONES_ENVIADAS_A_BITACORA.clear()
 
     with TestClient(app) as c:
         yield c
@@ -1299,7 +1299,7 @@ def test_seguimiento_de_cita_flujo_completo(client):
 COMENTARIO_PROVEEDOR = "Se atendió al paciente correctamente sin ninguna novedad que reportar hoy."
 
 
-def test_core_recibe_encabezado_del_proveedor(client):
+def test_bitacora_recibe_encabezado_del_proveedor(client):
     import app.repositories.estatus_repo as estatus_repo_module
     from app.schemas.expediente import EstatusExpediente
 
@@ -1309,17 +1309,17 @@ def test_core_recibe_encabezado_del_proveedor(client):
         "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": COMENTARIO_PROVEEDOR}, headers=prov_headers
     )
     assert r.status_code == 200, r.text
-    assert OBSERVACIONES_ENVIADAS_A_CORE[-1] == f"Proveedores --> Proveedor de Prueba\n{COMENTARIO_PROVEEDOR}"
+    assert OBSERVACIONES_ENVIADAS_A_BITACORA[-1] == f"Proveedores --> Proveedor de Prueba\n{COMENTARIO_PROVEEDOR}"
 
     # La copia local (la que muestra el portal) va sin el encabezado, pero
-    # trae el nombre para que el portal lo muestre igual que en Core.
+    # trae el nombre para que el portal lo muestre igual que en el sistema central.
     r = client.get("/seguimiento/comentarios/1001", headers=prov_headers)
     comentario = next(c for c in r.json() if c["comentario"] == COMENTARIO_PROVEEDOR)
     assert comentario["nombre"] == "Proveedor de Prueba"
     assert comentario["rfc"] == "RFCPROTEST"
 
 
-def test_core_pago_anticipado_lleva_prefijo_pa(client):
+def test_bitacora_pago_anticipado_lleva_prefijo_pa(client):
     import app.repositories.estatus_repo as estatus_repo_module
     from app.schemas.expediente import EstatusExpediente
 
@@ -1332,10 +1332,10 @@ def test_core_pago_anticipado_lleva_prefijo_pa(client):
         "/seguimiento/actualizar", json={"cl_expediente": 1001, "comentario": COMENTARIO_PROVEEDOR}, headers=prov_headers
     )
     assert r.status_code == 200, r.text
-    assert OBSERVACIONES_ENVIADAS_A_CORE[-1] == f"Proveedores --> Proveedor de Prueba\nPA-{COMENTARIO_PROVEEDOR}"
+    assert OBSERVACIONES_ENVIADAS_A_BITACORA[-1] == f"Proveedores --> Proveedor de Prueba\nPA-{COMENTARIO_PROVEEDOR}"
 
 
-def test_core_pago_anticipado_no_duplica_prefijo(client):
+def test_bitacora_pago_anticipado_no_duplica_prefijo(client):
     import app.repositories.estatus_repo as estatus_repo_module
     from app.schemas.expediente import EstatusExpediente
 
@@ -1348,10 +1348,10 @@ def test_core_pago_anticipado_no_duplica_prefijo(client):
         headers=prov_headers,
     )
     assert r.status_code == 200, r.text
-    assert OBSERVACIONES_ENVIADAS_A_CORE[-1] == f"Proveedores --> Proveedor de Prueba\nPA-{COMENTARIO_PROVEEDOR}"
+    assert OBSERVACIONES_ENVIADAS_A_BITACORA[-1] == f"Proveedores --> Proveedor de Prueba\nPA-{COMENTARIO_PROVEEDOR}"
 
 
-def test_core_recibe_encabezado_del_coordinador(client):
+def test_bitacora_recibe_encabezado_del_coordinador(client):
     import app.repositories.estatus_repo as estatus_repo_module
     from app.schemas.expediente import EstatusExpediente
 
@@ -1363,14 +1363,14 @@ def test_core_recibe_encabezado_del_coordinador(client):
         headers=cabina_headers,
     )
     assert r.status_code == 200, r.text
-    assert OBSERVACIONES_ENVIADAS_A_CORE[-1] == "Cabina Médica --> Cabina de Prueba\nFalta el número de póliza."
+    assert OBSERVACIONES_ENVIADAS_A_BITACORA[-1] == "Cabina Médica --> Cabina de Prueba\nFalta el número de póliza."
 
     r = client.get("/seguimiento/comentarios/1001", headers=cabina_headers)
     comentario = next(c for c in r.json() if c["origen"] == "cabina")
     assert comentario["nombre"] == "Cabina de Prueba"
 
 
-def test_core_rechaza_comentario_que_no_cabe_con_encabezado(client):
+def test_bitacora_rechaza_comentario_que_no_cabe_con_encabezado(client):
     import app.repositories.estatus_repo as estatus_repo_module
     from app.schemas.expediente import EstatusExpediente
 
@@ -1381,7 +1381,7 @@ def test_core_rechaza_comentario_que_no_cabe_con_encabezado(client):
     )
     assert r.status_code == 400
     assert "demasiado largo" in r.json()["detail"]
-    assert OBSERVACIONES_ENVIADAS_A_CORE == []
+    assert OBSERVACIONES_ENVIADAS_A_BITACORA == []
 
 
 def test_configuracion_cuentas_ciclo_completo(client):

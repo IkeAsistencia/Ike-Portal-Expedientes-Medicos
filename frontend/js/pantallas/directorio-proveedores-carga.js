@@ -1,27 +1,37 @@
-/* Pantalla: Directorio de Proveedores -- Carga catálogo proveedores Core
+/* Pantalla: Directorio de Proveedores -- Carga catálogo proveedores
    (submenú de Directorio de Proveedores, exclusiva de Administrador). La
-   configuración y los datos de este catálogo viven SOLO en este portal
-   (SQLite local) -- no hay conexión a SQL Server/Core para esto. Cada
-   carga REEMPLAZA el catálogo completo: el Excel debe traer siempre
-   TODOS los proveedores, no solo los nuevos. */
+   configuración y los datos de este padrón viven SOLO en este portal
+   (SQLite local) -- no hay conexión a SQL Server para esto.
+
+   La carga es INCREMENTAL (decisión del usuario, 2026-10-19): agrega los
+   proveedores que no existan y actualiza los que ya estaban, sin tocarles
+   su clave -- si la clave cambiara, las citas ya agendadas apuntarían a
+   otro médico. */
 import { api, apiArchivo } from "../core/api.js";
 import { toast } from "../core/toast.js";
 import { formatDateTime } from "../core/formato.js";
 
 const PLANTILLA = `
   <div class="card tono-azul">
-    <div class="card-header"><h2>Carga del catálogo de proveedores (Core)</h2></div>
+    <div class="card-header"><h2>Carga del catálogo de proveedores</h2></div>
     <div class="card-body">
       <p>
         Este catálogo se administra únicamente desde este portal. Cada
-        archivo que subas <b>reemplaza por completo</b> el catálogo
-        anterior: debe traer a TODOS los proveedores, no solo los nuevos.
-      </p>
+      archivo que subas <b>agrega los proveedores nuevos y actualiza los
+      que ya estaban</b>, sin borrar el resto: puedes mandar solo los
+      nuevos o el padrón completo, en ambos casos funciona.
+    </p>
+    <p class="hint">
+      A cada proveedor el portal le asigna su propia clave (PRV-000001) y
+      se la conserva entre cargas, para no perder el control de las citas
+      que ya se le hayan generado. Un médico dado de alta aquí pasa a
+      «Dentro de la red» en cuanto llega en una de estas cargas.
+    </p>
       <div class="actions-row" style="justify-content:flex-start;">
         <button class="btn btn-secondary" id="cp-descargar-plantilla">Descargar plantilla Excel</button>
       </div>
       <div class="field" style="max-width:420px;margin-top:16px;">
-        <label for="cp-archivo">Archivo Excel (.xlsx) con el catálogo completo</label>
+        <label for="cp-archivo">Archivo Excel (.xlsx) con los proveedores</label>
         <input type="file" id="cp-archivo" accept=".xlsx">
       </div>
       <div class="actions-row" style="justify-content:flex-start;">
@@ -60,9 +70,15 @@ async function cargarResumen() {
   try {
     const data = await api("/proveedores-catalogo");
     const ultima = data.ultima_carga;
-    $("cp-resumen").textContent = ultima
-      ? `Catálogo actual: ${data.total} proveedor(es) -- última carga el ${formatDateTime(ultima.fecha)} (${ultima.rfc}).`
-      : "Todavía no se ha cargado ningún catálogo.";
+    if (!ultima) {
+      $("cp-resumen").textContent = "Todavía no se ha cargado ningún catálogo.";
+      return;
+    }
+    $("cp-resumen").textContent =
+      `Padrón actual: ${data.total} proveedor(es) -- ${data.dentro_de_la_red} dentro de la red y ` +
+      `${data.fuera_de_la_red} fuera de la red. Última carga el ${formatDateTime(ultima.fecha)} ` +
+      `(${ultima.rfc}): ${ultima.nuevos} nuevo(s), ${ultima.actualizados} actualizado(s)` +
+      (ultima.absorbidos ? `, ${ultima.absorbidos} que ya estaban dados de alta en el portal` : "") + ".";
   } catch (err) {
     $("cp-resumen").textContent = "";
   }
@@ -79,7 +95,11 @@ async function cargarArchivo() {
     const formData = new FormData();
     formData.append("archivo", archivo);
     const data = await api("/proveedores-catalogo/cargar", { method: "POST", formData });
-    toast(`Catálogo cargado: ${data.total} proveedor(es).`, "success");
+    const absorbidos = data.absorbidos ? `, ${data.absorbidos} que ya estaban dados de alta aquí` : "";
+    toast(
+      `Catálogo cargado: ${data.nuevos} nuevo(s), ${data.actualizados} actualizado(s)${absorbidos}.`,
+      "success"
+    );
     input.value = "";
     cargarResumen();
   } catch (err) {

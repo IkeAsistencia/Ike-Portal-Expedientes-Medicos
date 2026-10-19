@@ -1,17 +1,19 @@
-/* Directorio de Proveedores (maqueta): datos simulados y generadores.
-   Portados TAL CUAL del prototipo original "Portal de búsqueda de
-   proveedores": misma lista de especialidades, estados, municipios y
-   nombres, y la misma matemática (hash FNV-1a) para generar médicos,
-   precios, calificaciones y horarios. Así, para la misma zona salen
-   exactamente los mismos médicos y en el mismo orden que en el original.
+/* Directorio de Proveedores: datos de la pantalla.
 
-   ÚNICA EXCEPCIÓN: la búsqueda y la lista de resultados (ver raw()/visible()
-   más abajo) sí están conectadas al catálogo real que carga Administrador
-   (ver pantallas/directorio-proveedores-carga.js) -- cargarCatalogoReal()
-   trae ese catálogo una vez al entrar a la pantalla. El resto (reservar
-   cita, comparador, panel de Métricas/Solicitudes, alta de médico) se
-   queda igual que antes, con datos simulados: no hay horarios/calificaciones
-   reales ni validación real de cédula todavía. */
+   YA ESTÁ CONECTADO AL BACKEND:
+     - Búsqueda y resultados: leen el padrón real (GET /directorio-proveedores),
+       con los dos orígenes juntos -- "Dentro de la red" (llegó en la carga de
+       Excel) y "Fuera de la red" (alta hecha en el portal).
+     - Alta de médico y sus solicitudes: se guardan de verdad; al aprobarse,
+       el médico entra al padrón con su propia clave (PRV-000001).
+     - Citas: se agendan contra esa clave y quedan registradas; los horarios
+       libres los decide el servidor (GET /directorio-proveedores/{clave}/agenda),
+       no un hash del navegador como antes.
+
+   SIGUE SIMULADO: la validación de la cédula profesional contra el RNP y el
+   panel de Métricas (no hay reseñas ni geolocalización todavía). Las listas
+   de especialidades/estados/municipios de aquí abajo son las del catálogo
+   base para los combos del alta y de la zona. */
 import { api } from "../core/api.js";
 
 export const SPECIALTIES = [
@@ -35,8 +37,6 @@ export const NOMBRES = [
   "Dra. Verónica Aguilar Sáenz", "Dr. Julián Espinoza Mora", "Dra. Rebeca Villanueva Ponce", "Dr. Marco Delgado Ávila"
 ];
 
-export const SLOTS = ["09:00", "10:30", "12:00", "13:30", "16:00", "17:30", "19:00"];
-export const DOW = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 export const PRICE_OPTIONS = [
   { label: "Hasta $600", max: 600 }, { label: "Hasta $900", max: 900 },
   { label: "Hasta $1,200", max: 1200 }, { label: "Sin límite", max: 9999 }
@@ -60,31 +60,55 @@ export function hash(str) {
 export const pick = (arr, seed, salt) => arr[hash(seed + "|" + salt) % arr.length];
 export const num = (seed, salt, min, max) => min + (hash(seed + "#" + salt) % (max - min + 1));
 
-/* Formulario de alta vacío (el mismo con el que arranca el original y al
-   que regresa "Registrar otro médico"). */
+/* Formulario de alta vacío (el de arranque y al que regresa "Registrar otro
+   médico"). El domicilio va desglosado: es el del lugar DONDE DA LA
+   CONSULTA, igual que en la carga de Excel. */
 export function formularioVacio() {
-  return { name: "", specialty: SPECIALTIES[0], cedula: "", rfc: "", estado: ESTADOS[0].name, municipio: ESTADOS[0].municipios[0], address: "", phone: "", email: "" };
+  return {
+    name: "", specialty: SPECIALTIES[0], cedula: "", rfc: "",
+    estado: ESTADOS[0].name, municipio: ESTADOS[0].municipios[0],
+    calleNumExtInt: "", colonia: "", codigoPostal: "",
+    phone: "", email: "",
+  };
 }
 
 /* Catálogo real (cargado por Administrador, ver GET /directorio-proveedores)
    -- null mientras no se ha pedido todavía, [] si ya se pidió y vino vacío. */
 let catalogoReal = null;
 
+/* Las dos etiquetas del semáforo de origen: un proveedor que llegó en la
+   carga ya está contratado ("Dentro de la red"); uno dado de alta en el
+   portal todavía no ("Fuera de la red"). */
+export const ETIQUETA_DENTRO_DE_LA_RED = "Dentro de la red";
+export const ETIQUETA_FUERA_DE_LA_RED = "Fuera de la red";
+
+/* Domicilio DONDE DA LA CONSULTA, en el orden que se pidió:
+   calle con números, colonia y código postal. */
+function domicilioConsulta(row) {
+  const cp = row.codigo_postal ? "C.P. " + row.codigo_postal : "";
+  return [row.calle_num_ext_int, row.colonia, cp].filter(Boolean).join(", ");
+}
+
 function mapearProveedor(row) {
   const costo = parseFloat(row.costo_consulta);
   const esPortal = row.origen === "portal";
   return {
-    // "core" (catálogo Excel) se identifica por cl_proveedor; "portal"
-    // (alta de médico aprobada, ver solicitudes_alta_medico_repo.py) no
-    // tiene cl_proveedor real -- se identifica por su folio.
-    id: String(row.cl_proveedor ?? row.folio ?? ""),
+    // La clave la genera el portal (PRV-000001) y es la misma para los dos
+    // orígenes: con ella se agenda la cita y no cambia aunque el médico
+    // llegue después en la carga de Excel (ver proveedores_repo.py).
+    id: String(row.clave ?? ""),
+    clave: String(row.clave ?? ""),
+    claveSistemaCentral: row.cl_proveedor ?? null,
+    folioAlta: row.folio_alta || "",
     name: row.nombre,
     specialty: row.especialidad || "Sin especialidad",
     estado: row.estado || "",
     municipio: row.municipio || "",
     cedula: row.cedula || "",
     clinic: row.consultorio || "Consultorio no especificado",
-    address: row.direccion || "",
+    address: domicilioConsulta(row),
+    calleNumExtInt: row.calle_num_ext_int || "",
+    colonia: row.colonia || "",
     schedule: row.horario || "Horario no especificado",
     // Sin calificación ni distancia real todavía (no hay reseñas ni
     // geolocalización) -- valores neutros para que ordenar/filtrar no truene.
@@ -100,8 +124,8 @@ function mapearProveedor(row) {
     codigoPostal: row.codigo_postal || "",
     latitud: row.latitud ?? null,
     longitud: row.longitud ?? null,
-    source: esPortal ? "Alta desde el portal" : "Catálogo cargado",
-    origen: esPortal ? "portal" : "core",
+    source: esPortal ? ETIQUETA_FUERA_DE_LA_RED : ETIQUETA_DENTRO_DE_LA_RED,
+    origen: esPortal ? "portal" : "catalogo",
     fromPlaces: false,
   };
 }
@@ -121,11 +145,14 @@ export async function cargarCatalogoReal() {
 }
 
 /* ---------- Alta de médico (ver pantallas/directorio-proveedores.js) ----------
-   La solicitud y su estatus quedan SOLO en este portal (nunca se mandan a
-   Core) -- la validación de cédula sigue siendo simulada en el frontend,
-   solo el registro de la solicitud y el flujo de aprobar/rechazar son
-   reales. Un médico aprobado se vuelve visible en cargarCatalogoReal()
-   (ver origen="portal" en mapearProveedor) sin tocar el catálogo de Excel. */
+   La solicitud y su estatus quedan SOLO en este portal (nunca se mandan al
+   sistema central). Al aprobarse, el médico entra al padrón con su propia
+   clave y queda "Fuera de la red" hasta que llegue en una carga de Excel:
+   ahí el MISMO renglón pasa a "Dentro de la red" conservando su clave, así
+   que sus citas no se pierden.
+
+   Lo único que sigue simulado aquí es la validación de la cédula contra el
+   Registro Nacional de Profesionistas. */
 export async function cargarSolicitudesReales() {
   try {
     const filas = await api("/solicitudes-alta-medico");
@@ -133,6 +160,7 @@ export async function cargarSolicitudesReales() {
       folio: f.folio, name: f.nombre, specialty: f.especialidad,
       zone: [f.municipio, f.estado].filter(Boolean).join(", "),
       cedula: f.cedula, rfc: f.rfc || "—", status: f.estatus,
+      claveProveedor: f.clave_proveedor || "",
     }));
   } catch (err) {
     return [];
@@ -144,7 +172,10 @@ export function enviarSolicitudAlta(form) {
     method: "POST",
     body: {
       nombre: form.name, especialidad: form.specialty, cedula: form.cedula, rfc: form.rfc || null,
-      estado: form.estado || null, municipio: form.municipio || null, direccion: form.address || null,
+      estado: form.estado || null, municipio: form.municipio || null,
+      calle_num_ext_int: form.calleNumExtInt || null,
+      colonia: form.colonia || null,
+      codigo_postal: form.codigoPostal || null,
       telefono: form.phone || null, email: form.email || null,
     },
   });
@@ -215,8 +246,31 @@ export function visible(s) {
   return list.slice().sort(sorters[f.orden]);
 }
 
-/* Horarios libres de un médico en el día dayIndex (0 = hoy). */
-export function slotsFor(doctor, dayIndex) {
-  if (!doctor) return [];
-  return SLOTS.filter(sl => hash(doctor.id + dayIndex + sl) % 3 !== 0);
+/* ---------- Citas ----------
+   La disponibilidad la decide el servidor: es el único que sabe qué horarios
+   ya están apartados. Antes se inventaba con un hash, así que dos personas
+   veían el mismo hueco libre y la cita no quedaba registrada en ningún lado. */
+export async function cargarAgenda(claveProveedor) {
+  try {
+    return await api("/directorio-proveedores/" + encodeURIComponent(claveProveedor) + "/agenda");
+  } catch (err) {
+    return [];
+  }
+}
+
+export function agendarCita({ claveProveedor, fecha, hora, paciente }) {
+  return api("/directorio-proveedores/citas", {
+    method: "POST",
+    body: { clave_proveedor: claveProveedor, fecha, hora, paciente: paciente || null },
+  });
+}
+
+export async function cargarCitas(claveProveedor) {
+  try {
+    return await api("/directorio-proveedores/citas", {
+      params: claveProveedor ? { clave_proveedor: claveProveedor } : undefined,
+    });
+  } catch (err) {
+    return [];
+  }
 }

@@ -23,15 +23,23 @@ router = APIRouter(
 
 
 class SolicitudAltaInput(BaseModel):
+    """
+    Alta real de un médico en el portal. El domicilio va desglosado y es el
+    del lugar DONDE DA LA CONSULTA (mismo criterio que la carga de Excel,
+    ver app/services/proveedores_excel_service.py).
+    """
+
     nombre: str = Field(min_length=1, max_length=150)
     especialidad: str = Field(min_length=1, max_length=100)
     cedula: str = Field(min_length=1, max_length=20)
-    rfc: str | None = None
-    estado: str | None = None
-    municipio: str | None = None
-    direccion: str | None = None
-    telefono: str | None = None
-    email: str | None = None
+    rfc: str | None = Field(default=None, max_length=20)
+    estado: str | None = Field(default=None, max_length=60)
+    municipio: str | None = Field(default=None, max_length=80)
+    calle_num_ext_int: str | None = Field(default=None, max_length=180)
+    colonia: str | None = Field(default=None, max_length=120)
+    codigo_postal: str | None = Field(default=None, max_length=10)
+    telefono: str | None = Field(default=None, max_length=30)
+    email: str | None = Field(default=None, max_length=120)
 
 
 class EstatusInput(BaseModel):
@@ -51,8 +59,14 @@ def crear(data: SolicitudAltaInput, usuario: dict = Depends(usuario_actual)):
 
 @router.post("/{folio}/estatus")
 def actualizar_estatus(folio: str, data: EstatusInput):
+    """
+    Aprobar da de alta al médico en el padrón con origen='portal' ("Fuera de
+    la red") y le asigna su clave -- por eso se regresa `clave_proveedor`:
+    es con la que ya se le pueden agendar citas.
+    """
     if data.estatus not in solicitudes_alta_medico_repo.ESTATUS_VALIDOS:
         raise HTTPException(400, "Estatus inválido.")
-    if not solicitudes_alta_medico_repo.cambiar_estatus(folio, data.estatus):
+    solicitud = solicitudes_alta_medico_repo.cambiar_estatus(folio, data.estatus)
+    if solicitud is None:
         raise HTTPException(404, "No se encontró esa solicitud.")
-    return {"ok": True}
+    return {"ok": True, "clave_proveedor": solicitud.get("clave_proveedor")}

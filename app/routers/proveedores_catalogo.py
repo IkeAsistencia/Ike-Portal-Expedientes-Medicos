@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from app.core.security import usuario_actual
-from app.repositories import accesos_repo, proveedores_catalogo_repo
-from app.services.proveedores_catalogo_excel_service import (
+from app.repositories import accesos_repo, proveedores_repo
+from app.services.proveedores_excel_service import (
     ErrorCatalogoExcel,
     generar_plantilla_excel,
     leer_catalogo_excel,
@@ -29,7 +29,7 @@ def _requerir_administrador(usuario: dict = Depends(usuario_actual)) -> dict:
 
 router = APIRouter(
     prefix="/proveedores-catalogo",
-    tags=["Directorio de Proveedores -- Catálogo Core"],
+    tags=["Directorio de Proveedores -- Catálogo"],
     dependencies=[Depends(_requerir_administrador)],
 )
 
@@ -46,9 +46,12 @@ def descargar_plantilla():
 
 @router.get("")
 def resumen():
+    por_origen = proveedores_repo.contar_por_origen()
     return {
-        "total": proveedores_catalogo_repo.contar_catalogo(),
-        "ultima_carga": proveedores_catalogo_repo.obtener_ultima_carga(),
+        "total": proveedores_repo.contar_padron(),
+        "dentro_de_la_red": por_origen.get(proveedores_repo.ORIGEN_CATALOGO, 0),
+        "fuera_de_la_red": por_origen.get(proveedores_repo.ORIGEN_PORTAL, 0),
+        "ultima_carga": proveedores_repo.obtener_ultima_carga(),
     }
 
 
@@ -69,5 +72,8 @@ async def cargar(archivo: UploadFile = File(...), usuario: dict = Depends(usuari
         raise HTTPException(400, str(e))
 
     rfc_usuario = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
-    total = proveedores_catalogo_repo.reemplazar_catalogo(registros, rfc_usuario)
-    return {"ok": True, "total": total}
+    # Carga INCREMENTAL: agrega los que no existan y actualiza los que ya
+    # estaban conservándoles su clave (ver proveedores_repo.cargar_padron),
+    # así las citas ya agendadas no quedan huérfanas.
+    resultado = proveedores_repo.cargar_padron(registros, rfc_usuario)
+    return {"ok": True, **resultado}

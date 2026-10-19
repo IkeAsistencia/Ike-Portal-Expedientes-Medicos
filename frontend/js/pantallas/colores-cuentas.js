@@ -1,5 +1,5 @@
 /* Pantalla: Colores de Cuentas (solo Administrador).
-   Se elige una cuenta que ya existe en Core y se le pone un prefijo corto y
+   Se elige una cuenta que ya existe en el sistema central y se le pone un prefijo corto y
    un color (paleta pastel fija). A partir de ahí, Expedientes pinta el
    renglón de ese color y muestra el prefijo junto a la cuenta (lo ven todos
    los perfiles). Se puede cambiar o quitar en cualquier momento.

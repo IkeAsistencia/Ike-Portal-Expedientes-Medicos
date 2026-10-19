@@ -321,8 +321,8 @@ tbody tr:hover{background:#FAFAFA;}
 .mini-table tbody tr:hover{background:#FAFAFA;}
 .mini-empty{padding:20px;text-align:center;color:var(--text-secondary);}
 
-/* Apartado "Seguimiento" (historial de Core/SISE): letra y espaciado más
-   compactos -- Core manda encabezados e íconos dentro de las celdas y con
+/* Apartado "Seguimiento" (historial de sistema central/SISE): letra y espaciado más
+   compactos -- el sistema central manda encabezados e íconos dentro de las celdas y con
    el tamaño normal de .mini-table cada registro ocupaba demasiado alto.
    La caja muestra 15 registros (el alto exacto lo fija
    ajustarAltoHistorialSise, que mide las filas porque son de alto
@@ -333,7 +333,7 @@ tbody tr:hover{background:#FAFAFA;}
 .sg-historial-tabla{font-size:11.5px;}
 .sg-historial-tabla thead th{padding:6px 8px;position:sticky;top:0;z-index:2;}
 .sg-historial-tabla tbody td{padding:6px 8px;vertical-align:top;}
-/* Los encabezados y párrafos que Core manda como formato (ver
+/* Los encabezados y párrafos que el sistema central manda como formato (ver
    sanitizarHtmlSeguimiento) llegan con el tamaño y los márgenes por
    defecto del navegador: se igualan a los de la tabla para que el renglón
    no crezca de más. */

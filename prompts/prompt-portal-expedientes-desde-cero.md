@@ -13,7 +13,7 @@
 Necesito construir el **Portal Promédico** de IKE Asistencia: una
 aplicación web interna donde **Cabina Médica** da seguimiento a los
 expedientes médicos que llevan 8 horas o más sin proveedor asignado en el
-sistema core (SISE), los manda a los **proveedores médicos**, y estos
+sistema central (SISE), los manda a los **proveedores médicos**, y estos
 responden desde el mismo portal. Un **Administrador** gestiona accesos y
 genera cortes en Excel.
 
@@ -21,7 +21,7 @@ genera cortes en Excel.
   todas colaboradores o asociados de IKE. No todos conectados a la vez.
 - El portal **solo consulta** la base de SISE y **agrega registros** a su
   bitácora de seguimiento. No cobra, no maneja tarjetas y no modifica el
-  flujo de Core.
+  flujo del sistema central.
 - Idioma de la interfaz, el código (nombres de variables, comentarios) y la
   documentación: **español**.
 
@@ -69,16 +69,16 @@ genera cortes en Excel.
 Estatus (viven solo en la app, en SQLite; nunca en SQL Server):
 
 1. **Abierto** — el SP de SISE lo regresa cuando lleva **8 horas o más**
-   abierto sin proveedor (antes de eso Core aún puede asignarlo solo).
+   abierto sin proveedor (antes de eso el sistema central aún puede asignarlo solo).
 2. **En Espera de Respuesta** — Cabina lo mandó al proveedor por correo.
 3. **Seguimiento Proveedor** — el proveedor registró su seguimiento
-   ("Actualizar Core"). Queda en solo lectura para él.
+   ("Actualizar Bitácora"). Queda en solo lectura para él.
 4. Desde ahí Cabina decide:
    - **Finalizado**.
    - **Regresar a Proveedor** (vuelve a En Espera) con comentario
-     obligatorio, que se registra en Core y se avisa por correo.
+     obligatorio, que se registra en el sistema central y se avisa por correo.
    - **Seguimiento de Cita** (solo si es pago anticipado): cita aceptada,
-     comentario obligatorio en Core y aviso por correo. El proveedor
+     comentario obligatorio en el sistema central y aviso por correo. El proveedor
      responde subiendo el comprobante de pago y vuelve a Seguimiento
      Proveedor.
 
@@ -136,7 +136,7 @@ no se puede cambiar.
   cuadro); solo el Proveedor puede cambiarla.
 - **Comentarios del Proveedor** y **Comentarios del Coordinador**: cada
   comentario muestra arriba `Proveedores --> {nombre}` o
-  `Cabina Médica --> {nombre}` (igual que en Core) con su fecha y hora, y
+  `Cabina Médica --> {nombre}` (igual que en el sistema central) con su fecha y hora, y
   abajo el texto. En pago anticipado, visor del comprobante (ver/descargar).
 - **Estado del Caso** (solo Cabina): Abierto, Finalizado, Regresar a
   Proveedor, Seguimiento de Cita (solo si es pago anticipado). Regresar y
@@ -167,7 +167,7 @@ no se puede cambiar.
   (validado también en el backend). Genera un Excel, lo guarda, muestra
   una vista previa, permite descargarlo y "Confirmar y enviar" por correo.
 
-## 6. Integración con Core (SISE)
+## 6. Integración con sistema central (SISE)
 
 - Lo que se inserta con `dbo.ST_CP_RegistrarSeguimiento` en
   `dbo.Seguimiento.Observaciones` lleva este formato, con el nombre de
@@ -186,8 +186,8 @@ no se puede cambiar.
   no quepa (nunca dejar que SQL Server lo corte en silencio).
 - La copia local del comentario (la que muestra el portal) se guarda sin
   el encabezado; el nombre se obtiene de los accesos al consultarla.
-- Cabina solo escribe en Core al regresar o aceptar la cita; finalizar no
-  escribe en Core.
+- Cabina solo escribe en el sistema central al regresar o aceptar la cita; finalizar no
+  escribe en el sistema central.
 
 ## 7. Stored Procedures
 
@@ -195,7 +195,7 @@ no se puede cambiar.
 indique el orden):
 1. `00_create_types.sql` — tipo `dbo.IntList`.
 2. `dbo.ST_CP_ObtenerExpedientesSinProveedorMedico` — listado principal; solo
-   trabaja los 3 subservicios con subsistema propio en Core (Check Up,
+   trabaja los 3 subservicios con subsistema propio en el sistema central (Check Up,
    Consulta Médica en Consultorio, Plan Visión) y solo considera
    expedientes que ya tienen su fila en ese subsistema, con filtros por
    expediente, fechas, servicio, subservicio y cuentas (TVP).
@@ -221,8 +221,8 @@ Todas exigen `Authorization: Bearer <token>`, salvo login y salud.
 | `POST /expedientes/enviar-correo-proveedores` | Envío a proveedores (Cabina) |
 | `POST /expedientes/corte`, `GET /expedientes/corte/{id}/descargar`, `POST /expedientes/corte/{id}/enviar` | Corte en Excel (Administrador) |
 | `GET /catalogos/servicios`, `/catalogos/subservicios`, `/catalogos/cuentas`, `/catalogos/cuentas/buscar` | Catálogos |
-| `POST /seguimiento/actualizar` | Registrar seguimiento en Core (Proveedor) |
-| `POST /seguimiento/estatus` | Cambiar estatus (Cabina; regresar/cita escriben en Core) |
+| `POST /seguimiento/actualizar` | Registrar seguimiento en el sistema central (Proveedor) |
+| `POST /seguimiento/estatus` | Cambiar estatus (Cabina; regresar/cita escriben en el sistema central) |
 | `GET /seguimiento/comentarios/{exp}` | Comentarios con nombre de quien escribió |
 | `GET/POST /seguimiento/pago-anticipado/{exp}` | Casilla de pago anticipado |
 | `POST /seguimiento/comprobante`, `GET /seguimiento/comprobante/{exp}`, `GET .../archivo` | Comprobante de pago |
@@ -300,7 +300,7 @@ frontend/
 
 - **pytest** sin SQL Server real: sustituir `call_procedure` por fakes y
   usar una SQLite temporal por prueba. Cubrir permisos por perfil, reglas
-  de negocio, formato exacto de lo que llega a Core, límites, IDOR y que el
+  de negocio, formato exacto de lo que llega al sistema central, límites, IDOR y que el
   portal se sirva en `/` sin tapar la API (y que los `.js` salgan como
   `text/javascript`).
 - **Servidor de datos de prueba** (`dev_server_datos_prueba.py`): levanta
@@ -334,7 +334,7 @@ frontend/
 ## 14. Forma de trabajo
 
 - Avanza por fases que se puedan revisar: (1) estructura y conexión,
-  (2) login y accesos, (3) Expedientes, (4) Seguimiento y Core,
+  (2) login y accesos, (3) Expedientes, (4) Seguimiento y sistema central,
   (5) Administración y corte, (6) correo y job, (7) documentación y
   despliegue. Al cerrar cada fase: pruebas en verde y un commit.
 - Mensajes de commit en español, describiendo el porqué.

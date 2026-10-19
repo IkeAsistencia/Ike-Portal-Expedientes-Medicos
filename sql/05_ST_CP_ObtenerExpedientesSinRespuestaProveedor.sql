@@ -7,7 +7,7 @@
 -- menos @horasMinimas horas.
 --
 -- CONFIRMADO: clEstatus = 3 en dbo.ProveedorxExpediente corresponde a
--- "Asignación de Proveedor" — es el estatus que el sistema core le da
+-- "Asignación de Proveedor" — es el estatus que el sistema central le da
 -- al expediente cuando se le asigna un proveedor. Por eso este mismo
 -- valor se usa para obtener FechaAsignacion (fecha en que se asignó el
 -- proveedor), tanto aquí como en dbo.ST_CP_ObtenerExpedientesSinProveedorMedico.

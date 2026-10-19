@@ -53,7 +53,7 @@ def _verificar_proveedor_puede_ver(cl_expediente: int, usuario: dict) -> None:
 @router.post("/actualizar")
 def actualizar_seguimiento(data: SeguimientoInput, usuario: dict = Depends(usuario_actual)):
     """
-    Botón 'Actualizar Core': inserta el registro en dbo.Seguimiento.
+    Botón 'Actualizar Bit?cora': inserta el registro en dbo.Seguimiento.
     Solo el perfil Proveedor (o una sesión SISE sin perfil, para no romper
     lo ya existente) puede usar esto — Cabina lo tiene bloqueado.
     Al completarse, si quien lo hizo es Proveedor, el estatus del
@@ -70,7 +70,7 @@ def obtener_comentarios(cl_expediente: int, usuario: dict = Depends(usuario_actu
     """
     Copia local (de solo lectura) de los comentarios que Proveedor ha ido
     dejando para este expediente. Cabina la usa para revisar sin poder
-    modificar nada — el modificar solo pasa por 'Actualizar Core'.
+    modificar nada — el modificar solo pasa por 'Actualizar Bit?cora'.
     """
     _verificar_proveedor_puede_ver(cl_expediente, usuario)
     return seguimiento_repo.listar_comentarios_local(cl_expediente)
@@ -79,7 +79,7 @@ def obtener_comentarios(cl_expediente: int, usuario: dict = Depends(usuario_actu
 @router.get("/historial-sise/{cl_expediente}", response_model=list[SeguimientoSiseItem])
 def obtener_historial_sise(cl_expediente: int, usuario: dict = Depends(usuario_actual)):
     """
-    Bitácora de Core/SISE para este expediente (dbo.sp_S2_Seguimiento, SP
+    Bitácora del sistema central/SISE para este expediente (dbo.sp_S2_Seguimiento, SP
     legado ya existente). Apartado "Seguimiento" de la pantalla Seguimiento
     de expedientes.
     """
@@ -90,7 +90,7 @@ def obtener_historial_sise(cl_expediente: int, usuario: dict = Depends(usuario_a
 @router.get("/fallidos", response_model=list[SeguimientoFalloLocal])
 def listar_fallidos(_: dict = Depends(requerir_administrador)):
     """
-    Bitácora PROPIA del portal: intentos de "Actualizar Core" / "Regresar a
+    Bitácora PROPIA del portal: intentos de "Actualizar Seguimiento" / "Regresar a
     Proveedor" que no se pudieron insertar en dbo.Seguimiento por un error
     de base de datos (ver app/repositories/seguimiento_repo.py). Exclusivo
     de Administrador, para revisarlos/reintentarlos manualmente después.

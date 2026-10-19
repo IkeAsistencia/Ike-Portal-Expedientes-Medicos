@@ -1,22 +1,29 @@
 """
 Solicitudes de "Alta de médico" (pantalla "Proveedores" del Directorio de
-Proveedores) -- quedan SOLO en este portal, nunca se mandan a Core. La
-validación de cédula sigue siendo simulada en el frontend; aquí solo se
-guarda la solicitud y su estatus para que Administrador la revise.
+Proveedores) -- quedan SOLO en este portal, nunca se mandan al sistema
+central.
 
-Un médico aprobado se vuelve visible en el Directorio de Proveedores (ver
-listar_aprobados_como_directorio(), usado por
-app/routers/directorio_proveedores.py) SIN copiarlo a proveedores_catalogo
--- ese catálogo es exclusivamente el que sube Administrador desde Excel, y
-cada carga lo REEMPLAZA por completo (ver proveedores_catalogo_repo); si un
-médico dado de alta aquí se guardara ahí, una recarga del Excel lo borraría.
+Al APROBARSE, el médico entra al padrón (`proveedores`, ver
+proveedores_repo.alta_desde_portal) con origen='portal' -- o sea, "Fuera de
+la red" -- y con su propia clave. Esa clave es la que amarra sus citas, así
+que si después llega en la carga de Excel no se duplica ni pierde su agenda:
+el mismo renglón solo cambia de origen a 'catalogo' ("Dentro de la red").
 """
 import random
 import string
 
 from app.db.local_store import ahora_local, get_local_connection
+from app.repositories import proveedores_repo
 
-ESTATUS_VALIDOS = ("En revisión", "Aprobada", "Rechazada")
+ESTATUS_EN_REVISION = "En revisión"
+ESTATUS_APROBADA = "Aprobada"
+ESTATUS_RECHAZADA = "Rechazada"
+ESTATUS_VALIDOS = (ESTATUS_EN_REVISION, ESTATUS_APROBADA, ESTATUS_RECHAZADA)
+
+_CAMPOS_SOLICITUD = (
+    "nombre", "especialidad", "cedula", "rfc", "estado", "municipio",
+    "calle_num_ext_int", "colonia", "codigo_postal", "telefono", "email",
+)
 
 
 def _generar_folio() -> str:
@@ -25,17 +32,17 @@ def _generar_folio() -> str:
 
 def crear_solicitud(datos: dict, rfc_solicito: str) -> dict:
     folio = _generar_folio()
+    columnas = ("folio",) + _CAMPOS_SOLICITUD + ("estatus", "rfc_solicito", "fecha")
+    valores = {
+        "folio": folio,
+        **{c: datos.get(c) for c in _CAMPOS_SOLICITUD},
+        "estatus": ESTATUS_EN_REVISION, "rfc_solicito": rfc_solicito, "fecha": ahora_local(),
+    }
     with get_local_connection() as conn:
         conn.execute(
-            "INSERT INTO solicitudes_alta_medico "
-            "(folio, nombre, especialidad, cedula, rfc, estado, municipio, direccion, telefono, email, "
-            " estatus, rfc_solicito, fecha) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'En revisión', ?, ?)",
-            (
-                folio, datos["nombre"], datos["especialidad"], datos["cedula"], datos.get("rfc"),
-                datos.get("estado"), datos.get("municipio"), datos.get("direccion"),
-                datos.get("telefono"), datos.get("email"), rfc_solicito, ahora_local(),
-            ),
+            f"INSERT INTO solicitudes_alta_medico ({', '.join(columnas)}) "
+            f"VALUES ({', '.join(':' + c for c in columnas)})",
+            valores,
         )
         conn.commit()
     return {"folio": folio}
@@ -48,35 +55,32 @@ def listar_solicitudes() -> list[dict]:
         ).fetchall()]
 
 
-def cambiar_estatus(folio: str, estatus: str) -> bool:
+def obtener_solicitud(folio: str) -> dict | None:
     with get_local_connection() as conn:
-        cur = conn.execute(
-            "UPDATE solicitudes_alta_medico SET estatus = ? WHERE folio = ?", (estatus, folio)
+        fila = conn.execute("SELECT * FROM solicitudes_alta_medico WHERE folio = ?", (folio,)).fetchone()
+        return dict(fila) if fila else None
+
+
+def cambiar_estatus(folio: str, estatus: str) -> dict | None:
+    """
+    Cambia el estatus y, si se aprueba, da de alta al médico en el padrón.
+    Devuelve la solicitud ya actualizada (o None si el folio no existe).
+
+    El alta en el padrón es idempotente: volver a aprobar la misma solicitud
+    no crea un segundo renglón (ver proveedores_repo.alta_desde_portal).
+    """
+    solicitud = obtener_solicitud(folio)
+    if solicitud is None:
+        return None
+
+    clave = solicitud.get("clave_proveedor")
+    if estatus == ESTATUS_APROBADA:
+        clave = proveedores_repo.alta_desde_portal(solicitud, folio)
+
+    with get_local_connection() as conn:
+        conn.execute(
+            "UPDATE solicitudes_alta_medico SET estatus = ?, clave_proveedor = ? WHERE folio = ?",
+            (estatus, clave, folio),
         )
         conn.commit()
-        return cur.rowcount > 0
-
-
-def listar_aprobados_como_directorio() -> list[dict]:
-    """
-    Los médicos dados de alta desde el portal y ya aprobados también deben
-    verse en el Directorio de Proveedores -- se exponen con la misma forma
-    que las filas de proveedores_catalogo (ver
-    app/routers/directorio_proveedores.py), marcados origen='portal' y sin
-    cl_proveedor real (no vienen de Core, por eso se identifican por folio).
-    """
-    with get_local_connection() as conn:
-        filas = conn.execute(
-            "SELECT folio, nombre, especialidad, cedula, rfc, estado, municipio, direccion, telefono, email "
-            "FROM solicitudes_alta_medico WHERE estatus = 'Aprobada' ORDER BY nombre"
-        ).fetchall()
-    return [
-        {
-            "cl_proveedor": None, "folio": f["folio"], "nombre": f["nombre"], "especialidad": f["especialidad"],
-            "cedula": f["cedula"], "rfc": f["rfc"], "estado": f["estado"], "municipio": f["municipio"],
-            "direccion": f["direccion"], "consultorio": None, "telefono": f["telefono"], "email": f["email"],
-            "horario": None, "costo_consulta": None, "convenio": None, "teleconsulta": 0,
-            "codigo_postal": None, "latitud": None, "longitud": None, "origen": "portal",
-        }
-        for f in filas
-    ]
+    return obtener_solicitud(folio)

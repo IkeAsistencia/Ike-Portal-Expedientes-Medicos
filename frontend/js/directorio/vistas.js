@@ -10,8 +10,8 @@
 import { escapeHtml as e } from "../core/formato.js";
 import { ICONOS } from "../componentes/iconos.js";
 import {
-  SPECIALTIES, ESTADOS, DOW, PRICE_OPTIONS, PROPS,
-  num, pick, raw, visible, slotsFor, valoresUnicosCatalogo,
+  SPECIALTIES, ESTADOS, PRICE_OPTIONS, PROPS,
+  num, pick, raw, visible, valoresUnicosCatalogo,
 } from "./datos.js";
 
 const svg = (contenido) =>
@@ -41,6 +41,16 @@ export function calcularSugerencias(s) {
   return sugg.slice(0, 6);
 }
 
+/* Colonia, código postal y zona del domicilio de consulta (la calle va
+   aparte, en su propio renglón). */
+function _domicilioResto(x) {
+  return [
+    x.colonia,
+    x.codigoPostal ? "C.P. " + x.codigoPostal : "",
+    [x.municipio, x.estado].filter(Boolean).join(", "),
+  ].filter(Boolean).join(" · ");
+}
+
 /* ---------- Valores calculados (equivalente a renderVals del original) ---------- */
 export function calcular(s) {
   const f = s.filters;
@@ -57,22 +67,18 @@ export function calcular(s) {
   const specTotals = SPECIALTIES.map(sp => ({ name: sp, total: num(sp, "count", 6, 48) }));
   const pending = s.requests.filter(r => r.status === "En revisión").length;
 
-  // Agenda: 7 días a partir de hoy, con los horarios libres de cada uno.
+  // Agenda: los días y horarios REALMENTE libres los manda el servidor (ver
+  // cargarAgenda en datos.js) -- s.agenda llega vacío mientras se consulta.
   const bookingDayIndex = s.bookingDay == null ? 0 : s.bookingDay;
-  const days = [];
-  const today = new Date();
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(today.getTime() + i * 86400000);
-    const slots = slotsFor(d, i);
-    days.push({
-      indice: i,
-      dow: DOW[date.getDay()], num: String(date.getDate()),
-      slots: slots.length ? slots.length + " horarios" : "sin cupo",
-      disabled: slots.length === 0,
-      elegido: i === bookingDayIndex,
-    });
-  }
-  const daySlots = slotsFor(d, bookingDayIndex).map(sl => ({ label: sl, elegido: sl === s.bookingSlot }));
+  const days = (s.agenda || []).map((dia, i) => ({
+    indice: i,
+    dow: dia.dia_semana, num: String(dia.dia_mes), fecha: dia.fecha,
+    slots: dia.horarios.length ? dia.horarios.length + " horarios" : "sin cupo",
+    disabled: dia.horarios.length === 0,
+    elegido: i === bookingDayIndex,
+  }));
+  const diaElegido = (s.agenda || [])[bookingDayIndex];
+  const daySlots = (diaElegido ? diaElegido.horarios : []).map(sl => ({ label: sl, elegido: sl === s.bookingSlot }));
   const selDay = days[bookingDayIndex];
 
   return {
@@ -112,8 +118,12 @@ export function calcular(s) {
     hasResults: listed.length > 0,
     emptyTitle: info.list.length ? "Ningún especialista cumple los filtros." : "Sin especialistas para esta búsqueda.",
     doctors: listed.map(x => ({
-      id: x.id, name: x.name, specialty: x.specialty, cedula: x.cedula, clinic: x.clinic,
-      address: x.address + ", " + x.municipio, convenio: x.convenio, tele: x.tele,
+      id: x.id, clave: x.clave, name: x.name, specialty: x.specialty, cedula: x.cedula, clinic: x.clinic,
+      // Domicilio DONDE DA LA CONSULTA, en dos renglones: primero la calle
+      // con sus números y luego colonia / CP / municipio.
+      domicilioCalle: x.calleNumExtInt || "Domicilio no especificado",
+      domicilioResto: _domicilioResto(x),
+      convenio: x.convenio, tele: x.tele, origen: x.origen,
       availability: x.hoy ? "Disponible hoy" : x.schedule,
       rating: x.rating, price: x.price, distance: x.distance, source: x.source, fromPlaces: x.fromPlaces,
       compared: s.compare.indexOf(x.id) >= 0,
@@ -134,13 +144,21 @@ export function calcular(s) {
     // Ficha / agenda
     hasDetail: !!d,
     detailName: d ? d.name : "", detailSpecialty: d ? d.specialty : "", detailCedula: d ? d.cedula : "",
-    detailClinic: d ? d.clinic : "", detailAddress: d ? d.address + ", " + d.municipio : "", detailSchedule: d ? d.schedule : "",
+    detailClinic: d ? d.clinic : "", detailSchedule: d ? d.schedule : "",
+    detailDomicilioCalle: d ? (d.calleNumExtInt || "Domicilio no especificado") : "",
+    detailDomicilioResto: d ? _domicilioResto(d) : "",
     detailPrice: d ? d.price : "", detailPhone: d ? d.phone : "", detailSource: d ? d.source : "", detailConvenio: d ? d.convenio : "",
-    detailFromPlaces: d ? d.fromPlaces : false,
+    detailClave: d ? d.clave : "", detailOrigen: d ? d.origen : "",
     bookingIdle: s.bookingStep === "idle", bookingPick: s.bookingStep === "pick", bookingDone: s.bookingStep === "done",
     bookingDays: days, bookingSlots: daySlots,
-    bookingNote: s.bookingSlot ? "Cita: " + (selDay ? selDay.dow + " " + selDay.num : "") + " a las " + s.bookingSlot : "Elige un horario para confirmar.",
+    bookingNote: s.bookingGuardando
+      ? "Agendando…"
+      : s.bookingSlot
+        ? "Cita: " + (selDay ? selDay.dow + " " + selDay.num : "") + " a las " + s.bookingSlot
+        : "Elige un horario para confirmar.",
     bookingSummary: (selDay ? selDay.dow + " " + selDay.num : "") + " · " + (s.bookingSlot || ""),
+    bookingFolio: s.bookingFolio || "",
+    bookingGuardando: !!s.bookingGuardando,
 
     // Métricas
     kpis: [
@@ -160,6 +178,9 @@ export function calcular(s) {
       cedulaCheck: r.status === "Cédula no localizada" ? "No localizada" : r.cedula + " ✓",
       rfcCheck: r.rfc + (r.status === "Cédula no localizada" ? "" : " ✓"),
       status: r.status,
+      // La clave que le tocó al aprobarse: es con la que ya se le pueden
+      // agendar citas, y la conserva aunque después llegue en la carga.
+      claveProveedor: r.claveProveedor || "—",
       statusClass: r.status === "Aprobada" || r.status === "Validada" ? "activo" : r.status === "Rechazada" || r.status === "Cédula no localizada" ? "inactivo" : "pendiente",
     })),
 
@@ -183,7 +204,10 @@ export function calcular(s) {
 }
 
 /* ---------- Piezas comunes ---------- */
-const clasePorFuente = (fromPlaces) => (fromPlaces ? "pendiente" : "seguimiento");
+/* Color del distintivo según de dónde salió el proveedor: "Dentro de la red"
+   (llegó en la carga) en verde, "Fuera de la red" (alta del portal) en
+   ámbar, para que se note de un vistazo cuál ya está contratado. */
+const clasePorOrigen = (origen) => (origen === "portal" ? "pendiente" : "seguimiento");
 
 function encabezado({ volver, accionVolver, titulo, texto, extra = "", idTexto = "" }) {
   return `
@@ -214,7 +238,7 @@ export function barra(v) {
 
 export function pie(v) {
   return `
-    <span>Datos simulados para prototipo. Validación de cédula, agenda y Google Places sin conexión real.</span>
+    <span>Padrón, altas y citas reales. La validación de cédula y Google Places siguen sin conexión real.</span>
     <span>${e(v.footerCount)}</span>`;
 }
 
@@ -410,16 +434,19 @@ export function listaResultados(v) {
     <article class="dp-medico">
       <div class="dp-medico-principal">
         <div class="dp-medico-nombre">
-          <span class="dp-origen-punto ${d.origen === "portal" ? "portal" : "core"}" title="${d.origen === "portal" ? "Dado de alta desde el portal" : "Proveedor del catálogo Core"}"></span>
+          <span class="dp-origen-punto ${d.origen === "portal" ? "portal" : "catalogo"}" title="${e(d.source)}"></span>
           <h3>${e(d.name)}</h3>
-          <span class="badge ${clasePorFuente(d.fromPlaces)}">${e(d.source)}</span>
+          <span class="badge ${clasePorOrigen(d.origen)}">${e(d.source)}</span>
           ${d.tele ? `<span class="badge espera">Teleconsulta</span>` : ""}
         </div>
         <p class="dp-nota">${e(d.specialty)} · Cédula ${e(d.cedula)} · ${e(d.convenio)}</p>
+        <p class="dp-nota dp-clave">Clave ${e(d.clave)}</p>
       </div>
       <div class="dp-medico-consultorio">
         <div class="dp-fuerte">${e(d.clinic)}</div>
-        <div class="dp-muted">${e(d.address)}</div>
+        <div class="dp-domicilio-etiqueta">Domicilio de consulta</div>
+        <div class="dp-muted">${e(d.domicilioCalle)}</div>
+        <div class="dp-muted">${e(d.domicilioResto)}</div>
       </div>
       <div class="dp-medico-disponibilidad">
         <div>${e(d.availability)}</div>
@@ -525,7 +552,7 @@ export function pantallaSolicitudes(v) {
         <table class="mini-table dp-tabla-solicitudes">
           <thead>
             <tr>
-              <th>Folio</th><th>Médico</th><th>Especialidad</th><th>Zona</th><th>Cédula prof.</th><th>RFC</th><th>Estatus</th><th>Acciones</th>
+              <th>Folio</th><th>Médico</th><th>Especialidad</th><th>Zona</th><th>Cédula prof.</th><th>RFC</th><th>Clave</th><th>Estatus</th><th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -537,6 +564,7 @@ export function pantallaSolicitudes(v) {
                 <td data-label="Zona">${e(r.zone)}</td>
                 <td data-label="Cédula prof.">${e(r.cedulaCheck)}</td>
                 <td data-label="RFC">${e(r.rfcCheck)}</td>
+                <td data-label="Clave" class="dp-tabular">${e(r.claveProveedor)}</td>
                 <td data-label="Estatus"><span class="badge ${r.statusClass}">${e(r.status)}</span></td>
                 <td data-label="Acciones">
                   <div class="dp-acciones">
@@ -638,7 +666,12 @@ export function pantallaAlta(v) {
               <select id="dp-mun-sel" data-campo="municipio">${opcionesMunicipio(v)}</select>
             </div>
           </div>
-          ${campo("dp-dir", "address", "Dirección del consultorio", "Av. Vallarta 1450, Col. Americana")}
+          <h3 class="dp-subtitulo dp-subtitulo-espacio">Domicilio donde da la consulta</h3>
+          ${campo("dp-calle", "calleNumExtInt", "Calle, No. Ext. y No. Int.", "Av. Vallarta 1450, Int. 302")}
+          <div class="dp-grid-campos">
+            ${campo("dp-colonia", "colonia", "Colonia", "Americana")}
+            ${campo("dp-cp", "codigoPostal", "Código Postal", "44100")}
+          </div>
           <div class="dp-grid-campos">
             ${campo("dp-tel", "phone", "Teléfono", "33 1234 5678")}
             ${campo("dp-mail", "email", "Correo electrónico", "consultorio@correo.mx")}
@@ -673,7 +706,7 @@ export function pantallaAlta(v) {
 /* ---------- Ficha del médico y agenda (modal) ---------- */
 export function fichaCuerpo(v) {
   const cabecera = `
-    <span class="badge ${clasePorFuente(v.detailFromPlaces)}">${e(v.detailSource)}</span>
+    <span class="badge ${clasePorOrigen(v.detailOrigen)}">${e(v.detailSource)}</span>
     <p class="dp-ficha-sub">${e(v.detailSpecialty)} · Cédula ${e(v.detailCedula)}</p>`;
   if (v.bookingPick) {
     return `
@@ -701,15 +734,18 @@ export function fichaCuerpo(v) {
       <div class="dp-ficha-seccion">
         <span class="badge seguimiento">Cita confirmada</span>
         <p class="dp-cita-resumen">${e(v.bookingSummary)}</p>
-        <p class="dp-texto">${e(v.detailClinic)} · ${e(v.detailAddress)}. Recibirás la confirmación y el recordatorio por correo.</p>
+        <p class="dp-texto">Folio ${e(v.bookingFolio)} · ${e(v.detailClinic)}</p>
+        <p class="dp-texto">${e(v.detailDomicilioCalle)}, ${e(v.detailDomicilioResto)}.</p>
       </div>`;
   }
   const dato = (titulo, valor) => `<div><dt>${e(titulo)}</dt><dd>${e(valor)}</dd></div>`;
   return `
     ${cabecera}
     <dl class="dp-ficha-datos">
+      ${dato("Clave del proveedor", v.detailClave)}
       ${dato("Consultorio", v.detailClinic)}
-      ${dato("Dirección", v.detailAddress)}
+      ${dato("Domicilio de consulta", v.detailDomicilioCalle)}
+      ${dato("Colonia, C.P. y zona", v.detailDomicilioResto)}
       ${dato("Horario", v.detailSchedule)}
       ${dato("Consulta", v.detailPrice)}
       ${dato("Convenios", v.detailConvenio)}
@@ -720,7 +756,7 @@ export function fichaCuerpo(v) {
 export function fichaPie(v) {
   if (v.bookingPick) {
     return `
-      <button class="btn btn-primary" data-accion="confirmar-cita">Confirmar cita</button>
+      <button class="btn btn-primary" data-accion="confirmar-cita"${v.bookingGuardando ? " disabled" : ""}>Confirmar cita</button>
       <button class="btn btn-secondary" data-accion="volver-ficha">Volver</button>
       <span class="dp-nota">${e(v.bookingNote)}</span>`;
   }

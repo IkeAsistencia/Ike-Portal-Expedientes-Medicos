@@ -48,11 +48,11 @@ ENTIDADES_MEXICO = [
 
 # ⚠️ PENDIENTE: un usuario RFC (login propio de esta app) no tiene un clUsrApp
 # real de SISE ligado a él todavía (falta definir ese mapeo con el equipo).
-# "Actualizar Core" SÍ necesita un clUsrApp válido para escribir en
+# "Actualizar Bit?cora" SÍ necesita un clUsrApp válido para escribir en
 # dbo.Seguimiento. Mientras no se resuelva, se usa este placeholder para no
 # bloquear el flujo de Proveedores — pero OJO: contra el SQL Server real,
 # ese registro de bitácora quedaría atribuido a este ID falso, no a la
-# persona real. No usar "Actualizar Core" contra la base real hasta
+# persona real. No usar "Actualizar Bit?cora" contra la base real hasta
 # resolver esto; probarlo solo contra el servidor de datos de prueba.
 CL_USR_APP_PLACEHOLDER_RFC = 0
 

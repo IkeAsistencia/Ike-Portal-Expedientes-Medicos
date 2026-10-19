@@ -3,15 +3,18 @@
    especialistas por zona y especialidad) metida dentro del portal: mismos
    textos y mismo comportamiento que el original, con el diseño del portal.
    NO toca expedientes, correos ni usuarios -- pero SÍ tiene conexión real
-   con el backend para dos cosas (ver js/directorio/datos.js):
-     - Búsqueda/resultados: leen del catálogo real cargado por
-       Administrador (pantalla "Carga catálogo proveedores Core").
+   con el backend (ver js/directorio/datos.js):
+     - Búsqueda/resultados: leen el padrón real, con los dos orígenes
+       juntos -- "Dentro de la red" (llegó en la carga de Excel que sube
+       Administrador) y "Fuera de la red" (alta hecha en este portal).
      - Alta de médico / Solicitudes: la solicitud, su estatus y su
-       aprobación quedan guardados en este portal (nunca en Core) -- un
-       médico aprobado se vuelve buscable en el Directorio.
-   El resto (reservar cita, comparador, panel de Métricas, validación de
-   cédula) se queda simulado: no hay horarios/calificaciones reales ni
-   validación real de cédula todavía.
+       aprobación quedan guardados en este portal (nunca en el sistema
+       central); al aprobarse, el médico entra al padrón con su propia
+       clave (PRV-000001) y ya se le pueden agendar citas.
+     - Citas: se guardan contra esa clave y los horarios libres los decide
+       el servidor, así que dos personas no pueden tomar el mismo.
+   Lo único que sigue simulado es la validación de la cédula contra el RNP
+   y el panel de Métricas (no hay reseñas ni geolocalización todavía).
 
    Sub-pantallas internas (por estado, no por hash): home, zone, results,
    compare, metrics, admin (Solicitudes) y register (Alta de médico), más la
@@ -23,6 +26,7 @@ import {
   ESTADOS, RECENT_KEY, PROPS,
   visible, formularioVacio, cargarCatalogoReal,
   cargarSolicitudesReales, enviarSolicitudAlta, actualizarEstatusSolicitud,
+  cargarAgenda, agendarCita,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
 import { toast } from "../core/toast.js";
@@ -57,6 +61,8 @@ function estadoInicial() {
     filters: { maxPrice: 9999, hoy: false, tele: false, seguro: false, soloVerificados: false, orden: "rating" },
     compare: [],
     detail: null, bookingStep: "idle", bookingDay: null, bookingSlot: null,
+    // Agenda real del médico abierto (la manda el servidor, ver cargarAgenda).
+    agenda: [], bookingFolio: null, bookingGuardando: false,
     cedulaStatus: "idle", registered: null, requests: [],
     form: formularioVacio(),
   };
@@ -296,6 +302,42 @@ async function cargarSolicitudes() {
   pintar();
 }
 
+/* ---------- Agenda y citas (reales) ----------
+   Los días/horarios libres los decide el servidor, así que se piden al abrir
+   la agenda y se vuelven a pedir después de confirmar: si alguien más apartó
+   un horario mientras tanto, se ve al instante. */
+async function abrirAgenda(medico) {
+  if (!medico) return;
+  irA({
+    detail: medico, bookingStep: "pick", bookingDay: 0, bookingSlot: null,
+    agenda: [], bookingFolio: null, bookingGuardando: false,
+  });
+  const g = generacion;
+  const agenda = await cargarAgenda(medico.clave);
+  if (g !== generacion || estado.detail !== medico) return;
+  irA({ agenda });
+}
+
+async function confirmarCita() {
+  const medico = estado.detail;
+  const dia = (estado.agenda || [])[estado.bookingDay == null ? 0 : estado.bookingDay];
+  if (!medico || !dia || !estado.bookingSlot || estado.bookingGuardando) return;
+
+  irA({ bookingGuardando: true });
+  try {
+    const cita = await agendarCita({
+      claveProveedor: medico.clave, fecha: dia.fecha, hora: estado.bookingSlot,
+    });
+    irA({ bookingStep: "done", bookingFolio: cita.folio, bookingGuardando: false });
+  } catch (err) {
+    // El caso típico: otra persona tomó ese horario (409). Se refresca la
+    // agenda para que ya no aparezca como libre.
+    toast(err.message, "error");
+    const agenda = await cargarAgenda(medico.clave);
+    irA({ agenda, bookingSlot: null, bookingGuardando: false });
+  }
+}
+
 const medicoVisible = (id) => visible(estado).find(x => x.id === id) || null;
 
 const ACCIONES = {
@@ -322,7 +364,7 @@ const ACCIONES = {
   "limpiar-filtros": () => { ponerFiltros({ maxPrice: 9999, hoy: false, tele: false, seguro: false, soloVerificados: false }); pintar(); },
   "ficha": (el) => {
     const x = medicoVisible(el.dataset.id);
-    if (x) irA({ detail: x, bookingStep: "idle", bookingDay: null, bookingSlot: null });
+    if (x) irA({ detail: x, bookingStep: "idle", bookingDay: null, bookingSlot: null, agenda: [], bookingFolio: null });
   },
 
   // Comparar
@@ -330,14 +372,14 @@ const ACCIONES = {
   "quitar-comparar": () => irA({ compare: [] }),
   "agendar-desde-comparar": (el) => {
     const x = medicoVisible(el.dataset.id);
-    if (x) irA({ detail: x, bookingStep: "pick", bookingDay: 0, bookingSlot: null });
+    if (x) abrirAgenda(x);
   },
 
   // Ficha y agenda
-  "cerrar-ficha": () => irA({ detail: null, bookingStep: "idle" }),
-  "agendar": () => irA({ bookingStep: "pick", bookingDay: 0, bookingSlot: null }),
+  "cerrar-ficha": () => irA({ detail: null, bookingStep: "idle", agenda: [], bookingFolio: null }),
+  "agendar": () => abrirAgenda(estado.detail),
   "volver-ficha": () => irA({ bookingStep: "idle" }),
-  "confirmar-cita": () => { if (estado.bookingSlot) irA({ bookingStep: "done" }); },
+  "confirmar-cita": confirmarCita,
   "elegir-dia": (el) => irA({ bookingDay: Number(el.dataset.indice), bookingSlot: null }),
   "elegir-horario": (el) => irA({ bookingSlot: el.dataset.valor }),
 

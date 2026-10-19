@@ -1,7 +1,7 @@
 """
 Color y prefijo que el Administrador le pone a una cuenta (módulo "Colores
 de Cuentas"). Es independiente de cuentas_configuradas (Configuración
-Cuentas): aquí se puede etiquetar cualquier cuenta que exista en Core.
+Cuentas): aquí se puede etiquetar cualquier cuenta que exista en el sistema central.
 
 Con estos datos Expedientes pinta el renglón de ese color y muestra el
 prefijo junto a la cuenta (ver expedientes_repo.listar_expedientes).

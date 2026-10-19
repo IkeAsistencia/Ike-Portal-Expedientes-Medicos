@@ -1,12 +1,12 @@
 """
-Reglas de negocio de 'Actualizar Core' (botón del Proveedor), compartidas
+Reglas de negocio de 'Actualizar Bit?cora' (botón del Proveedor), compartidas
 entre REST (app/routers/seguimiento.py) y GraphQL (app/graphql/mutation.py).
 
 Antes, la mutation de GraphQL llamaba directo a seguimiento_repo sin pasar
 por ninguna de estas reglas (perfil Cabina bloqueado, longitud mínima del
 comentario, expediente en el estatus correcto, comprobante de pago
 anticipado obligatorio) -- lo que permitía a cualquier usuario autenticado
-escribir en Core saltándose todas las validaciones que sí tiene el REST.
+escribir en el sistema central saltándose todas las validaciones que sí tiene el REST.
 Centralizar la lógica aquí garantiza que ambas superficies impongan
 exactamente las mismas reglas.
 """
@@ -23,19 +23,19 @@ LONGITUD_MINIMA_COMENTARIO_PROVEEDOR = 50
 LONGITUD_MINIMA_COMENTARIO_COMPROBANTE = 20
 
 
-def construir_observaciones_core(etiqueta: str, usuario: dict, comentario: str) -> str:
-    """Arma el texto que se inserta en Core con el encabezado de quién lo
-    escribió (ver seguimiento_repo.observaciones_para_core) y valida que
+def construir_observaciones_bitacora(etiqueta: str, usuario: dict, comentario: str) -> str:
+    """Arma el texto que se inserta en el sistema central con el encabezado de quién lo
+    escribió (ver seguimiento_repo.observaciones_para_bitacora) y valida que
     quepa en @Observaciones: si no, se rechaza en vez de que SQL Server lo
     corte en silencio."""
     nombre = usuario.get("nombre") or usuario.get("rfc") or usuario.get("usuario") or "desconocido"
-    observaciones = seguimiento_repo.observaciones_para_core(etiqueta, nombre, comentario)
-    sobran = len(observaciones) - seguimiento_repo.LONGITUD_MAXIMA_OBSERVACIONES_CORE
+    observaciones = seguimiento_repo.observaciones_para_bitacora(etiqueta, nombre, comentario)
+    sobran = len(observaciones) - seguimiento_repo.LONGITUD_MAXIMA_OBSERVACIONES
     if sobran > 0:
         raise HTTPException(
             400,
-            f"El comentario es demasiado largo para Core: quítale {sobran} caracter(es). "
-            f"El registro admite {seguimiento_repo.LONGITUD_MAXIMA_OBSERVACIONES_CORE} caracteres "
+            f"El comentario es demasiado largo para el sistema central: quítale {sobran} caracter(es). "
+            f"El registro admite {seguimiento_repo.LONGITUD_MAXIMA_OBSERVACIONES} caracteres "
             "contando el encabezado con tu nombre.",
         )
     return observaciones
@@ -43,7 +43,7 @@ def construir_observaciones_core(etiqueta: str, usuario: dict, comentario: str) 
 
 def actualizar_seguimiento(cl_expediente: int, comentario: str, usuario: dict) -> dict:
     """
-    Botón 'Actualizar Core': inserta el registro en dbo.Seguimiento.
+    Botón 'Actualizar Bit?cora': inserta el registro en dbo.Seguimiento.
     Solo el perfil Proveedor (o una sesión SISE sin perfil, para no romper
     lo ya existente) puede usar esto — Cabina lo tiene bloqueado.
     Al completarse, si quien lo hizo es Proveedor, el estatus del
@@ -98,14 +98,14 @@ def actualizar_seguimiento(cl_expediente: int, comentario: str, usuario: dict) -
         cl_usr_app = accesos_repo.CL_USR_APP_PLACEHOLDER_RFC
 
     # Pago anticipado: el comentario del Proveedor debe empezar con "PA-"
-    # (así lo identifican en Core). El portal ya lo pone al marcar la
+    # (así lo identifican en el sistema central). El portal ya lo pone al marcar la
     # casilla; esto lo garantiza aunque lo borren a mano.
     if pago_anticipado_repo.es_anticipado(cl_expediente) and not comentario_limpio.startswith(
         seguimiento_repo.PREFIJO_PAGO_ANTICIPADO
     ):
         comentario_limpio = seguimiento_repo.PREFIJO_PAGO_ANTICIPADO + comentario_limpio
 
-    observaciones = construir_observaciones_core(seguimiento_repo.ETIQUETA_CORE_PROVEEDOR, usuario, comentario_limpio)
+    observaciones = construir_observaciones_bitacora(seguimiento_repo.ETIQUETA_BITACORA_PROVEEDOR, usuario, comentario_limpio)
     nombre_usuario = usuario.get("nombre") or usuario.get("rfc") or usuario.get("usuario") or "desconocido"
     try:
         resultado = seguimiento_repo.registrar_seguimiento(

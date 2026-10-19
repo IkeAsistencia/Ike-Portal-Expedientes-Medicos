@@ -104,7 +104,7 @@ const PLANTILLA = `
       <div class="field hidden" id="sg-motivo-regreso-field" style="margin-top:12px;">
         <label for="sg-motivo-regreso" id="sg-motivo-regreso-label">Motivo del regreso (obligatorio)</label>
         <textarea id="sg-motivo-regreso" rows="4" placeholder="Explica qué le falta o qué está mal en la respuesta del proveedor..."></textarea>
-        <div class="hint">Se guarda en Core igual que el comentario del proveedor, y se le notifica por correo.</div>
+        <div class="hint">Se guarda en el sistema central igual que el comentario del proveedor, y se le notifica por correo.</div>
       </div>
     </div>
   </div>
@@ -120,7 +120,7 @@ const PLANTILLA = `
         <label for="sg-observaciones">Observaciones</label>
         <textarea id="sg-observaciones" rows="7"></textarea>
         <div class="char-counter" id="sg-counter">0 / 1500</div>
-        <div class="hint">Cada vez que presionas "Actualizar Core" se guarda un nuevo registro en la bitácora de seguimiento, no se sobrescribe el anterior.</div>
+        <div class="hint">Cada vez que presionas "Actualizar Seguimiento" se guarda un nuevo registro en el seguimiento, no se sobrescribe el anterior.</div>
       </div>
       <div class="field hidden" id="sg-comprobante-field">
         <label for="sg-comprobante-input">Comprobante de pago (obligatorio para Pago Anticipado)</label>
@@ -129,7 +129,7 @@ const PLANTILLA = `
       </div>
       <div class="actions-row">
         <button class="btn btn-secondary" id="sg-cancelar-btn">Cancelar</button>
-        <button class="btn btn-primary" id="sg-actualizar-btn">Actualizar Core</button>
+        <button class="btn btn-primary" id="sg-actualizar-btn">Actualizar Seguimiento</button>
       </div>
     </div>
   </div>
@@ -162,20 +162,20 @@ function comentarioMinimo() {
 }
 
 // Igual que en el backend (app/repositories/seguimiento_repo.py): lo que se
-// inserta en Core lleva un encabezado con quién lo escribió
+// inserta en el sistema central lleva un encabezado con quién lo escribió
 // ("Proveedores --> Nombre" o "Cabina Médica --> Nombre" + salto de línea) y
 // todo junto debe caber en los 1500 caracteres de Observaciones.
-const LONGITUD_MAXIMA_CORE = 1500;
-const ETIQUETA_CORE_CABINA = "Cabina Médica";
-const ETIQUETA_CORE_PROVEEDOR = "Proveedores";
+const LONGITUD_MAXIMA_OBSERVACIONES = 1500;
+const ETIQUETA_BITACORA_CABINA = "Cabina Médica";
+const ETIQUETA_BITACORA_PROVEEDOR = "Proveedores";
 // Los comentarios del Proveedor en expedientes de pago anticipado empiezan
-// con "PA-": así los identifican en Core (el backend también lo garantiza).
+// con "PA-": así los identifican en el sistema central (el backend también lo garantiza).
 const PREFIJO_PAGO_ANTICIPADO = "PA-";
-let maxObservaciones = LONGITUD_MAXIMA_CORE;
+let maxObservaciones = LONGITUD_MAXIMA_OBSERVACIONES;
 
 function largoDisponible(etiqueta) {
   const encabezado = `${etiqueta} --> ${nombreUsuario() || ""}\n`;
-  return LONGITUD_MAXIMA_CORE - encabezado.length;
+  return LONGITUD_MAXIMA_OBSERVACIONES - encabezado.length;
 }
 
 let registroActual = null;
@@ -262,10 +262,10 @@ export async function abrirSeguimiento(record, source) {
   await cargarPagoAnticipado(record);
 }
 
-// Cuando el refresco silencioso de Expedientes detecta que Core actualizó
+// Cuando el refresco silencioso de Expedientes detecta que el sistema central actualizó
 // un expediente (ej. el proveedor respondió) y esta pantalla ya está
 // mostrando justo ese expediente, se refresca su listado de Seguimiento
-// (el historial que llena Core) en vez de dejarlo con datos viejos hasta
+// (el historial que llenal sistema central) en vez de dejarlo con datos viejos hasta
 // que alguien lo vuelva a buscar a mano.
 export function refrescarSiEsElMismo(clExpediente) {
   if (registroActual?.expediente === clExpediente) cargarHistorialSise(clExpediente);
@@ -387,13 +387,13 @@ async function verComprobante(clExpediente) {
   }
 }
 
-/* ---------- Seguimiento (historial de Core/SISE, dbo.sp_S2_Seguimiento) ---------- */
+/* ---------- Seguimiento (historial del sistema central/SISE, dbo.sp_S2_Seguimiento) ---------- */
 /* Cuántos registros se ven de una vez; del 16 en adelante se alcanzan con la
    barra lateral del propio apartado. */
 const MAX_FILAS_VISIBLES_SISE = 15;
 
 /* El alto de la caja se *mide* (no se calcula con un alto fijo por renglón)
-   porque Core manda celdas de alto variable: encabezados, saltos de línea e
+   porque el sistema central manda celdas de alto variable: encabezados, saltos de línea e
    íconos. Se toma del inicio de la primera fila al final de la fila
    MAX_FILAS_VISIBLES_SISE, más el encabezado (que va fijo al hacer scroll),
    así el corte cae justo en el límite de un renglón y se ve que hay más. */
@@ -426,10 +426,10 @@ function renderHistorialSise(registros) {
     ajustarAltoHistorialSise();
     return;
   }
-  // Estatus/Observaciones: Core a veces los llena con HTML de puro formato
+  // Estatus/Observaciones: el sistema central a veces los llena con HTML de puro formato
   // (íconos, encabezados, negritas -- ver nota en sanitizarHtmlSeguimiento),
   // por eso van sanitizados y no escapados (si no, se vería el HTML tal
-  // cual en vez del ícono/encabezado que Core sí renderiza).
+  // cual en vez del ícono/encabezado que el sistema central sí renderiza).
   tbody.innerHTML = registros.map(r => `
     <tr>
       <td>${formatDateTime(r.fecha)}</td>
@@ -462,12 +462,12 @@ function renderListaComentarios(contId, comentarios, mensajeVacio) {
     cont.innerHTML = `<div class="mini-empty">${mensajeVacio}</div>`;
     return;
   }
-  // Mismo encabezado que se guarda en Core: "Cabina Médica --> Nombre" o
+  // Mismo encabezado que se guarda en el sistema central: "Cabina Médica --> Nombre" o
   // "Proveedores --> Nombre", y abajo el texto.
   cont.innerHTML = comentarios.map(c => `
     <div class="comentario-item">
       <div class="comentario-meta">
-        <span>${c.origen === "cabina" ? ETIQUETA_CORE_CABINA : ETIQUETA_CORE_PROVEEDOR} --&gt; ${escapeHtml(c.nombre || c.rfc)}</span>
+        <span>${c.origen === "cabina" ? ETIQUETA_BITACORA_CABINA : ETIQUETA_BITACORA_PROVEEDOR} --&gt; ${escapeHtml(c.nombre || c.rfc)}</span>
         <span>${formatDateTime(c.fecha)}</span>
       </div>
       <div class="comentario-texto">${escapeHtml(c.comentario)}</div>
@@ -524,7 +524,7 @@ async function actualizarEstatus() {
   }
 
   // Sin este candado, un doble clic (o un clic de más mientras tarda la
-  // respuesta) mandaba dos veces el mismo comentario a Core -- se veía
+  // respuesta) mandaba dos veces el mismo comentario al sistema central -- se veía
   // duplicado en el listado de Seguimiento aunque solo se quiso mandar uno.
   const btn = $("sg-estatus-btn");
   if (btn.disabled) return;
@@ -616,7 +616,7 @@ async function registrarSeguimiento() {
       body: { cl_expediente: registroActual.expediente, comentario },
     });
     exito = true;
-    toast("Seguimiento registrado en Core.", "success");
+    toast("Seguimiento registrado en el sistema central.", "success");
     // Confirmación visible y permanente en pantalla (no solo el toast, que desaparece):
     // se deja el mensaje enviado a la vista, bloqueado, como comprobante.
     $("sg-exito-banner").classList.remove("hidden");
@@ -636,7 +636,7 @@ async function registrarSeguimiento() {
     // Refresca el comprobante y la casilla de pago anticipado (ya queda
     // bloqueada tras este primer/segundo envío, ver backend).
     cargarPagoAnticipado(registroActual);
-    // "Actualizar Core" acaba de insertar un registro nuevo en dbo.Seguimiento
+    // "Actualizar Seguimiento" acaba de insertar un registro nuevo en dbo.Seguimiento
     // -- se vuelve a pedir el historial (dbo.sp_S2_Seguimiento) para que se
     // vea de inmediato, sin tener que buscar el expediente otra vez a mano.
     cargarHistorialSise(registroActual.expediente);
@@ -676,14 +676,14 @@ export function aplicarPermisos() {
   // Cabina no tiene acceso a "Registrar seguimiento" (eso es exclusivo de Proveedor).
   $("sg-seguimiento-card").classList.toggle("hidden-perfil", esPerfilCabina());
   // Proveedor no puede cambiar el estado a mano ("Estado del Caso"): en su
-  // caso el estatus solo cambia automático al usar "Actualizar Core".
+  // caso el estatus solo cambia automático al usar "Actualizar Seguimiento".
   $("sg-estatus-card").classList.toggle("hidden-perfil", esPerfilProveedor());
 
   // Lo que cabe en cada cuadro de texto: 1500 menos el encabezado con el
   // nombre de quien inició sesión.
-  maxObservaciones = largoDisponible(ETIQUETA_CORE_PROVEEDOR);
+  maxObservaciones = largoDisponible(ETIQUETA_BITACORA_PROVEEDOR);
   $("sg-observaciones").maxLength = maxObservaciones;
-  $("sg-motivo-regreso").maxLength = largoDisponible(ETIQUETA_CORE_CABINA);
+  $("sg-motivo-regreso").maxLength = largoDisponible(ETIQUETA_BITACORA_CABINA);
   actualizarContador();
 }
 
