@@ -140,3 +140,16 @@ def test_municipios_llama_sp_getmun_con_clexpediente_en_cero(client, monkeypatch
 def test_municipios_requiere_cod_ent(client):
     r = client.get("/catalogos/municipios", headers=_auth_headers(client))
     assert r.status_code == 422
+
+
+def test_municipios_no_distingue_mayusculas_en_las_columnas_del_sp(client, monkeypatch):
+    # No hay una definición de dbo.sp_GetMun en el repo para confirmar la
+    # casing exacta de sus columnas -- no debe tronar si vienen distintas.
+    def fake_call_procedure(sp_name, params=None):
+        return [{"codMd": "039", "dsMundel": "Guadalajara"}]
+
+    monkeypatch.setattr(catalogos_repo_module, "call_procedure", fake_call_procedure)
+
+    r = client.get("/catalogos/municipios", params={"cod_ent": "14"}, headers=_auth_headers(client))
+    assert r.status_code == 200
+    assert r.json() == [{"clave": "039", "descripcion": "Guadalajara"}]

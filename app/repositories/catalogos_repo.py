@@ -55,10 +55,13 @@ def listar_entidades() -> list[CatalogoItemTexto]:
     una tabla de catálogo de solo lectura, sin ningún valor interpolado en
     la consulta (0% superficie de inyección) -- no existe un SP equivalente
     a sp_GetMun para entidades (confirmado con el usuario, 2026-10-19).
+    clEntFed BETWEEN 1 AND 32 -- mismo filtro que dio el usuario, para
+    quedarse solo con las 32 entidades (la tabla real trae renglones fuera
+    de ese rango que no aplican aquí).
     """
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT CodEnt, dsEntFed FROM dbo.cEntFed ORDER BY dsEntFed")
+        cursor.execute("SELECT CodEnt, dsEntFed FROM dbo.cEntFed WHERE clEntFed BETWEEN 1 AND 32 ORDER BY dsEntFed")
         filas = cursor.fetchall()
     return [CatalogoItemTexto(clave=f.CodEnt.strip(), descripcion=f.dsEntFed) for f in filas]
 
@@ -66,15 +69,20 @@ def listar_entidades() -> list[CatalogoItemTexto]:
 def listar_municipios(cod_ent: str) -> list[CatalogoItemTexto]:
     """
     Municipios de una entidad, vía el SP legado dbo.sp_GetMun -- @clExpediente
-    siempre en 0 (no aplica para este catálogo, confirmado con el usuario,
-    2026-10-19). OJO: no hay una definición de este SP en sql/*.sql para
-    confirmar sus columnas de salida -- CodMD/dsMunDel es lo que usa
-    dbo.cMunDel en el resto del proyecto (ver
-    sql/01_ST_CP_ObtenerExpedientesSinProveedorMedico.sql), pendiente de
-    confirmar contra el SP real la primera vez que se pruebe.
+    siempre en 0 (no aplica para este catálogo). Columnas de salida
+    confirmadas por el usuario, 2026-10-19: CodMD, dsMunDel, CodEnt -- se
+    busca sin distinguir mayúsculas/minúsculas por si acaso, ya que no hay
+    una definición de este SP en sql/*.sql para confirmar la casing exacta.
     """
     filas = call_procedure("dbo.sp_GetMun", {"CodEnt": cod_ent, "clExpediente": 0})
-    return [CatalogoItemTexto(clave=str(f["CodMD"]).strip(), descripcion=f["dsMunDel"]) for f in filas]
+    resultado = []
+    for fila in filas:
+        por_minuscula = {clave.lower(): valor for clave, valor in fila.items()}
+        resultado.append(CatalogoItemTexto(
+            clave=str(por_minuscula["codmd"]).strip(),
+            descripcion=por_minuscula["dsmundel"],
+        ))
+    return resultado
 
 
 def buscar_cuentas(texto: str) -> list[dict]:

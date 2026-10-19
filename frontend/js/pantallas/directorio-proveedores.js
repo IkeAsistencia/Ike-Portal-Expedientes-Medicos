@@ -429,9 +429,14 @@ async function cambiarCombo(el) {
     // Estado/Municipio del Alta de médico ya NO son el catálogo simulado de
     // Zona -- el municipio sale de dbo.sp_GetMun para la entidad elegida
     // (ver cargarMunicipiosAltaReal en datos.js), cacheado por entidad.
+    // OJO: pintarDependientesAlta() NO toca #dp-mun-sel (solo la
+    // verificación de cédula) -- hay que refrescarlo aquí a mano, antes
+    // (estado "Cargando…") y después (ya con los municipios reales).
     ponerFormulario({ estado: el.value, municipio: "" });
+    $("dp-mun-sel").innerHTML = V.opcionesMunicipio(V.calcular(estado));
     pintarDependientesAlta();
     await cargarMunicipiosAltaReal(el.value);
+    $("dp-mun-sel").innerHTML = V.opcionesMunicipio(V.calcular(estado));
     pintarDependientesAlta();
   } else {
     ponerFormulario({ [campo]: el.value });
