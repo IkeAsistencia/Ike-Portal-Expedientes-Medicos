@@ -17,9 +17,10 @@ import { esPerfilAdministrador } from "../core/sesion.js";
 const ESTATUS_EDITABLES = ["En revisión", "Cédula no localizada"];
 import { ICONOS } from "../componentes/iconos.js";
 import {
-  SPECIALTIES, ESTADOS, PRICE_OPTIONS, PROPS,
+  ESTADOS, PRICE_OPTIONS, PROPS,
   num, pick, raw, visible, valoresUnicosCatalogo,
   entidadesAltaCache, municipiosAltaCache,
+  especialidadesKpiCache, todasLasEspecialidades,
 } from "./datos.js";
 
 const svg = (contenido) =>
@@ -49,6 +50,34 @@ export function calcularSugerencias(s) {
   return sugg.slice(0, 6);
 }
 
+/* El KPI que lleva cada tarjeta de especialidad: cuántos proveedores del
+   padrón hay dentro y fuera de la red (formato que pidió el usuario,
+   2026-10-20). Los conteos son reales -- salen de amarrar cada proveedor a
+   una especialidad del catálogo, ver app/repositories/especialidades_repo.py.
+
+   Una especialidad en 0 no se esconde: se marca "Sin proveedores" y se deja
+   clickeable, porque justo esa es la que hay que salir a contratar (ahí
+   entra "Buscar fuera de la red"). */
+function kpiEspecialidad(x) {
+  const dentro = Number(x.dentro_de_red) || 0;
+  const fuera = Number(x.fuera_de_red) || 0;
+  if (dentro + fuera === 0) return "Sin proveedores";
+  return dentro + " dentro de la red · " + fuera + " fuera";
+}
+
+function tarjetaEspecialidad(x, i) {
+  return {
+    id: x.cl_especialidad,
+    name: x.descripcion,
+    // Consecutivo de la POSICIÓN en pantalla (01..16), no el ordenKPI del
+    // catálogo: ese trae huecos y un valor repetido, así que numerar con él
+    // se vería como un error ("15" dos veces, sin "06" ni "10").
+    num: String(i + 1).padStart(2, "0"),
+    meta: kpiEspecialidad(x),
+    vacia: (Number(x.dentro_de_red) || 0) + (Number(x.fuera_de_red) || 0) === 0,
+  };
+}
+
 /* Colonia, código postal y zona del domicilio de consulta (la calle va
    aparte, en su propio renglón). */
 function _domicilioResto(x) {
@@ -72,7 +101,13 @@ export function calcular(s) {
 
   const coverageRaw = ESTADOS.map(x => ({ name: x.name, total: x.municipios.reduce((acc, m) => acc + num(x.name + m, "cov", 12, 68), 0) }));
   const maxCov = Math.max.apply(null, coverageRaw.map(c => c.total));
-  const specTotals = SPECIALTIES.map(sp => ({ name: sp, total: num(sp, "count", 6, 48) }));
+  // Catálogo real de especialidades, ya partido por el servidor en lo que
+  // cabe en pantalla (16 = 4 renglones de 4) y lo que va al combo.
+  const catalogoEsp = especialidadesKpiCache();
+  const specTotals = todasLasEspecialidades().map(x => ({
+    name: x.descripcion,
+    total: (Number(x.dentro_de_red) || 0) + (Number(x.fuera_de_red) || 0),
+  }));
   const pending = s.requests.filter(r => r.status === "En revisión").length;
 
   // Agenda: los días y horarios REALMENTE libres los manda el servidor (ver
@@ -97,11 +132,22 @@ export function calcular(s) {
     gridAmplia: PROPS.gridDensity === "amplia",
 
     // Inicio
-    specialties: SPECIALTIES.map((name, i) => ({
-      name, num: String(i + 1).padStart(2, "0"),
-      meta: PROPS.mostrarConteo === false ? "Ver disponibilidad" : num(name, "count", 6, 48) + " especialistas · " + num(name, "z", 4, 12) + " zonas",
+    specialties: catalogoEsp.tarjetas.map(tarjetaEspecialidad),
+    // Las que no caben en la cuadrícula siguen disponibles aquí, con la
+    // misma funcionalidad que una tarjeta (instrucción del usuario).
+    specialtyCombo: catalogoEsp.combo.map(x => ({
+      id: x.cl_especialidad,
+      name: x.descripcion,
+      meta: kpiEspecialidad(x),
+      elegido: x.cl_especialidad === s.specialtyId,
     })),
-    totalNote: SPECIALTIES.length + " especialidades · " + ESTADOS.length + " estados",
+    specialtyComboNota: catalogoEsp.combo.length
+      ? catalogoEsp.combo.length + " especialidades más, fuera de las " + catalogoEsp.tarjetas.length + " de mayor prioridad"
+      : "",
+    cargandoEspecialidades: catalogoEsp.total === 0,
+    totalNote: catalogoEsp.total
+      ? catalogoEsp.total + " especialidades · " + catalogoEsp.tarjetas.length + " en pantalla"
+      : "Cargando catálogo…",
     query: s.query,
     suggestions: calcularSugerencias(s),
     recent: s.recent,
@@ -176,7 +222,15 @@ export function calcular(s) {
       { label: "Importados de Google", value: s.placesSynced ? "126" : "0", note: s.placesSynced ? "Última sincronización: hoy" : "Sin sincronizar", icono: "nube", clase: "kpi-seguimiento" }
     ],
     coverage: coverageRaw.map(c => ({ name: c.name, value: c.total + " especialistas", width: Math.round(c.total / maxCov * 100) })),
-    lowCoverage: specTotals.filter(x => x.total < 20).map(x => ({ name: x.name, value: x.total + " activos" })),
+    // Las especialidades con menos proveedores del padrón REAL (antes era un
+    // conteo simulado). Se acotan a las 10 peores y ascendente: con el
+    // catálogo completo de 38, listar "todas las que tienen menos de 20"
+    // sería listarlas casi todas y no diría nada.
+    lowCoverage: specTotals
+      .slice()
+      .sort((a, b) => a.total - b.total || a.name.localeCompare(b.name))
+      .slice(0, 10)
+      .map(x => ({ name: x.name, value: x.total === 0 ? "sin proveedores" : x.total + " en el padrón" })),
 
     // Solicitudes
     adminSummary: pending + " en revisión · " + s.requests.length + " solicitudes",
@@ -211,6 +265,22 @@ export function calcular(s) {
     form: s.form,
     formEntidades: entidadesAltaCache(),
     formMunicipios: municipiosAltaCache(s.form.estado),
+
+    // Búsqueda fuera de la red (DENUE). Usa los catálogos REALES de Entidad
+    // y Municipio (los mismos del Alta de médico), no el catálogo de la
+    // pantalla Zona -- el DENUE necesita la clave del INEGI, que solo sale
+    // de ahí.
+    fueraForm: s.fueraForm,
+    fueraEntidades: entidadesAltaCache(),
+    fueraMunicipios: municipiosAltaCache(s.fueraForm.codEnt),
+    fueraBuscando: !!s.fueraBuscando,
+    fueraError: s.fueraError || "",
+    fueraBuscado: !!s.fueraResultados,
+    fueraArea: s.fueraResultados ? s.fueraResultados.area : "",
+    fueraFuente: s.fueraResultados ? s.fueraResultados.fuente : "",
+    fueraCandidatos: s.fueraResultados ? s.fueraResultados.candidatos : [],
+    fueraTipo: s.fueraResultados ? (s.fueraResultados.tipo_descripcion || "") : "",
+    fueraPuedeBuscar: !!(s.fueraForm.codEnt && (s.fueraForm.especialidad || "").trim().length >= 3),
     verifyLabel: vs === "loading" ? "Consultando…" : vs === "valid" ? "Cédula verificada" : "Verificar cédula profesional",
     verifyMessage: { idle: "Sin verificar", loading: "Consultando registro…", valid: "Cédula localizada en el registro", invalid: "Formato inválido: debe tener 7 u 8 dígitos" }[vs],
     verifyClase: vs === "valid" ? "dp-ok" : vs === "invalid" ? "dp-error" : "dp-neutro",
@@ -325,14 +395,28 @@ export function pantallaInicio(v) {
         <span class="dp-nota">${e(v.totalNote)}</span>
       </div>
       <div class="card-body">
-        <div class="dp-grid-especialidades${v.gridAmplia ? " dp-grid-amplia" : ""}">
+        ${v.cargandoEspecialidades
+          ? `<div class="spinner-row">Cargando el catálogo de especialidades…</div>`
+          : `<div class="dp-grid-especialidades${v.gridAmplia ? " dp-grid-amplia" : ""}">
           ${v.specialties.map(sp => `
-            <button class="dp-opcion dp-tarjeta-especialidad" data-accion="elegir-especialidad" data-valor="${e(sp.name)}">
+            <button class="dp-opcion dp-tarjeta-especialidad${sp.vacia ? " dp-tarjeta-vacia" : ""}" data-accion="elegir-especialidad" data-valor="${e(sp.name)}" data-id="${e(String(sp.id))}">
               <span class="dp-numero">${e(sp.num)}</span>
               <span class="dp-tarjeta-nombre">${e(sp.name)}</span>
               <span class="dp-nota">${e(sp.meta)}</span>
             </button>`).join("")}
         </div>
+        ${v.specialtyCombo.length ? `
+          <div class="dp-otras-especialidades">
+            <div class="field dp-campo">
+              <label for="dp-esp-otras">Otras especialidades</label>
+              <select id="dp-esp-otras" data-accion-cambio="elegir-especialidad-combo">
+                <option value="">Selecciona una especialidad…</option>
+                ${v.specialtyCombo.map(sp => `
+                  <option value="${e(String(sp.id))}"${sp.elegido ? " selected" : ""}>${e(sp.name)} — ${e(sp.meta)}</option>`).join("")}
+              </select>
+              <span class="dp-nota">${e(v.specialtyComboNota)}</span>
+            </div>
+          </div>` : ""}`}
       </div>
     </div>`;
 }
@@ -447,10 +531,10 @@ export function listaResultados(v) {
     return `
       <div class="dp-vacio">
         <p class="dp-vacio-titulo">${e(v.emptyTitle)}</p>
-        <p class="dp-texto">Prueba con otro municipio, relaja los filtros o sincroniza con Google Places para ampliar la cobertura.</p>
+        <p class="dp-texto">No hay proveedores <b>dentro de la red</b> que cumplan con esta búsqueda. Puedes relajar los filtros, o buscar consultorios <b>fuera de la red</b> para evaluar su contratación.</p>
         <div class="dp-acciones">
           <button class="btn btn-secondary" data-accion="limpiar-filtros">Limpiar filtros</button>
-          <button class="btn btn-primary" data-accion="sincronizar">${e(v.syncLabel)}</button>
+          <button class="btn btn-primary" data-accion="ir-fuera-de-red">Buscar fuera de la red</button>
         </div>
       </div>`;
   }
@@ -557,7 +641,7 @@ export function pantallaMetricas(v) {
                 <span class="dp-valor-alerta">${e(l.value)}</span>
               </div>`).join("")}
           </div>
-          <p class="hint dp-umbral">Umbral de alerta: menos de 20 especialistas activos en la red nacional.</p>
+          <p class="hint dp-umbral">Las 10 especialidades del catálogo con menos proveedores en el padrón. Son las candidatas a buscar fuera de la red.</p>
         </div>
       </div>
     </div>`;
@@ -656,6 +740,134 @@ export function opcionesMunicipio(v) {
   return opcionesCatalogoTexto(v.formMunicipios, v.form.municipio);
 }
 
+/* El combo de especialidad del alta usa el MISMO catálogo que las tarjetas
+   (las 38, en el orden del KPI) -- antes eran 12 nombres fijos en el código,
+   así que se podían dar de alta médicos con una especialidad que el catálogo
+   no conoce y que por lo tanto no sumaba a ningún KPI. */
+export function opcionesEspecialidadAlta(elegida) {
+  const lista = todasLasEspecialidades();
+  if (!lista.length) return `<option value="">Cargando…</option>`;
+  return lista.map(x =>
+    `<option value="${e(x.descripcion)}"${x.descripcion === elegida ? " selected" : ""}>${e(x.descripcion)}</option>`
+  ).join("");
+}
+
+/* ---------- Fuera de la red (candidatos del DENUE) ---------- */
+export function opcionesEntidadFuera(v) {
+  return `<option value="">Selecciona un estado</option>`
+    + opcionesCatalogoTexto(v.fueraEntidades, v.fueraForm.codEnt);
+}
+
+export function opcionesMunicipioFuera(v) {
+  if (!v.fueraForm.codEnt) return `<option value="">Elige un estado primero</option>`;
+  if (!v.fueraMunicipios.length) return `<option value="">Cargando…</option>`;
+  // Sin municipio = toda la entidad: útil cuando en el municipio no hay nada.
+  return `<option value="">Todo el estado</option>`
+    + opcionesCatalogoTexto(v.fueraMunicipios, v.fueraForm.codMun);
+}
+
+export function fueraResultadosCuerpo(v) {
+  if (v.fueraBuscando) return `<div class="spinner-row">Consultando el directorio del INEGI…</div>`;
+  if (v.fueraError) {
+    return `
+      <div class="dp-vacio">
+        <p class="dp-vacio-titulo">No se pudo completar la búsqueda</p>
+        <p class="dp-texto">${e(v.fueraError)}</p>
+      </div>`;
+  }
+  if (!v.fueraBuscado) {
+    return `
+      <div class="dp-vacio">
+        <p class="dp-vacio-titulo">Elige estado y especialidad</p>
+        <p class="dp-texto">Se consultará el Directorio Estadístico Nacional de Unidades Económicas (DENUE) del INEGI, que es información pública de establecimientos.</p>
+      </div>`;
+  }
+  if (!v.fueraCandidatos.length) {
+    return `
+      <div class="dp-vacio">
+        <p class="dp-vacio-titulo">Sin consultorios para esa búsqueda</p>
+        <p class="dp-texto">El INEGI no reporta ${e(v.fueraTipo || "consultorios")} en el área ${e(v.fueraArea)}. Prueba con el municipio "Todo el estado".</p>
+      </div>`;
+  }
+  return `
+    <div class="dp-aviso-candidatos">
+      <span class="badge pendiente">Fuera de la red</span>
+      <p class="dp-texto">
+        ${e(String(v.fueraCandidatos.length))} establecimiento(s) según ${e(v.fueraFuente)} · área ${e(v.fueraArea)}.
+        <b>No son proveedores del portal:</b> no tienen clave, no se les puede agendar y sus datos no se guardan.
+        El INEGI registra el establecimiento, no al médico -- por eso no trae cédula, costo ni convenio.
+      </p>
+      ${v.fueraTipo ? `<p class="dp-texto dp-aviso-alcance">
+        <b>Se buscaron ${e(v.fueraTipo)}.</b> El INEGI no clasifica por especialidad médica:
+        cardiología, pediatría, dermatología y las demás comparten el mismo giro, así que
+        <b>hay que confirmar la especialidad al contactarlos</b>. Los que mencionan el término
+        buscado en su nombre aparecen primero.
+      </p>` : ""}
+    </div>
+    <div class="table-wrap">
+      <table class="mini-table">
+        <thead>
+          <tr><th>Establecimiento</th><th>Giro registrado</th><th>Domicilio</th><th>Contacto</th></tr>
+        </thead>
+        <tbody>
+          ${v.fueraCandidatos.map(c => `
+            <tr>
+              <td data-label="Establecimiento">
+                <div class="dp-fuerte">${e(c.nombre || "Sin nombre registrado")}</div>
+                ${c.razon_social ? `<div class="dp-muted">${e(c.razon_social)}</div>` : ""}
+              </td>
+              <td data-label="Giro registrado">${e(c.especialidad || "—")}</td>
+              <td data-label="Domicilio">
+                <div>${e(c.calle_num_ext_int || "—")}</div>
+                <div class="dp-muted">${e([c.colonia, c.codigo_postal ? "C.P. " + c.codigo_postal : "", c.ubicacion].filter(Boolean).join(" · "))}</div>
+              </td>
+              <td data-label="Contacto">
+                <div>${e(c.telefono || "Sin teléfono")}</div>
+                ${c.email ? `<div class="dp-muted">${e(c.email)}</div>` : ""}
+              </td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+export function pantallaFueraDeRed(v) {
+  return `
+    ${encabezado({
+      volver: "← Volver al directorio", accionVolver: "ir-inicio",
+      titulo: "Buscar fuera de la red",
+      texto: "Consultorios que el INEGI reporta en una zona, como candidatos a contratar cuando la red no tiene cobertura. Es información pública de establecimientos: para incorporar a alguien hay que darlo de alta y validar su cédula profesional.",
+      // El alcance real (tipo de consultorio, no especialidad) se explica en
+      // el campo de búsqueda y en el aviso de resultados.
+    })}
+    <div class="card tono-azul">
+      <div class="card-body">
+        <div class="dp-grid-campos">
+          <div class="field dp-campo">
+            <label for="dp-fr-estado">Estado</label>
+            <select id="dp-fr-estado" data-campo-fuera="codEnt">${opcionesEntidadFuera(v)}</select>
+          </div>
+          <div class="field dp-campo">
+            <label for="dp-fr-mun">Municipio</label>
+            <select id="dp-fr-mun" data-campo-fuera="codMun">${opcionesMunicipioFuera(v)}</select>
+          </div>
+        </div>
+        <div class="dp-grid-campos">
+          <div class="field dp-campo">
+            <label for="dp-fr-esp">Especialidad o término de búsqueda</label>
+            <input type="text" id="dp-fr-esp" data-campo-fuera="especialidad" placeholder="cardiología" value="${e(v.fueraForm.especialidad)}" autocomplete="off">
+            <span class="dp-nota">El INEGI agrupa por tipo de consultorio, no por especialidad: las especialidades médicas devuelven "consultorios de medicina especializada". Odontología, psicología, nutrición, optometría y terapia sí tienen giro propio.</span>
+          </div>
+        </div>
+        <div class="dp-acciones dp-enviar">
+          <button class="btn btn-primary" data-accion="buscar-fuera-de-red"${v.fueraPuedeBuscar && !v.fueraBuscando ? "" : " disabled"}>Buscar</button>
+          <span class="dp-nota">${e(v.fueraPuedeBuscar ? "Listo para buscar." : "Elige un estado y escribe al menos 3 caracteres de la especialidad.")}</span>
+        </div>
+      </div>
+    </div>
+    <div class="card tono-verdeazul" id="dp-fuera-resultados">${fueraResultadosCuerpo(v)}</div>`;
+}
+
 export function pantallaAlta(v) {
   // La misma pantalla captura un alta nueva y corrige una en revisión
   // (botón "Editar" de Solicitudes, solo Administrador).
@@ -701,7 +913,10 @@ export function pantallaAlta(v) {
             ${campo("dp-nombre", "name", "Nombre completo", "Dra. Laura Méndez Ruiz")}
             <div class="field dp-campo">
               <label for="dp-esp">Especialidad</label>
-              <select id="dp-esp" data-campo="specialty">${opciones(SPECIALTIES, f.specialty)}</select>
+              <select id="dp-esp" data-campo="specialty">
+                <option value="">Selecciona una especialidad</option>
+                ${opcionesEspecialidadAlta(f.specialty)}
+              </select>
             </div>
           </div>
           <div class="dp-grid-campos">

@@ -1,7 +1,7 @@
 from app.config import get_settings
 from app.db.connection import as_tvp_rows, call_procedure, get_connection
 from app.repositories import cuentas_config_repo
-from app.schemas.catalogo import CatalogoItem, CatalogoItemTexto
+from app.schemas.catalogo import CatalogoItem, CatalogoItemTexto, EntidadFederativa
 
 
 # Únicos subservicios que trabaja dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
@@ -57,12 +57,26 @@ def listar_cuentas() -> list[CatalogoItem]:
     return [CatalogoItem(clave=r["clCuenta"], descripcion=r["Nombre"]) for r in rows]
 
 
-def listar_entidades() -> list[CatalogoItemTexto]:
+def listar_entidades() -> list[EntidadFederativa]:
     """
     Combo Entidad del Alta de médico (Directorio de Proveedores) -- mismas
     32 entidades que ya usa Seguimiento/Expedientes, pero con su CodEnt real
     (dbo.cEntFed), necesario para después pedir los municipios de esa
     entidad a dbo.sp_GetMun (ver listar_municipios).
+
+    También se trae clEntFed (1 a 32) como `clave_inegi`, con dos dígitos:
+    es la clave de entidad federativa del INEGI, que pide el DENUE para
+    acotar el área geográfica en la búsqueda fuera de la red (ver
+    app/services/denue_service.py). Se lee de la misma tabla en vez de
+    mantener aquí una equivalencia "JC -> 14" a mano, que se desincronizaría
+    en silencio.
+
+    CONFIRMADO contra la base real (2026-10-20): las 32 entidades coinciden
+    una a una con el orden oficial del INEGI (01 Aguascalientes ... 32
+    Zacatecas); JC -> 14 Jalisco, y con CodMD "00039" el área "14039" devuelve
+    Guadalajara en el DENUE. Para volver a revisarlo:
+    GET /directorio-proveedores/fuera-de-red regresa en `area` la clave que
+    armó, así se compara contra el catálogo del INEGI sin leer la base.
 
     ÚNICA excepción a "solo Stored Procedures" de este módulo: cEntFed es
     una tabla de catálogo de solo lectura, sin ningún valor interpolado en
@@ -74,9 +88,31 @@ def listar_entidades() -> list[CatalogoItemTexto]:
     """
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT CodEnt, dsEntFed FROM dbo.cEntFed WHERE clEntFed BETWEEN 1 AND 32 ORDER BY dsEntFed")
+        cursor.execute(
+            "SELECT CodEnt, dsEntFed, clEntFed FROM dbo.cEntFed "
+            "WHERE clEntFed BETWEEN 1 AND 32 ORDER BY dsEntFed"
+        )
         filas = cursor.fetchall()
-    return [CatalogoItemTexto(clave=f.CodEnt.strip(), descripcion=f.dsEntFed) for f in filas]
+    return [
+        EntidadFederativa(
+            clave=f.CodEnt.strip(),
+            descripcion=f.dsEntFed,
+            clave_inegi=str(int(f.clEntFed)).zfill(2),
+        )
+        for f in filas
+    ]
+
+
+def clave_inegi_de_entidad(cod_ent: str) -> str | None:
+    """
+    CodEnt del sistema central ("JC") -> clave de entidad del INEGI ("14"),
+    que es la que necesita el DENUE. None si ese CodEnt no está en el
+    catálogo.
+    """
+    for entidad in listar_entidades():
+        if entidad.clave.upper() == (cod_ent or "").strip().upper():
+            return entidad.clave_inegi
+    return None
 
 
 def listar_municipios(cod_ent: str) -> list[CatalogoItemTexto]:

@@ -302,14 +302,17 @@ def _cargar_excel(client, headers, filas: list[dict]):
 
     from openpyxl import Workbook
 
-    from app.services.proveedores_excel_service import COLUMNAS
+    from app.services.proveedores_excel_service import COLUMNA_CLAVE_CENTRAL, COLUMNAS
 
+    # Con la clave del sistema central al final: ya no va en la plantilla,
+    # pero se sigue leyendo si el archivo la trae.
+    columnas = list(COLUMNAS) + [COLUMNA_CLAVE_CENTRAL]
     wb = Workbook()
     ws = wb.active
-    for col_idx, (encabezado, _clave, _ancho, obligatorio) in enumerate(COLUMNAS, start=1):
-        ws.cell(row=1, column=col_idx, value=encabezado + (" *" if obligatorio else ""))
+    for col_idx, (encabezado, _clave, _ancho, _alias) in enumerate(columnas, start=1):
+        ws.cell(row=1, column=col_idx, value=encabezado)
     for fila_idx, fila in enumerate(filas, start=2):
-        for col_idx, (_encabezado, clave, _ancho, _obligatorio) in enumerate(COLUMNAS, start=1):
+        for col_idx, (_encabezado, clave, _ancho, _alias) in enumerate(columnas, start=1):
             ws.cell(row=fila_idx, column=col_idx, value=fila.get(clave))
     buffer = BytesIO()
     wb.save(buffer)
@@ -363,7 +366,10 @@ def test_cuando_el_medico_del_portal_llega_en_la_carga_conserva_su_clave_y_pasa_
         "nombre": SOLICITUD_VALIDA["nombre"], "especialidad": SOLICITUD_VALIDA["especialidad"],
         "cedula": SOLICITUD_VALIDA["cedula"], "cl_proveedor": 777, "costo_consulta": "1200",
     }])
-    assert r.json() == {"ok": True, "total": 1, "nuevos": 0, "actualizados": 0, "absorbidos": 1}
+    assert r.json() == {
+        "ok": True, "total": 1, "nuevos": 0, "actualizados": 0, "absorbidos": 1,
+        "especialidades_no_reconocidas": [],
+    }
 
     directorio = client.get("/directorio-proveedores", headers=admin).json()
     assert len(directorio) == 1, "no debe duplicarse"

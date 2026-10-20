@@ -51,11 +51,15 @@ def _auth_headers(client):
 
 
 class _FilaCEntFed:
-    """Simula una fila de pyodbc: acceso por atributo, igual que CodEnt/dsEntFed reales."""
+    """Simula una fila de pyodbc: acceso por atributo, igual que
+    CodEnt/dsEntFed/clEntFed reales."""
 
-    def __init__(self, cod_ent, ds_ent_fed):
+    def __init__(self, cod_ent, ds_ent_fed, cl_ent_fed=1):
         self.CodEnt = cod_ent
         self.dsEntFed = ds_ent_fed
+        # clEntFed (1 a 32) es la clave de entidad del INEGI; se expone como
+        # clave_inegi porque es la que pide el DENUE (ver denue_service.py).
+        self.clEntFed = cl_ent_fed
 
 
 class _CursorFake:
@@ -88,26 +92,37 @@ def _fake_get_connection(filas):
 # ---------- /catalogos/entidades ----------
 
 def test_entidades_consulta_centfed_estatico(client, monkeypatch):
-    filas = [_FilaCEntFed("14", "Jalisco"), _FilaCEntFed("09", "Ciudad de México")]
+    filas = [_FilaCEntFed("JC", "Jalisco", 14), _FilaCEntFed("DF", "Ciudad de México", 9)]
     conexion_fake = _fake_get_connection(filas)
     monkeypatch.setattr(catalogos_repo_module, "get_connection", conexion_fake)
 
     r = client.get("/catalogos/entidades", headers=_auth_headers(client))
     assert r.status_code == 200
     assert r.json() == [
-        {"clave": "14", "descripcion": "Jalisco"},
-        {"clave": "09", "descripcion": "Ciudad de México"},
+        {"clave": "JC", "descripcion": "Jalisco", "clave_inegi": "14"},
+        {"clave": "DF", "descripcion": "Ciudad de México", "clave_inegi": "09"},
     ]
+
+
+def test_entidades_traen_la_clave_del_inegi_a_dos_digitos(client, monkeypatch):
+    """clEntFed se expone con dos dígitos porque así la pide el DENUE para
+    acotar el área geográfica ("09", no "9")."""
+    monkeypatch.setattr(
+        catalogos_repo_module, "get_connection",
+        _fake_get_connection([_FilaCEntFed("AS", "Aguascalientes", 1)]),
+    )
+    r = client.get("/catalogos/entidades", headers=_auth_headers(client))
+    assert r.json()[0]["clave_inegi"] == "01"
 
 
 def test_entidades_quita_espacios_del_codent(client, monkeypatch):
     # CHAR/VARCHAR de SQL Server a veces viene con relleno -- no debe colarse
     # al frontend, porque luego ese valor se manda tal cual a sp_GetMun.
-    filas = [_FilaCEntFed("14  ", "Jalisco")]
+    filas = [_FilaCEntFed("JC  ", "Jalisco", 14)]
     monkeypatch.setattr(catalogos_repo_module, "get_connection", _fake_get_connection(filas))
 
     r = client.get("/catalogos/entidades", headers=_auth_headers(client))
-    assert r.json()[0]["clave"] == "14"
+    assert r.json()[0]["clave"] == "JC"
 
 
 def test_entidades_requiere_sesion(client):

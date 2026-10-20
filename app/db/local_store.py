@@ -203,7 +203,11 @@ CREATE TABLE IF NOT EXISTS proveedores (
     origen              TEXT NOT NULL DEFAULT 'catalogo',  -- 'catalogo' | 'portal'
     cl_proveedor        INTEGER,            -- referencia opcional del sistema central
     nombre              TEXT NOT NULL,
-    especialidad        TEXT,
+    especialidad        TEXT,               -- como vino en el Excel / el alta
+    -- A qué especialidad de especialidades_catalogo corresponde ese texto.
+    -- Es lo que hace contable el KPI; queda en NULL si el nombre no empató
+    -- con el catálogo (la carga lo reporta, pero no rechaza el renglón).
+    cl_especialidad     INTEGER,
     cedula              TEXT,
     rfc                 TEXT,
     estado              TEXT,
@@ -224,6 +228,25 @@ CREATE TABLE IF NOT EXISTS proveedores (
     folio_alta          TEXT,               -- folio de la solicitud, si nació en el portal
     fecha_alta          TEXT NOT NULL,
     fecha_actualizacion TEXT
+);
+
+-- Catálogo de especialidades médicas, copiado del sistema central
+-- (CatEspecialidadesMedicas.txt). Lo siembra especialidades_repo.sembrar()
+-- en cada arranque, así que la fuente de verdad es el código, no esta tabla.
+--
+-- orden_kpi decide qué especialidades salen como tarjeta en el Directorio de
+-- Proveedores y en qué orden; las que no entran en pantalla se ofrecen en un
+-- combo. Viene con huecos, un valor repetido y dos NULL tal como lo manda el
+-- catálogo central (ver el encabezado de especialidades_repo.py).
+--
+-- activo = 0 marca las que dejaron de venir en el catálogo: no se borran
+-- para no dejar proveedores apuntando a una especialidad inexistente.
+CREATE TABLE IF NOT EXISTS especialidades_catalogo (
+    cl_especialidad INTEGER PRIMARY KEY,
+    descripcion     TEXT NOT NULL,
+    prioridad       INTEGER,
+    orden_kpi       INTEGER,
+    activo          INTEGER NOT NULL DEFAULT 1
 );
 
 -- Bitácora de cada carga del padrón. Como la carga ya es incremental, aquí
@@ -308,6 +331,10 @@ def _migrar_columnas_faltantes(conn: sqlite3.Connection) -> None:
         if columna not in columnas_solicitudes:
             conn.execute(f"ALTER TABLE solicitudes_alta_medico ADD COLUMN {columna} TEXT")
 
+    columnas_proveedores = {row["name"] for row in conn.execute("PRAGMA table_info(proveedores)")}
+    if "cl_especialidad" not in columnas_proveedores:
+        conn.execute("ALTER TABLE proveedores ADD COLUMN cl_especialidad INTEGER")
+
 
 def _migrar_tablas_renombradas(conn: sqlite3.Connection) -> None:
     """
@@ -340,7 +367,47 @@ def _migrar_tablas_renombradas(conn: sqlite3.Connection) -> None:
             conn.execute(f"DROP TABLE {tabla}")
 
 
+def _migrar_llaves_de_identidad(conn: sqlite3.Connection) -> None:
+    """
+    Vuelve a armar proveedores.llave_identidad con la fórmula vigente.
+
+    Hace falta porque la identidad cambió (2026-10-20): antes mandaba la
+    cédula y ahora es nombre + especialidad + domicilio + teléfono. Sin esto,
+    los renglones viejos conservarían una llave con el formato anterior, la
+    siguiente carga no los reconocería y los volvería a insertar: el
+    proveedor quedaría DUPLICADO y sus citas colgando de la clave vieja.
+    """
+    from app.repositories.proveedores_repo import llaves_candidatas
+
+    filas = conn.execute("SELECT * FROM proveedores").fetchall()
+    if not filas:
+        return
+
+    usadas: set[str] = set()
+    cambios = []
+    for fila in filas:
+        candidatas = llaves_candidatas(dict(fila))
+        # Un renglón sin nada con qué identificarse conserva su llave actual:
+        # es preferible a dejarlo sin ninguna (la columna es NOT NULL/UNIQUE).
+        nueva = candidatas[0] if candidatas else fila["llave_identidad"]
+        # La columna es UNIQUE: si dos renglones distintos caen en la misma
+        # llave (duplicados que ya estaban en el padrón), se desempata con la
+        # clave, que es única por definición.
+        if nueva in usadas:
+            nueva = f"{nueva}#{fila['clave']}"
+        usadas.add(nueva)
+        if nueva != fila["llave_identidad"]:
+            cambios.append((nueva, fila["id"]))
+
+    if cambios:
+        conn.executemany("UPDATE proveedores SET llave_identidad = ? WHERE id = ?", cambios)
+
+
 def init_local_db() -> None:
+    # El import va aquí dentro a propósito: especialidades_repo importa de
+    # este módulo (get_local_connection), así que arriba sería circular.
+    from app.repositories import especialidades_repo
+
     settings = get_settings()
     Path(settings.local_db_path).parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(settings.local_db_path) as conn:
@@ -348,6 +415,13 @@ def init_local_db() -> None:
         conn.executescript(_SCHEMA)
         _migrar_columnas_faltantes(conn)
         _migrar_tablas_renombradas(conn)
+        # El catálogo de especialidades se resiembra en cada arranque (la
+        # fuente de verdad es el código) y enseguida se vuelve a amarrar el
+        # padrón: así un cambio de nombre en el catálogo se refleja en los
+        # KPI sin tener que recargar el Excel.
+        especialidades_repo.sembrar(conn)
+        especialidades_repo.asignar_padron(conn)
+        _migrar_llaves_de_identidad(conn)
         conn.commit()
 
 

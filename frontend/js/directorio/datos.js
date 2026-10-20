@@ -16,10 +16,41 @@
    base para los combos del alta y de la zona. */
 import { api } from "../core/api.js";
 
-export const SPECIALTIES = [
-  "Medicina General", "Psicología", "Nutrición", "Cardiología", "Ginecología", "Pediatría",
-  "Dermatología", "Traumatología", "Oftalmología", "Odontología", "Neurología", "Endocrinología"
-];
+/* Catálogo de especialidades (GET /directorio-proveedores/especialidades).
+   Sale de la tabla especialidades_catalogo de SQLite, sembrada con el
+   catálogo del sistema central -- ver app/repositories/especialidades_repo.py.
+
+   Trae ya partido lo que va en tarjeta (las 16 primeras según ordenKPI) y lo
+   que va en el combo, más el KPI real de cada una: cuántos proveedores hay
+   dentro y fuera de la red. null mientras no se ha pedido. */
+let especialidadesKpi = null;
+
+export async function cargarEspecialidadesKpi() {
+  if (especialidadesKpi) return especialidadesKpi;
+  try {
+    especialidadesKpi = await api("/directorio-proveedores/especialidades");
+  } catch (err) {
+    especialidadesKpi = { total: 0, maximo_tarjetas: 0, tarjetas: [], combo: [] };
+  }
+  return especialidadesKpi;
+}
+
+export function especialidadesKpiCache() {
+  return especialidadesKpi || { total: 0, maximo_tarjetas: 0, tarjetas: [], combo: [] };
+}
+
+/* Las 38 juntas, en el orden del KPI: es lo que necesita el combo del Alta
+   de médico (ahí no se parte en tarjetas y combo). */
+export function todasLasEspecialidades() {
+  const c = especialidadesKpiCache();
+  return [...c.tarjetas, ...c.combo];
+}
+
+/* Se vuelve a pedir cuando el padrón cambió (carga de Excel o alta
+   aprobada): los conteos del KPI ya no son los mismos. */
+export function olvidarEspecialidadesKpi() {
+  especialidadesKpi = null;
+}
 
 export const ESTADOS = [
   { name: "Jalisco", municipios: ["Guadalajara", "Zapopan", "San Pedro Tlaquepaque", "Tonalá", "Puerto Vallarta"] },
@@ -67,7 +98,9 @@ export const num = (seed, salt, min, max) => min + (hash(seed + "#" + salt) % (m
    elegirlos del catálogo real (ver cargarEntidadesAltaReal). */
 export function formularioVacio() {
   return {
-    name: "", specialty: SPECIALTIES[0], cedula: "", rfc: "",
+    // La especialidad arranca vacía, igual que Estado/Municipio: sale del
+    // catálogo real (ver cargarEspecialidadesKpi), no de una lista fija.
+    name: "", specialty: "", cedula: "", rfc: "",
     estado: "", municipio: "",
     calleNumExtInt: "", colonia: "", codigoPostal: "",
     phone: "", email: "",
@@ -144,6 +177,13 @@ function mapearProveedor(row) {
     folioAlta: row.folio_alta || "",
     name: row.nombre,
     specialty: row.especialidad || "Sin especialidad",
+    // A qué especialidad del catálogo quedó amarrado (null si su nombre no
+    // empató). Es con esto que se filtra al picarle a una tarjeta: filtrar
+    // por el texto haría que la tarjeta dijera "1 dentro de la red" y los
+    // resultados salieran vacíos, porque el padrón guarda el nombre como
+    // venga en el Excel ("Traumatología") y el catálogo el oficial
+    // ("TRAUMATOLOGIA Y ORTOPEDIA").
+    clEspecialidad: row.cl_especialidad ?? null,
     estado: row.estado || "",
     municipio: row.municipio || "",
     cedula: row.cedula || "",
@@ -298,7 +338,14 @@ export function raw(s) {
     };
   }
   if (s.specialty && s.municipio) {
-    const list = catalogo.filter(d => normalizar(d.specialty) === normalizar(s.specialty) && normalizar(d.municipio) === normalizar(s.municipio));
+    // Por cl_especialidad cuando se llegó desde una tarjeta/combo del
+    // catálogo, y por texto solo como respaldo (p. ej. una especialidad
+    // vieja que ya no está en el catálogo): así el conteo de la tarjeta y
+    // los resultados siempre dicen lo mismo.
+    const mismaEspecialidad = s.specialtyId
+      ? (d => d.clEspecialidad === s.specialtyId)
+      : (d => normalizar(d.specialty) === normalizar(s.specialty));
+    const list = catalogo.filter(d => mismaEspecialidad(d) && normalizar(d.municipio) === normalizar(s.municipio));
     return { list, label: s.specialty + " en " + s.municipio, sub: s.municipio + ", " + s.estado };
   }
   return { list: [], label: "", sub: "" };
@@ -319,6 +366,19 @@ export function visible(s) {
     cercania: (a, b) => a.distNum - b.distNum
   };
   return list.slice().sort(sorters[f.orden]);
+}
+
+/* ---------- Búsqueda fuera de la red (DENUE del INEGI) ----------
+   Cuando no hay nadie de la red en esa zona, se ofrecen consultorios del
+   DENUE como CANDIDATOS a contratar -- no son proveedores del portal: no
+   tienen clave PRV-, no se les puede agendar y no se guardan en ningún
+   lado (cada búsqueda va en vivo al INEGI). Para incorporar a uno hay que
+   darlo de alta, con su validación de cédula y la aprobación de un
+   Administrador (ver app/services/denue_service.py). */
+export async function buscarFueraDeRed({ codEnt, codMun, especialidad }) {
+  return api("/directorio-proveedores/fuera-de-red", {
+    params: { cod_ent: codEnt, cod_mun: codMun || undefined, especialidad },
+  });
 }
 
 /* ---------- Citas ----------

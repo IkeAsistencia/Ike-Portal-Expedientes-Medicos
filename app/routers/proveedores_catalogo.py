@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 
 from app.core.security import usuario_actual
-from app.repositories import accesos_repo, proveedores_repo
+from app.repositories import accesos_repo, especialidades_repo, proveedores_repo
 from app.services.proveedores_excel_service import (
     ErrorCatalogoExcel,
     generar_plantilla_excel,
@@ -71,9 +71,17 @@ async def cargar(archivo: UploadFile = File(...), usuario: dict = Depends(usuari
     except ErrorCatalogoExcel as e:
         raise HTTPException(400, str(e))
 
+    # Especialidades que no empatan con el catálogo: el renglón se carga
+    # igual (decisión del usuario, 2026-10-20), pero hay que avisarlo -- un
+    # proveedor sin especialidad del catálogo no suma a ninguna tarjeta de
+    # KPI, y eso se vería como "falta gente" en vez de "está mal escrito".
+    no_reconocidas = especialidades_repo.especialidades_no_reconocidas(
+        r.get("especialidad") for r in registros
+    )
+
     rfc_usuario = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
     # Carga INCREMENTAL: agrega los que no existan y actualiza los que ya
     # estaban conservándoles su clave (ver proveedores_repo.cargar_padron),
     # así las citas ya agendadas no quedan huérfanas.
     resultado = proveedores_repo.cargar_padron(registros, rfc_usuario)
-    return {"ok": True, **resultado}
+    return {"ok": True, **resultado, "especialidades_no_reconocidas": no_reconocidas}

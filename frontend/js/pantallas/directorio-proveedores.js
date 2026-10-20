@@ -29,6 +29,8 @@ import {
   editarSolicitudAlta,
   cargarAgenda, agendarCita,
   cargarEntidadesAltaReal, cargarMunicipiosAltaReal,
+  buscarFueraDeRed,
+  cargarEspecialidadesKpi, olvidarEspecialidadesKpi, todasLasEspecialidades,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
 import { toast } from "../core/toast.js";
@@ -57,6 +59,10 @@ const $ = (id) => document.getElementById(id);
 function estadoInicial() {
   return {
     screen: "home", specialty: null, estado: null, municipio: null,
+    // cl_especialidad del catálogo cuando se llegó por tarjeta o por el
+    // combo: con eso se filtra el padrón (ver raw() en datos.js), para que
+    // el conteo de la tarjeta y los resultados coincidan.
+    specialtyId: null,
     query: "", searchTerm: null, recent: [],
     placesSynced: false, syncing: false,
     view: "list",
@@ -70,6 +76,10 @@ function estadoInicial() {
     // Solicitudes); null = la pantalla de alta captura una nueva.
     editandoFolio: null,
     form: formularioVacio(),
+    // Búsqueda fuera de la red (candidatos del DENUE, ver datos.js). No se
+    // guardan: viven solo en este estado mientras dura la consulta.
+    fueraForm: { codEnt: "", codMun: "", especialidad: "" },
+    fueraResultados: null, fueraBuscando: false, fueraError: null,
   };
 }
 
@@ -161,6 +171,7 @@ function pintarPantalla(v) {
     const plantillas = {
       home: V.pantallaInicio, zone: V.pantallaZona, compare: V.pantallaComparar,
       metrics: V.pantallaMetricas, admin: V.pantallaSolicitudes, register: V.pantallaAlta,
+      fuera: V.pantallaFueraDeRed,
     };
     cuerpo.innerHTML = plantillas[v.screen](v);
     cuerpo.dataset.pantalla = v.screen;
@@ -352,6 +363,114 @@ async function cargarSolicitudes() {
   pintar();
 }
 
+/* ---------- Especialidades (tarjetas de KPI y combo) ----------
+   Las tarjetas y el combo son la MISMA funcionalidad: las dos llegan aquí,
+   con el nombre que se muestra y la clave del catálogo con la que se filtra
+   el padrón (instrucción del usuario, 2026-10-20). */
+function elegirEspecialidad(nombre, id) {
+  if (!nombre) return;
+  irA({
+    screen: "zone", specialty: nombre,
+    specialtyId: id ? Number(id) : null,
+    estado: null, municipio: null, searchTerm: null,
+  });
+}
+
+/* Las que no caben en la cuadrícula se eligen del combo: se busca el nombre
+   por su clave para no depender del texto del <option> (que además lleva el
+   KPI pegado). */
+function elegirEspecialidadDelCombo(el) {
+  const id = el.value;
+  if (!id) return;
+  const encontrada = todasLasEspecialidades().find(x => String(x.cl_especialidad) === String(id));
+  if (encontrada) elegirEspecialidad(encontrada.descripcion, id);
+}
+
+/* ---------- Fuera de la red (candidatos del DENUE) ----------
+   Se precarga el catálogo de Entidad al entrar, igual que en el Alta de
+   médico: el DENUE necesita la clave del INEGI, que solo viene de ahí. */
+function abrirFueraDeRed() {
+  // Si se venía de una búsqueda por zona, se arrastra la especialidad para
+  // no obligar a volver a escribirla.
+  const especialidad = estado.specialty || estado.searchTerm || "";
+  const zona = { estado: estado.estado, municipio: estado.municipio };
+  irA({
+    screen: "fuera", detail: null,
+    fueraForm: { ...estado.fueraForm, especialidad: estado.fueraForm.especialidad || especialidad },
+    fueraResultados: null, fueraError: null, fueraBuscando: false,
+  });
+  preseleccionarZonaFuera(zona);
+}
+
+/* El botón de "fuera de la red" sale justo cuando la red no tiene a nadie en
+   una zona, así que esa zona se arrastra al formulario: obligar a volver a
+   elegir estado y municipio invita a buscar en otro lado sin querer.
+
+   El directorio trabaja con nombres ("Yucatán", "Valladolid") y el DENUE con
+   las claves del catálogo real, por eso hay que emparejarlos por nombre. */
+async function preseleccionarZonaFuera({ estado: nombreEntidad, municipio: nombreMunicipio }) {
+  const g = generacion;
+  const entidades = await cargarEntidadesAltaReal();
+  if (g !== generacion || estado.screen !== "fuera") return;
+
+  const entidad = nombreEntidad && !estado.fueraForm.codEnt
+    ? entidades.find(x => comparable(x.descripcion) === comparable(nombreEntidad))
+    : null;
+  if (!entidad) {
+    pintar();
+    return;
+  }
+
+  estado.fueraForm = { ...estado.fueraForm, codEnt: entidad.clave, codMun: "" };
+  pintar();
+
+  const municipios = await cargarMunicipiosAltaReal(entidad.clave);
+  if (g !== generacion || estado.screen !== "fuera") return;
+  const municipio = nombreMunicipio
+    ? municipios.find(x => comparable(x.descripcion) === comparable(nombreMunicipio))
+    : null;
+  if (municipio) estado.fueraForm = { ...estado.fueraForm, codMun: municipio.clave };
+  pintar();
+}
+
+/* El catálogo viene en mayúsculas y sin acentos ("MERIDA"); el directorio
+   los trae con acento ("Mérida"). */
+function comparable(texto) {
+  return (texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+}
+
+async function buscarFuera() {
+  const { codEnt, codMun, especialidad } = estado.fueraForm;
+  if (!codEnt || (especialidad || "").trim().length < 3 || estado.fueraBuscando) return;
+
+  irA({ fueraBuscando: true, fueraError: null, fueraResultados: null });
+  const g = generacion;
+  try {
+    const datos = await buscarFueraDeRed({ codEnt, codMun, especialidad: especialidad.trim() });
+    if (g !== generacion) return;
+    irA({ fueraResultados: datos, fueraBuscando: false });
+  } catch (err) {
+    if (g !== generacion) return;
+    irA({ fueraError: err.message, fueraBuscando: false });
+  }
+}
+
+/* Los combos de esta pantalla no comparten el formulario del alta, por eso
+   tienen su propio data-campo-fuera (ver cambiarCombo). */
+async function cambiarComboFuera(el) {
+  const campo = el.dataset.campoFuera;
+  if (campo === "codEnt") {
+    estado.fueraForm = { ...estado.fueraForm, codEnt: el.value, codMun: "" };
+    estado.fueraResultados = null;
+    pintar();
+    await cargarMunicipiosAltaReal(el.value);
+    if (estado.screen === "fuera") pintar();
+    return;
+  }
+  estado.fueraForm = { ...estado.fueraForm, [campo]: el.value };
+  pintar();
+}
+
 /* ---------- Agenda y citas (reales) ----------
    Los días/horarios libres los decide el servidor, así que se piden al abrir
    la agenda y se vuelven a pedir después de confirmar: si alguien más apartó
@@ -399,11 +518,15 @@ const ACCIONES = {
   "volver-zona": () => irA({ screen: estado.searchTerm ? "home" : "zone", searchTerm: null }),
   "volver-resultados": () => irA({ screen: "results" }),
 
+  // Fuera de la red (candidatos del DENUE)
+  "ir-fuera-de-red": abrirFueraDeRed,
+  "buscar-fuera-de-red": buscarFuera,
+
   // Inicio y zona
   "buscar": () => buscar(estado.query),
   "buscar-termino": (el) => buscar(el.dataset.valor),
   "sincronizar": sincronizarPlaces,
-  "elegir-especialidad": (el) => irA({ screen: "zone", specialty: el.dataset.valor, estado: null, municipio: null, searchTerm: null }),
+  "elegir-especialidad": (el) => elegirEspecialidad(el.dataset.valor, el.dataset.id),
   "elegir-estado": (el) => irA({ estado: el.dataset.valor, municipio: null }),
   "elegir-municipio": (el) => irA({ screen: "results", municipio: el.dataset.valor, searchTerm: null }),
 
@@ -470,6 +593,10 @@ function alCambiar(e) {
   } else if (el.id === "dp-orden") {
     ponerFiltros({ orden: el.value });
     pintar();
+  } else if (el.dataset.accionCambio === "elegir-especialidad-combo") {
+    elegirEspecialidadDelCombo(el);
+  } else if (el.tagName === "SELECT" && el.dataset.campoFuera) {
+    cambiarComboFuera(el);
   } else if (el.tagName === "SELECT" && el.dataset.campo) {
     cambiarCombo(el);
   }
@@ -503,6 +630,13 @@ function alEscribir(e) {
     pintarSugerencias();
     return;
   }
+  if (el.dataset.campoFuera) {
+    // Solo se guarda el valor y se refresca el botón "Buscar": NO se
+    // repinta toda la pantalla en cada tecla, para no perder el cursor.
+    estado.fueraForm = { ...estado.fueraForm, [el.dataset.campoFuera]: el.value };
+    pintarBotonFuera();
+    return;
+  }
   if (el.tagName !== "INPUT" || !el.dataset.campo) return;
   const campo = el.dataset.campo;
   if (campo === "rfc") {
@@ -521,6 +655,26 @@ function alTeclear(e) {
   if (e.target.id === "dp-q" && e.key === "Enter") {
     e.preventDefault();
     buscar(estado.query);
+    return;
+  }
+  if (e.target.dataset.campoFuera && e.key === "Enter") {
+    e.preventDefault();
+    buscarFuera();
+  }
+}
+
+/* Habilita/deshabilita "Buscar" mientras se escribe la especialidad, sin
+   repintar la pantalla completa. */
+function pintarBotonFuera() {
+  const boton = raiz.querySelector("[data-accion='buscar-fuera-de-red']");
+  if (!boton) return;
+  const v = V.calcular(estado);
+  boton.disabled = !(v.fueraPuedeBuscar && !v.fueraBuscando);
+  const nota = boton.parentElement.querySelector(".dp-nota");
+  if (nota) {
+    nota.textContent = v.fueraPuedeBuscar
+      ? "Listo para buscar."
+      : "Elige un estado y escribe al menos 3 caracteres de la especialidad.";
   }
 }
 
@@ -563,6 +717,10 @@ export function alEntrar() {
   // solicitud) -- se vuelven a pedir cada vez que se entra a la pantalla.
   cargarCatalogoReal().then(() => pintar());
   cargarSolicitudes();
+  // Especialidades con su KPI (tarjetas + combo). Se vuelven a pedir cada
+  // vez: los conteos cambian con cada carga de padrón o alta aprobada.
+  olvidarEspecialidadesKpi();
+  cargarEspecialidadesKpi().then(() => pintar());
   // Catálogo de Entidad para el combo del Alta de médico -- se precarga al
   // entrar a la pantalla para que ya esté listo si el usuario navega a
   // "Alta de médico" (los municipios de la entidad elegida se piden aparte,

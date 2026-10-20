@@ -13,12 +13,15 @@ existe y actualiza lo que ya estaba) y `cl_proveedor` es opcional.
 
 Un médico con VARIAS especialidades ocupa un renglón por especialidad: cada
 uno con su clave y su agenda, porque la consulta y el horario cambian según
-la especialidad.
+la especialidad. Lo mismo con las SUCURSALES: el padrón real trae cadenas
+("OPTICAS DEVLYN" en 68 domicilios, "FARMACOS ESPECIALIZADOS" en 38), y cada
+domicilio es donde se da la consulta, así que es un renglón aparte.
 """
 
 import unicodedata
 
 from app.db.local_store import ahora_local, get_local_connection
+from app.repositories import especialidades_repo
 
 ORIGEN_CATALOGO = "catalogo"
 ORIGEN_PORTAL = "portal"
@@ -30,7 +33,8 @@ _LARGO_CONSECUTIVO = 6
 # clave, la llave de identidad y el origen NO están aquí a propósito: son del
 # portal, no del archivo.
 _CAMPOS_DATOS = (
-    "cl_proveedor", "nombre", "especialidad", "cedula", "rfc", "estado", "municipio",
+    "cl_proveedor", "nombre", "especialidad", "cl_especialidad",
+    "cedula", "rfc", "estado", "municipio",
     "calle_num_ext_int", "colonia", "codigo_postal", "consultorio", "telefono", "email",
     "horario", "costo_consulta", "convenio", "teleconsulta", "latitud", "longitud",
 )
@@ -46,24 +50,40 @@ def _normalizar(valor) -> str:
     return " ".join(sin_acentos.split())
 
 
+# Qué compone la identidad de un renglón del padrón. El orden es fijo: la
+# llave se guarda armada en llave_identidad y se vuelve a armar igual en cada
+# carga para reconocer al mismo proveedor.
+_CAMPOS_IDENTIDAD = (
+    "nombre", "especialidad",
+    # Domicilio DONDE DA LA CONSULTA: es lo que distingue una sucursal de
+    # otra. Sin esto, las 662 filas del padrón real colapsan a 480.
+    "calle_num_ext_int", "colonia", "codigo_postal", "municipio", "estado",
+    # Desempata las dos sucursales que comparten domicilio exacto.
+    "telefono",
+)
+
+
 def llaves_candidatas(registro: dict) -> list[str]:
     """
-    Con qué se puede reconocer a este médico, de la llave más confiable a la
-    menos. La cédula es la buena (es única por profesionista); el nombre es
-    el respaldo para los renglones del Excel que no la traen.
+    Con qué se reconoce a este renglón entre una carga y otra.
 
-    La especialidad va en ambas porque el padrón guarda un renglón por
-    especialidad.
+    Es nombre + especialidad + domicilio de consulta + teléfono (decisión del
+    usuario, 2026-10-20, medida contra el padrón real de 662 filas: así entran
+    las 662; con menos campos se fusionan sucursales distintas).
+
+    La CÉDULA NO entra: en el padrón que entrega el área viene un mismo valor
+    de relleno repetido en las 662 filas, así que usarla fusionaba todo lo que
+    compartiera especialidad -- de 662 proveedores quedaban 38. Se sigue
+    guardando como dato del proveedor, nada más que no identifica.
+
+    Devuelve una lista (y no una sola llave) porque `cargar_padron` espera
+    varias candidatas; aquí siempre es una. Vacía si el renglón no trae NADA
+    con qué distinguirlo, para no fusionarlo con otro igual de vacío.
     """
-    especialidad = _normalizar(registro.get("especialidad"))
-    candidatas = []
-    cedula = _normalizar(registro.get("cedula"))
-    if cedula:
-        candidatas.append(f"ced:{cedula}|{especialidad}")
-    nombre = _normalizar(registro.get("nombre"))
-    if nombre:
-        candidatas.append(f"nom:{nombre}|{especialidad}")
-    return candidatas
+    partes = [_normalizar(registro.get(campo)) for campo in _CAMPOS_IDENTIDAD]
+    if not any(partes):
+        return []
+    return ["prv:" + "|".join(partes)]
 
 
 def _siguiente_clave(conn) -> str:
@@ -88,6 +108,32 @@ def _buscar_por_llaves(conn, candidatas: list[str]):
         if fila:
             return fila
     return None
+
+
+def _altas_del_portal_por_nombre(conn) -> dict:
+    """
+    Las altas hechas en el portal, indexadas por nombre + especialidad.
+
+    Sirve de RED DE SEGURIDAD al absorber: el Excel del área casi nunca trae
+    el domicilio exactamente igual al que capturó el médico al darse de alta,
+    y sin esto la carga lo insertaría como un proveedor NUEVO -- quedaría
+    duplicado y sus citas colgando de la clave anterior.
+
+    Solo se buscan las de origen 'portal' (son pocas y capturadas a mano). No
+    se usa este atajo contra las que vinieron del Excel, porque ahí sí hay
+    cadenas con el mismo nombre y especialidad en decenas de domicilios
+    ("OPTICAS DEVLYN" aparece 68 veces) y se fusionarían entre ellas.
+    """
+    filas = conn.execute(
+        "SELECT id, clave, origen, llave_identidad, nombre, especialidad "
+        "FROM proveedores WHERE origen = ?",
+        (ORIGEN_PORTAL,),
+    ).fetchall()
+    return {
+        (_normalizar(f["nombre"]), _normalizar(f["especialidad"])): f
+        for f in filas
+        if _normalizar(f["nombre"])
+    }
 
 
 def _insertar(conn, registro: dict, llave: str, origen: str, folio_alta: str | None) -> str:
@@ -138,11 +184,31 @@ def cargar_padron(registros: list[dict], rfc_usuario: str) -> dict:
     """
     nuevos = actualizados = absorbidos = 0
     with get_local_connection() as conn:
+        # El mapa del catálogo se arma UNA vez, con esta misma conexión: abrir
+        # otra por renglón chocaría con el candado de escritura de la carga.
+        mapa_especialidades = especialidades_repo.mapa_por_nombre(conn)
+        altas_del_portal = _altas_del_portal_por_nombre(conn)
         for registro in registros:
+            registro = {
+                **registro,
+                "cl_especialidad": mapa_especialidades.get(
+                    especialidades_repo.normalizar(registro.get("especialidad"))
+                ),
+            }
             candidatas = llaves_candidatas(registro)
             if not candidatas:
                 continue
             fila = _buscar_por_llaves(conn, candidatas)
+            if fila is None:
+                # Antes de darlo por nuevo: ¿será un alta del portal que el
+                # Excel trae con otro domicilio? (ver _altas_del_portal_por_nombre)
+                senas = (
+                    _normalizar(registro.get("nombre")),
+                    _normalizar(registro.get("especialidad")),
+                )
+                # Se saca del mapa para que dos renglones del Excel no
+                # absorban al mismo proveedor del portal.
+                fila = altas_del_portal.pop(senas, None)
             if fila is None:
                 _insertar(conn, registro, candidatas[0], ORIGEN_CATALOGO, None)
                 nuevos += 1
@@ -177,6 +243,12 @@ def alta_desde_portal(datos: dict, folio: str) -> str:
         if fila is not None:
             conn.commit()
             return fila["clave"]
+        datos = {
+            **datos,
+            "cl_especialidad": especialidades_repo.mapa_por_nombre(conn).get(
+                especialidades_repo.normalizar(datos.get("especialidad"))
+            ),
+        }
         clave = _insertar(conn, datos, candidatas[0], ORIGEN_PORTAL, folio)
         conn.commit()
     return clave

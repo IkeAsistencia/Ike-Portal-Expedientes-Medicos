@@ -53,6 +53,16 @@ class Settings(BaseSettings):
     # dinámico en cascada del combo Servicio, vía dbo.sp_GetSubServicios2)
     cuentas_permitidas: Optional[str] = "2819,2868,1366,2806,2654,1519"
 
+    # --- Búsqueda fuera de la red: DENUE del INEGI (ver app/services/denue_service.py) ---
+    # Token gratuito que se tramita en https://www.inegi.org.mx/servicios/api_denue.html
+    # Mientras no se configure, la búsqueda fuera de la red queda apagada y
+    # el endpoint responde 503 con un mensaje claro (no truena la pantalla).
+    denue_token: Optional[str] = None
+    denue_timeout_segundos: float = 8.0
+    # Tope de candidatos por consulta -- el DENUE pagina por rango de
+    # registros y no tiene caso traer cientos a una pantalla de prospección.
+    denue_maximo_resultados: int = 50
+
     # --- Correo a proveedores (ver app/services/email_service.py) ---
     # Mientras no se configure un SMTP real, el envío queda "simulado"
     # (se registra en el log pero no se manda un correo de verdad).
@@ -111,6 +121,10 @@ class Settings(BaseSettings):
     @property
     def smtp_configurado(self) -> bool:
         return bool(self.smtp_host and self.smtp_remitente)
+
+    @property
+    def denue_configurado(self) -> bool:
+        return bool(self.denue_token and self.denue_token.strip())
 
 @lru_cache
 def get_settings() -> "Settings":

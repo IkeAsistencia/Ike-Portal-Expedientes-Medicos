@@ -100,6 +100,18 @@ async function cargarArchivo() {
       `Catálogo cargado: ${data.nuevos} nuevo(s), ${data.actualizados} actualizado(s)${absorbidos}.`,
       "success"
     );
+    // Los proveedores se cargaron, pero su especialidad no empata con el
+    // catálogo: no van a sumar a ninguna tarjeta de KPI del Directorio. Se
+    // avisa aparte para que no se lea como "falta gente" cuando en realidad
+    // es un nombre mal escrito en el Excel.
+    const desconocidas = data.especialidades_no_reconocidas || [];
+    if (desconocidas.length) {
+      toast(
+        `Especialidad fuera del catálogo: ${desconocidas.join(", ")}. ` +
+        "Esos proveedores se cargaron, pero no aparecen en las tarjetas del Directorio hasta corregir el nombre.",
+        "error"
+      );
+    }
     input.value = "";
     cargarResumen();
   } catch (err) {

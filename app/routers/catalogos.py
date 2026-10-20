@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.security import usuario_actual
 from app.repositories import catalogos_repo
-from app.schemas.catalogo import CatalogoItem, CatalogoItemTexto, CuentaBusqueda
+from app.schemas.catalogo import (
+    CatalogoItem,
+    CatalogoItemTexto,
+    CuentaBusqueda,
+    EntidadFederativa,
+)
 
 router = APIRouter(
     prefix="/catalogos",
@@ -38,12 +43,15 @@ def cuentas():
     return catalogos_repo.listar_cuentas()
 
 
-@router.get("/entidades", response_model=list[CatalogoItemTexto])
+@router.get("/entidades", response_model=list[EntidadFederativa])
 def entidades():
     """Combo Entidad del Alta de médico (Directorio de Proveedores) -- con
     CodEnt real, para después pedir municipios (ver /catalogos/municipios).
     Sin opción "Todas": a diferencia del filtro de Expedientes, aquí se
-    está dando de alta a UN médico, siempre hace falta una entidad puntual."""
+    está dando de alta a UN médico, siempre hace falta una entidad puntual.
+
+    Trae además `clave_inegi` (la clave de entidad del INEGI, dos dígitos),
+    que es la que pide el DENUE en la búsqueda fuera de la red."""
     return catalogos_repo.listar_entidades()
 
 

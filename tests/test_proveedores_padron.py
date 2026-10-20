@@ -11,7 +11,11 @@ from fastapi.testclient import TestClient
 from openpyxl import load_workbook
 
 from app.main import app
-from app.services.proveedores_excel_service import COLUMNAS, generar_plantilla_excel
+from app.services.proveedores_excel_service import (
+    COLUMNA_CLAVE_CENTRAL,
+    COLUMNAS,
+    generar_plantilla_excel,
+)
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
@@ -84,10 +88,13 @@ def _xlsx_de_filas(filas: list[dict]) -> bytes:
 
     wb = Workbook()
     ws = wb.active
-    for col_idx, (encabezado, _clave, _ancho, obligatorio) in enumerate(COLUMNAS, start=1):
-        ws.cell(row=1, column=col_idx, value=encabezado + (" *" if obligatorio else ""))
+    # La clave del proveedor ya no está en COLUMNAS (salió del layout), pero
+    # varias pruebas la mandan para comprobar que se sigue leyendo.
+    columnas = list(COLUMNAS) + [COLUMNA_CLAVE_CENTRAL]
+    for col_idx, (encabezado, _clave, _ancho, _alias) in enumerate(columnas, start=1):
+        ws.cell(row=1, column=col_idx, value=encabezado)
     for fila_idx, fila in enumerate(filas, start=2):
-        for col_idx, (_encabezado, clave, _ancho, _obligatorio) in enumerate(COLUMNAS, start=1):
+        for col_idx, (_encabezado, clave, _ancho, _alias) in enumerate(columnas, start=1):
             ws.cell(row=fila_idx, column=col_idx, value=fila.get(clave))
     buffer = BytesIO()
     wb.save(buffer)
@@ -137,20 +144,21 @@ def test_plantilla_se_descarga_y_abre_como_excel_valido(client):
     assert r.headers["content-type"] == XLSX_MIME
     wb = load_workbook(BytesIO(r.content))
     encabezados = [c.value for c in next(wb.active.iter_rows(min_row=1, max_row=1))]
-    # El nombre es ahora el único obligatorio: la clave del proveedor dejó
-    # de serlo (decisión del usuario, 2026-10-19).
+    # Mismos encabezados que el archivo que validó el área (2026-10-20).
+    assert encabezados == [c[0] for c in COLUMNAS]
     assert encabezados[0] == "Nombre completo *"
-    assert [e for e in encabezados if e.endswith(" *")] == ["Nombre completo *"]
+    # La clave del proveedor salió del layout: el portal genera la suya.
+    assert not any("Clave del proveedor" in (e or "") for e in encabezados)
 
 
 def test_la_plantilla_trae_el_domicilio_de_consulta_desglosado(client):
-    """La dirección va separada y etiquetada como el domicilio DONDE DA LA
-    CONSULTA -- ya no es un solo campo de texto libre."""
+    """La dirección va separada en calle, colonia y CP -- ya no es un solo
+    campo de texto libre."""
     r = client.get("/proveedores-catalogo/plantilla", headers=_auth_headers_admin(client))
     encabezados = [c.value for c in next(load_workbook(BytesIO(r.content)).active.iter_rows(min_row=1, max_row=1))]
-    assert "Domicilio de consulta: Calle, No. Ext., No. Int." in encabezados
-    assert "Domicilio de consulta: Colonia" in encabezados
-    assert "Domicilio de consulta: Código Postal" in encabezados
+    assert "Calle, No. Ext., No. Int. *" in encabezados
+    assert "Colonia *" in encabezados
+    assert "Código Postal *" in encabezados
     assert not any("Dirección del consultorio" == e for e in encabezados)
 
 
@@ -176,7 +184,11 @@ def test_cargar_padron_lo_deja_disponible_en_el_resumen(client):
         {**FILA_VALIDA, "nombre": "Dr. Otro Médico", "cedula": "5555555"},
     ])
     assert r.status_code == 200, r.text
-    assert r.json() == {"ok": True, "total": 2, "nuevos": 2, "actualizados": 0, "absorbidos": 0}
+    assert r.json() == {
+        "ok": True, "total": 2, "nuevos": 2, "actualizados": 0, "absorbidos": 0,
+        # "Cardiología" sí está en el catálogo de especialidades.
+        "especialidades_no_reconocidas": [],
+    }
 
     resumen = client.get("/proveedores-catalogo", headers=headers).json()
     assert resumen["total"] == 2
@@ -219,7 +231,10 @@ def test_segunda_carga_agrega_los_nuevos_y_conserva_la_clave_de_los_que_ya_estab
         {**FILA_VALIDA, "costo_consulta": "950"},           # el mismo, con otro precio
         {**FILA_VALIDA, "nombre": "Dr. Nuevo", "cedula": "7777777"},
     ])
-    assert r.json() == {"ok": True, "total": 2, "nuevos": 1, "actualizados": 1, "absorbidos": 0}
+    assert r.json() == {
+        "ok": True, "total": 2, "nuevos": 1, "actualizados": 1, "absorbidos": 0,
+        "especialidades_no_reconocidas": [],
+    }
 
     padron = {p["nombre"]: p for p in client.get("/directorio-proveedores", headers=headers).json()}
     assert len(padron) == 2
@@ -274,13 +289,15 @@ def test_rechaza_xlsx_falso_con_content_type_mentiroso(client):
     assert r.status_code == 400
 
 
-def test_rechaza_archivo_sin_la_columna_obligatoria(client):
+def test_rechaza_archivo_con_encabezado_irreconocible(client):
+    """Si no se reconoce NI UNA columna, casi siempre es otro archivo: ahí sí
+    se rechaza, porque cargarlo generaría cientos de renglones vacíos."""
     from openpyxl import Workbook
 
     wb = Workbook()
     ws = wb.active
-    ws.cell(row=1, column=1, value="Especialidad")  # falta "Nombre completo *"
-    ws.cell(row=2, column=1, value="Cardiología")
+    ws.cell(row=1, column=1, value="Columna inventada")
+    ws.cell(row=2, column=1, value="algo")
     buffer = BytesIO()
     wb.save(buffer)
 
@@ -290,19 +307,53 @@ def test_rechaza_archivo_sin_la_columna_obligatoria(client):
         files={"archivo": ("catalogo.xlsx", buffer.getvalue(), XLSX_MIME)},
     )
     assert r.status_code == 400
-    assert "Nombre completo" in r.json()["detail"]
+    assert "no se reconoció" in r.json()["detail"].lower()
 
 
-def test_rechaza_fila_sin_nombre(client):
-    r = _cargar(client, _auth_headers_admin(client), [{**FILA_VALIDA, "nombre": None}])
-    assert r.status_code == 400
-    assert "Nombre completo" in r.json()["detail"]
+def test_una_fila_sin_nombre_se_carga_vacia_en_vez_de_rechazarse(client):
+    """Instrucción del usuario (2026-10-20): ninguna columna es obligatoria;
+    lo que falte entra vacío. Antes esto tumbaba la carga completa."""
+    headers = _auth_headers_admin(client)
+    r = _cargar(client, headers, [{**FILA_VALIDA, "nombre": None}])
+    assert r.status_code == 200, r.text
+    assert r.json()["nuevos"] == 1
+    padron = client.get("/directorio-proveedores", headers=headers).json()
+    assert padron[0]["nombre"] == ""
 
 
-def test_rechaza_clave_de_proveedor_no_numerica(client):
-    r = _cargar(client, _auth_headers_admin(client), [{**FILA_VALIDA, "cl_proveedor": "ABC"}])
-    assert r.status_code == 400
-    assert "número entero" in r.json()["detail"]
+def test_una_fila_a_la_que_le_faltan_varios_datos_se_carga_igual(client):
+    headers = _auth_headers_admin(client)
+    r = _cargar(client, headers, [{
+        "nombre": "Dr. Solo Nombre", "especialidad": "CARDIOLOGIA",
+    }])
+    assert r.status_code == 200, r.text
+    proveedor = client.get("/directorio-proveedores", headers=headers).json()[0]
+    assert proveedor["nombre"] == "Dr. Solo Nombre"
+    for campo in ("rfc", "estado", "municipio", "colonia", "codigo_postal", "email"):
+        assert proveedor[campo] is None, campo
+
+
+def test_una_clave_de_proveedor_no_numerica_se_ignora(client):
+    """Ya no viene en la plantilla; si el archivo la trae con basura, se
+    descarta en vez de tumbar la carga."""
+    headers = _auth_headers_admin(client)
+    r = _cargar(client, headers, [{**FILA_VALIDA, "cl_proveedor": "ABC"}])
+    assert r.status_code == 200, r.text
+    assert client.get("/directorio-proveedores", headers=headers).json()[0]["cl_proveedor"] is None
+
+
+def test_el_texto_de_relleno_entra_como_vacio(client):
+    """El padrón real trae celdas con "NULL" y "-" en vez de vacías; guardarlas
+    tal cual se vería en pantalla como "C.P. null" o "$NULL consulta"."""
+    headers = _auth_headers_admin(client)
+    _cargar(client, headers, [{
+        **FILA_VALIDA,
+        "rfc": "-", "codigo_postal": "null", "estado": "NULL",
+        "costo_consulta": "NULL", "telefono": "N/A",
+    }])
+    proveedor = client.get("/directorio-proveedores", headers=headers).json()[0]
+    for campo in ("rfc", "codigo_postal", "estado", "costo_consulta", "telefono"):
+        assert proveedor[campo] is None, campo
 
 
 def test_el_codigo_postal_conserva_los_ceros_a_la_izquierda(client):
@@ -322,13 +373,15 @@ def test_ignora_renglones_vacios_al_final(client):
 
 def test_teleconsulta_si_no_se_interpreta_a_booleano(client):
     headers = _auth_headers_admin(client)
+    # Se distinguen por teléfono, que sí forma parte de la identidad: la
+    # cédula ya no identifica (ver proveedores_repo.llaves_candidatas).
     _cargar(client, headers, [
-        {**FILA_VALIDA, "cedula": "1", "teleconsulta": "Sí"},
-        {**FILA_VALIDA, "cedula": "2", "teleconsulta": "No"},
+        {**FILA_VALIDA, "telefono": "33 1111 1111", "teleconsulta": "Sí"},
+        {**FILA_VALIDA, "telefono": "33 2222 2222", "teleconsulta": "No"},
     ])
-    padron = {p["cedula"]: p for p in client.get("/directorio-proveedores", headers=headers).json()}
-    assert padron["1"]["teleconsulta"] == 1
-    assert padron["2"]["teleconsulta"] == 0
+    padron = {p["telefono"]: p for p in client.get("/directorio-proveedores", headers=headers).json()}
+    assert padron["33 1111 1111"]["teleconsulta"] == 1
+    assert padron["33 2222 2222"]["teleconsulta"] == 0
 
 
 # ---------- GET /directorio-proveedores (lectura para la pantalla "Proveedores") ----------
