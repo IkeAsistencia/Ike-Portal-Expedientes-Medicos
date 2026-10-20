@@ -17,8 +17,8 @@ import { esPerfilAdministrador } from "../core/sesion.js";
 const ESTATUS_EDITABLES = ["En revisión", "Cédula no localizada"];
 import { ICONOS } from "../componentes/iconos.js";
 import {
-  ESTADOS, PRICE_OPTIONS, PROPS,
-  num, pick, raw, visible, valoresUnicosCatalogo,
+  PRICE_OPTIONS,
+  raw, visible, valoresUnicosCatalogo, zonasDelPadron, resumenDelPadron,
   entidadesAltaCache, municipiosAltaCache,
   especialidadesKpiCache, todasLasEspecialidades,
 } from "./datos.js";
@@ -91,7 +91,11 @@ function _domicilioResto(x) {
 /* ---------- Valores calculados (equivalente a renderVals del original) ---------- */
 export function calcular(s) {
   const f = s.filters;
-  const estadoObj = ESTADOS.find(x => x.name === s.estado);
+  // Estados y municipios DONDE HAY proveedores, sacados del padrón real
+  // (ver zonasDelPadron en datos.js). Acotados a la especialidad elegida:
+  // no tiene caso ofrecer una zona que no tiene a nadie de esa especialidad.
+  const zonas = zonasDelPadron(s.specialtyId);
+  const estadoObj = zonas.find(x => x.name === s.estado);
   const info = s.screen === "results" || s.screen === "compare" ? raw(s) : { list: [], label: "", sub: "" };
   const listed = s.screen === "results" ? visible(s) : [];
   const d = s.detail;
@@ -99,8 +103,14 @@ export function calcular(s) {
   const compareItems = visible(s).filter(x => s.compare.indexOf(x.id) >= 0);
   const esAdministrador = esPerfilAdministrador();
 
-  const coverageRaw = ESTADOS.map(x => ({ name: x.name, total: x.municipios.reduce((acc, m) => acc + num(x.name + m, "cov", 12, 68), 0) }));
-  const maxCov = Math.max.apply(null, coverageRaw.map(c => c.total));
+  // Cobertura por estado: conteo real del padrón, no una cifra generada.
+  const zonasTodas = zonasDelPadron();
+  const coverageRaw = zonasTodas.map(x => ({ name: x.name, total: x.total }));
+  const maxCov = Math.max(1, ...coverageRaw.map(c => c.total));
+  const municipiosCubiertos = zonasTodas.reduce((a, x) => a + x.municipios.length, 0);
+  const {
+    total: totalPadron, dentroDeRed, fueraDeRed, especialidadesConProveedor,
+  } = resumenDelPadron();
   // Catálogo real de especialidades, ya partido por el servidor en lo que
   // cabe en pantalla (16 = 4 renglones de 4) y lo que va al combo.
   const catalogoEsp = especialidadesKpiCache();
@@ -129,7 +139,6 @@ export function calcular(s) {
     breadcrumb: { home: "Inicio", register: "Inicio / Alta de médico", admin: "Inicio / Solicitudes", metrics: "Inicio / Métricas", compare: "Inicio / Comparar" }[s.screen]
       || (s.screen === "zone" ? "Inicio / " + s.specialty : "Inicio / " + (s.searchTerm ? "Búsqueda" : s.specialty + " / " + s.municipio)),
     pendingBadge: pending ? "(" + pending + ")" : "",
-    gridAmplia: PROPS.gridDensity === "amplia",
 
     // Inicio
     specialties: catalogoEsp.tarjetas.map(tarjetaEspecialidad),
@@ -152,21 +161,26 @@ export function calcular(s) {
     suggestions: calcularSugerencias(s),
     recent: s.recent,
 
-    // Zona
+    // Zona -- estados y municipios con proveedores de verdad. Vacío cuando
+    // el padrón todavía no se ha cargado.
     specialty: s.specialty,
-    estados: ESTADOS.map(x => ({ name: x.name, count: x.municipios.length + " municipios", elegido: x.name === s.estado })),
+    estados: zonas.map(x => ({
+      name: x.name,
+      count: x.municipios.length + (x.municipios.length === 1 ? " municipio" : " municipios"),
+      elegido: x.name === s.estado,
+    })),
+    hayZonas: zonas.length > 0,
     hasEstado: !!estadoObj,
-    municipios: (estadoObj ? estadoObj.municipios : []).map(m => ({ name: m, meta: num(s.specialty + m, "d", 2, 9) + " especialistas disponibles" })),
-
-    // Google Places (simulado)
-    syncLabel: s.syncing ? "Sincronizando…" : s.placesSynced ? "Google Places sincronizado" : "Sincronizar con Google Places",
-    syncNote: s.placesSynced ? "Se agregaron consultorios importados de Google Places." : "Importa consultorios con ficha en Google.",
+    municipios: (estadoObj ? estadoObj.municipios : []).map(m => ({
+      name: m.name,
+      meta: m.total + (m.total === 1 ? " especialista" : " especialistas"),
+    })),
 
     // Resultados
     viewList: s.view === "list", viewMap: s.view === "map",
     priceOptions: PRICE_OPTIONS.map(p => ({ label: p.label, max: p.max, elegido: f.maxPrice === p.max })),
-    fHoy: f.hoy, fTele: f.tele, fSeguro: f.seguro, fPlaces: f.soloVerificados, orden: f.orden,
-    filterSummary: [f.maxPrice < 9999 ? "≤ $" + f.maxPrice : null, f.hoy ? "hoy" : null, f.tele ? "teleconsulta" : null, f.seguro ? "con convenio" : null, f.soloVerificados ? "solo verificados" : null].filter(Boolean).join(" · ") || "Sin filtros activos",
+    fTele: f.tele, fSeguro: f.seguro, orden: f.orden,
+    filterSummary: [f.maxPrice < 9999 ? "≤ $" + f.maxPrice : null, f.tele ? "teleconsulta" : null, f.seguro ? "con convenio" : null].filter(Boolean).join(" · ") || "Sin filtros activos",
     countLabel: listed.length + " de " + info.list.length + " especialistas",
     resultsTitle: info.label, resultsSubtitle: info.sub,
     hasResults: listed.length > 0,
@@ -178,8 +192,10 @@ export function calcular(s) {
       domicilioCalle: x.calleNumExtInt || "Domicilio no especificado",
       domicilioResto: _domicilioResto(x),
       convenio: x.convenio, tele: x.tele, origen: x.origen,
-      availability: x.hoy ? "Disponible hoy" : x.schedule,
-      rating: x.rating, price: x.price, distance: x.distance, source: x.source, fromPlaces: x.fromPlaces,
+      // El horario que trae el padrón; la disponibilidad real sale de la
+      // agenda, al abrir la ficha.
+      availability: x.schedule,
+      price: x.price, source: x.source,
       compared: s.compare.indexOf(x.id) >= 0,
     })),
 
@@ -191,9 +207,9 @@ export function calcular(s) {
     compareRows: [
       { label: "Especialidad", key: "specialty" }, { label: "Consultorio", key: "clinic" },
       { label: "Zona", key: "municipio" }, { label: "Consulta", key: "price" },
-      { label: "Calificación", key: "rating" }, { label: "Distancia", key: "distance" },
-      { label: "Convenios", key: "convenio" }, { label: "Fuente", key: "source" }
-    ].map(r => ({ label: r.label, cells: compareItems.map(x => String(x[r.key])) })),
+      { label: "Horario", key: "schedule" }, { label: "Convenios", key: "convenio" },
+      { label: "Teléfono", key: "phone" }, { label: "Cobertura", key: "source" }
+    ].map(r => ({ label: r.label, cells: compareItems.map(x => String(x[r.key] || "—")) })),
 
     // Ficha / agenda
     hasDetail: !!d,
@@ -214,14 +230,17 @@ export function calcular(s) {
     bookingFolio: s.bookingFolio || "",
     bookingGuardando: !!s.bookingGuardando,
 
-    // Métricas
+    // Métricas -- todas del padrón real (antes "Especialistas activos" y
+    // "Zonas cubiertas" salían de una cifra generada, y había un KPI de
+    // "Importados de Google" que nunca importó nada).
     kpis: [
-      { label: "Especialistas activos", value: String(coverageRaw.reduce((a, c) => a + c.total, 0)), note: "Red nacional simulada", icono: "personas", clase: "kpi-total" },
-      { label: "Zonas cubiertas", value: String(ESTADOS.reduce((a, x) => a + x.municipios.length, 0)), note: ESTADOS.length + " estados", icono: "ubicacion", clase: "kpi-cita" },
+      { label: "Proveedores en el padrón", value: String(totalPadron), note: dentroDeRed + " dentro de la red · " + fueraDeRed + " fuera", icono: "personas", clase: "kpi-total" },
+      { label: "Municipios con cobertura", value: String(municipiosCubiertos), note: coverageRaw.length + (coverageRaw.length === 1 ? " estado" : " estados"), icono: "ubicacion", clase: "kpi-cita" },
       { label: "Solicitudes en revisión", value: String(pending), note: s.requests.length + " solicitudes totales", icono: "expediente", clase: "kpi-proceso" },
-      { label: "Importados de Google", value: s.placesSynced ? "126" : "0", note: s.placesSynced ? "Última sincronización: hoy" : "Sin sincronizar", icono: "nube", clase: "kpi-seguimiento" }
+      { label: "Especialidades con proveedor", value: String(especialidadesConProveedor) + " de " + (catalogoEsp.total || 0), note: "Del catálogo de especialidades", icono: "expediente", clase: "kpi-seguimiento" }
     ],
-    coverage: coverageRaw.map(c => ({ name: c.name, value: c.total + " especialistas", width: Math.round(c.total / maxCov * 100) })),
+    coverage: coverageRaw.map(c => ({ name: c.name, value: c.total + (c.total === 1 ? " especialista" : " especialistas"), width: Math.round(c.total / maxCov * 100) })),
+    hayCobertura: coverageRaw.length > 0,
     // Las especialidades con menos proveedores del padrón REAL (antes era un
     // conteo simulado). Se acotan a las 10 peores y ascendente: con el
     // catálogo completo de 38, listar "todas las que tienen menos de 20"
@@ -281,19 +300,27 @@ export function calcular(s) {
     fueraCandidatos: s.fueraResultados ? s.fueraResultados.candidatos : [],
     fueraTipo: s.fueraResultados ? (s.fueraResultados.tipo_descripcion || "") : "",
     fueraPuedeBuscar: !!(s.fueraForm.codEnt && (s.fueraForm.especialidad || "").trim().length >= 3),
-    verifyLabel: vs === "loading" ? "Consultando…" : vs === "valid" ? "Cédula verificada" : "Verificar cédula profesional",
-    verifyMessage: { idle: "Sin verificar", loading: "Consultando registro…", valid: "Cédula localizada en el registro", invalid: "Formato inválido: debe tener 7 u 8 dígitos" }[vs],
+    // Verificación de la cédula. HOY SOLO SE VALIDA EL FORMATO: no hay
+    // conexión con el Registro Nacional de Profesionistas, así que no se
+    // afirma que la cédula "se localizó" ni se inventan institución y año
+    // de registro, como se hacía antes.
+    verifyLabel: vs === "loading" ? "Validando…" : vs === "valid" ? "Formato validado" : "Validar cédula profesional",
+    verifyMessage: {
+      idle: "Sin validar",
+      loading: "Validando…",
+      valid: "El formato es correcto. Falta confirmarla contra el RNP.",
+      invalid: "Formato inválido: debe tener 7 u 8 dígitos",
+    }[vs],
     verifyClase: vs === "valid" ? "dp-ok" : vs === "invalid" ? "dp-error" : "dp-neutro",
     verified: vs === "valid",
-    verifyHolder: s.form.name || "Titular registrado",
-    verifyTitle: "Médico Cirujano y Partero · " + s.form.specialty,
-    verifyInstitution: pick(["Universidad de Guadalajara", "UNAM", "UANL", "Universidad Autónoma de Yucatán", "BUAP"], s.form.cedula || "x", "u"),
-    verifyYear: String(num(s.form.cedula || "x", "y", 1996, 2019)),
+    verifyCedula: s.form.cedula || "",
+    verifyHolder: s.form.name || "",
+    verifySpecialty: s.form.specialty || "",
     submitNote: vs === "valid"
-      ? (s.editandoFolio ? "Cédula validada. Puedes guardar los cambios." : "Cédula validada. Puedes enviar la solicitud.")
-      : (s.editandoFolio ? "Cambiaste la cédula: vuelve a verificarla antes de guardar." : "Verifica la cédula profesional antes de enviar."),
+      ? (s.editandoFolio ? "Formato de cédula validado. Puedes guardar los cambios." : "Formato de cédula validado. Puedes enviar la solicitud.")
+      : (s.editandoFolio ? "Cambiaste la cédula: vuelve a validarla antes de guardar." : "Valida la cédula profesional antes de enviar."),
 
-    footerCount: s.placesSynced ? "Fuentes: directorio interno + Google Places" : "Fuente: directorio interno",
+    footerCount: "Fuente: padrón del portal",
   };
 }
 
@@ -332,7 +359,7 @@ export function barra(v) {
 
 export function pie(v) {
   return `
-    <span>Padrón, altas y citas reales. La validación de cédula y Google Places siguen sin conexión real.</span>
+    <span>Padrón, altas, citas y métricas reales. La cédula profesional todavía se valida solo por formato: falta conectar el RNP de la SEP.</span>
     <span>${e(v.footerCount)}</span>`;
 }
 
@@ -381,10 +408,6 @@ export function pantallaInicio(v) {
             <div id="dp-sugerencias">${sugerencias(v.suggestions)}</div>
           </div>
           ${recientes}
-          <div class="dp-sync">
-            <button class="btn btn-secondary" data-accion="sincronizar">${e(v.syncLabel)}</button>
-            <span class="dp-nota">${e(v.syncNote)}</span>
-          </div>
         </div>
       </div>
     </div>
@@ -397,7 +420,7 @@ export function pantallaInicio(v) {
       <div class="card-body">
         ${v.cargandoEspecialidades
           ? `<div class="spinner-row">Cargando el catálogo de especialidades…</div>`
-          : `<div class="dp-grid-especialidades${v.gridAmplia ? " dp-grid-amplia" : ""}">
+          : `<div class="dp-grid-especialidades">
           ${v.specialties.map(sp => `
             <button class="dp-opcion dp-tarjeta-especialidad${sp.vacia ? " dp-tarjeta-vacia" : ""}" data-accion="elegir-especialidad" data-valor="${e(sp.name)}" data-id="${e(String(sp.id))}">
               <span class="dp-numero">${e(sp.num)}</span>
@@ -431,6 +454,27 @@ export function pantallaZona(v) {
           <span class="dp-nota">${e(m.meta)}</span>
         </button>`).join("")}
     </div>` : `<p class="dp-texto dp-muted">Elige primero un estado en la columna izquierda.</p>`;
+
+  // Sin zonas = no hay proveedores de esa especialidad en el padrón. Antes
+  // siempre salían seis estados fijos aunque no hubiera nadie en ellos.
+  if (!v.hayZonas) {
+    return `
+      ${encabezado({
+        volver: "← Todas las especialidades", accionVolver: "ir-inicio",
+        titulo: v.specialty, texto: "Zonas donde el padrón tiene especialistas de esta especialidad.",
+      })}
+      <div class="card tono-ambar">
+        <div class="dp-vacio">
+          <p class="dp-vacio-titulo">Sin cobertura para ${e(v.specialty)}</p>
+          <p class="dp-texto">El padrón no tiene proveedores de esta especialidad en ninguna zona todavía. Carga el catálogo de proveedores, da de alta un médico, o busca consultorios <b>fuera de la red</b> para evaluar su contratación.</p>
+          <div class="dp-acciones">
+            <button class="btn btn-primary" data-accion="ir-fuera-de-red">Buscar fuera de la red</button>
+            <button class="btn btn-secondary" data-accion="ir-alta">Alta de médico</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
   return `
     ${encabezado({
       volver: "← Todas las especialidades", accionVolver: "ir-inicio",
@@ -483,7 +527,7 @@ export function cabeceraResultados(v) {
         <button class="dp-seg-opcion${v.viewList ? " dp-sel" : ""}" data-accion="vista-lista">Lista</button>
         <button class="dp-seg-opcion${v.viewMap ? " dp-sel" : ""}" data-accion="vista-mapa">Mapa</button>
       </div>
-      <button class="btn btn-secondary" data-accion="sincronizar">${e(v.syncLabel)}</button>
+      <button class="btn btn-secondary" data-accion="ir-fuera-de-red">Buscar fuera de la red</button>
       <button class="btn btn-primary" data-accion="ir-inicio">Nueva búsqueda</button>
     </div>`;
   return encabezado({
@@ -506,17 +550,14 @@ export function filtrosResultados(v) {
     </div>
     <div class="dp-seccion dp-seccion-linea">
       <h2 class="dp-subtitulo">Filtros</h2>
-      ${casilla("hoy", v.fHoy, "Disponible hoy")}
       ${casilla("tele", v.fTele, "Teleconsulta")}
       ${casilla("seguro", v.fSeguro, "Con convenio / seguro")}
-      ${casilla("soloVerificados", v.fPlaces, "Solo directorio verificado")}
     </div>
     <div class="field dp-campo dp-seccion-linea">
       <label for="dp-orden">Ordenar por</label>
       <select id="dp-orden">
-        ${opcionOrden("rating", "Mejor calificación")}
+        ${opcionOrden("nombre", "Nombre")}
         ${opcionOrden("precio", "Precio más bajo")}
-        ${opcionOrden("cercania", "Más cercano")}
       </select>
     </div>
     <button class="btn dp-btn-ghost" data-accion="limpiar-filtros">Limpiar filtros</button>`;
@@ -558,7 +599,7 @@ export function listaResultados(v) {
       </div>
       <div class="dp-medico-disponibilidad">
         <div>${e(d.availability)}</div>
-        <div class="dp-muted"><span class="dp-dato">${e(d.rating)}</span> · <span class="dp-dato">${e(d.price)}</span> · <span class="dp-dato">${e(d.distance)}</span></div>
+        <div class="dp-muted"><span class="dp-dato">${e(d.price)}</span></div>
       </div>
       <div class="dp-medico-acciones">
         <label class="dp-check dp-check-compacto"><input type="checkbox" data-accion="comparar" data-id="${e(d.id)}"${d.compared ? " checked" : ""}> Comparar</label>
@@ -604,7 +645,7 @@ export function pantallaMetricas(v) {
   return `
     ${encabezado({
       volver: "← Volver al directorio", accionVolver: "ir-inicio",
-      titulo: "Métricas del directorio", texto: "Cobertura por estado y especialidades con oferta insuficiente.",
+      titulo: "Métricas del directorio", texto: "Cifras del padrón cargado en este portal: cobertura por estado y especialidades con oferta insuficiente.",
     })}
     <div class="kpi-row">
       ${v.kpis.map(k => `
@@ -621,14 +662,16 @@ export function pantallaMetricas(v) {
       <div class="card tono-azul">
         <div class="card-header"><h2>Especialistas por estado</h2></div>
         <div class="card-body dp-cobertura">
-          ${v.coverage.map(c => `
+          ${v.hayCobertura
+            ? v.coverage.map(c => `
             <div>
               <div class="dp-cobertura-fila">
                 <span class="dp-fuerte">${e(c.name)}</span>
                 <span class="dp-muted">${e(c.value)}</span>
               </div>
               <div class="dp-pista"><div class="dp-pista-valor" style="width:${Number(c.width)}%;"></div></div>
-            </div>`).join("")}
+            </div>`).join("")
+            : `<p class="dp-texto dp-muted">Todavía no hay proveedores con domicilio en el padrón. Carga el catálogo de proveedores para ver la cobertura.</p>`}
         </div>
       </div>
       <div class="card tono-ambar">
@@ -702,18 +745,22 @@ export function altaVerificacion(v) {
     <span class="dp-mensaje ${v.verifyClase}">${e(v.verifyMessage)}</span>`;
 }
 
+/* Resumen de lo capturado una vez validado el FORMATO de la cédula. Solo
+   repite lo que el usuario escribió: antes mostraba institución y año de
+   registro inventados por el navegador, como si vinieran del registro
+   oficial. Cuando se conecte el RNP, aquí van sus datos reales. */
 export function altaPanelCedula(v) {
   if (!v.verified) return "";
-  const dato = (titulo, valor) => `<div><dt>${e(titulo)}</dt><dd>${e(valor)}</dd></div>`;
+  const dato = (titulo, valor) => `<div><dt>${e(titulo)}</dt><dd>${e(valor || "—")}</dd></div>`;
   return `
     <div class="dp-panel-cedula">
-      <span class="badge seguimiento">Cédula válida</span>
+      <span class="badge espera">Formato válido</span>
       <dl class="dp-datos">
+        ${dato("Cédula capturada", v.verifyCedula)}
         ${dato("Titular", v.verifyHolder)}
-        ${dato("Título", v.verifyTitle)}
-        ${dato("Institución", v.verifyInstitution)}
-        ${dato("Año de registro", v.verifyYear)}
+        ${dato("Especialidad", v.verifySpecialty)}
       </dl>
+      <p class="dp-nota">Pendiente de confirmar contra el Registro Nacional de Profesionistas (SEP).</p>
     </div>`;
 }
 
@@ -880,7 +927,7 @@ export function pantallaAlta(v) {
     : encabezado({
         volver: "← Volver al directorio", accionVolver: "ir-inicio",
         titulo: "Alta de médico",
-        texto: "Registra tu consultorio en el directorio. La cédula profesional se valida contra el Registro Nacional de Profesionistas y la cédula fiscal (RFC) contra el padrón del SAT.",
+        texto: "Registra tu consultorio en el directorio. La solicitud queda en revisión y un Administrador la aprueba o la rechaza.",
       });
   if (v.registered) {
     return `
@@ -958,7 +1005,7 @@ export function pantallaAlta(v) {
         <div class="card-body dp-lateral">
           <div>
             <h3 class="dp-subtitulo">Validación de cédula</h3>
-            <p class="dp-texto">La consulta se hace contra el servicio de Cédula Profesional (SEP/RNP) por número de cédula. En esta demo la respuesta está simulada: cualquier número de 7 u 8 dígitos se valida.</p>
+            <p class="dp-texto">Por ahora solo se valida el <b>formato</b> del número (7 u 8 dígitos). La consulta al servicio de Cédula Profesional (SEP/RNP) todavía no está conectada, así que quien revise la solicitud debe confirmar la cédula por fuera antes de aprobarla.</p>
           </div>
           <div id="dp-alta-panel">${altaPanelCedula(v)}</div>
           <div class="dp-seccion-linea">

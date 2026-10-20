@@ -10,10 +10,14 @@
        libres los decide el servidor (GET /directorio-proveedores/{clave}/agenda),
        no un hash del navegador como antes.
 
-   SIGUE SIMULADO: la validación de la cédula profesional contra el RNP y el
-   panel de Métricas (no hay reseñas ni geolocalización todavía). Las listas
-   de especialidades/estados/municipios de aquí abajo son las del catálogo
-   base para los combos del alta y de la zona. */
+   NO HAY DATOS SIMULADOS. Todo lo que se muestra sale del padrón real, del
+   catálogo de especialidades o del catálogo de Entidad/Municipio. Con el
+   portal recién desplegado (padrón vacío) las pantallas se ven vacías a
+   propósito: es la verdad del sistema, no una falla.
+
+   Lo ÚNICO que falta conectar es la validación de la cédula profesional
+   contra el RNP de la SEP: hoy solo se valida el formato del número, y así
+   se le dice al usuario (ver altaVerificacion en vistas.js). */
 import { api } from "../core/api.js";
 
 /* Catálogo de especialidades (GET /directorio-proveedores/especialidades).
@@ -52,22 +56,8 @@ export function olvidarEspecialidadesKpi() {
   especialidadesKpi = null;
 }
 
-export const ESTADOS = [
-  { name: "Jalisco", municipios: ["Guadalajara", "Zapopan", "San Pedro Tlaquepaque", "Tonalá", "Puerto Vallarta"] },
-  { name: "Ciudad de México", municipios: ["Benito Juárez", "Cuauhtémoc", "Coyoacán", "Miguel Hidalgo", "Álvaro Obregón"] },
-  { name: "Nuevo León", municipios: ["Monterrey", "San Pedro Garza García", "Guadalupe", "Apodaca"] },
-  { name: "Yucatán", municipios: ["Mérida", "Progreso", "Valladolid"] },
-  { name: "Puebla", municipios: ["Puebla", "San Andrés Cholula", "Atlixco"] },
-  { name: "Querétaro", municipios: ["Querétaro", "El Marqués", "Corregidora"] }
-];
-
-export const NOMBRES = [
-  "Dra. Laura Méndez Ruiz", "Dr. Andrés Salcedo Vega", "Dra. Paulina Rentería Cruz", "Dr. Emilio Cárdenas Lara",
-  "Dra. Mariana Ochoa Beltrán", "Dr. Rodrigo Ibarra Solís", "Dra. Fernanda Zamora Ríos", "Dr. Héctor Peralta Muñoz",
-  "Dra. Claudia Barrios Nava", "Dr. Sergio Loera Fuentes", "Dra. Ana Sofía Treviño Gil", "Dr. Ignacio Robles Pardo",
-  "Dra. Verónica Aguilar Sáenz", "Dr. Julián Espinoza Mora", "Dra. Rebeca Villanueva Ponce", "Dr. Marco Delgado Ávila"
-];
-
+/* Rangos del filtro de precio. No son un dato, son los cortes del filtro:
+   se comparan contra el costo de consulta real de cada proveedor. */
 export const PRICE_OPTIONS = [
   { label: "Hasta $600", max: 600 }, { label: "Hasta $900", max: 900 },
   { label: "Hasta $1,200", max: 1200 }, { label: "Sin límite", max: 9999 }
@@ -75,21 +65,6 @@ export const PRICE_OPTIONS = [
 // Misma llave que el original: las búsquedas recientes se comparten con él
 // si alguna vez se abren en el mismo origen.
 export const RECENT_KEY = "portalProveedores.recientes";
-
-// Opciones fijas del editor del prototipo original (sus "props"), con sus
-// valores por defecto: Google Places sí sincroniza, cuadrícula compacta y
-// conteo visible en las tarjetas de especialidad.
-export const PROPS = { placesSync: true, gridDensity: "compacta", mostrarConteo: true };
-
-/* Hash FNV-1a de 32 bits: la base de todos los datos "aleatorios" (siempre
-   da lo mismo para la misma semilla). */
-export function hash(str) {
-  let h = 2166136261;
-  for (let i = 0; i < String(str).length; i++) { h ^= String(str).charCodeAt(i); h = Math.imul(h, 16777619); }
-  return Math.abs(h);
-}
-export const pick = (arr, seed, salt) => arr[hash(seed + "|" + salt) % arr.length];
-export const num = (seed, salt, min, max) => min + (hash(seed + "#" + salt) % (max - min + 1));
 
 /* Formulario de alta vacío (el de arranque y al que regresa "Registrar otro
    médico"). El domicilio va desglosado: es el del lugar DONDE DA LA
@@ -192,13 +167,11 @@ function mapearProveedor(row) {
     calleNumExtInt: row.calle_num_ext_int || "",
     colonia: row.colonia || "",
     schedule: row.horario || "Horario no especificado",
-    // Sin calificación ni distancia real todavía (no hay reseñas ni
-    // geolocalización) -- valores neutros para que ordenar/filtrar no truene.
-    ratingNum: 0, rating: "Sin calificación",
+    // Solo lo que el padrón trae de verdad. Ya no se inventan calificación,
+    // distancia ni "disponible hoy": no hay reseñas, ni geolocalización del
+    // usuario, ni agenda consultada en este punto.
     priceNum: Number.isFinite(costo) ? costo : 0,
     price: row.costo_consulta ? "$" + row.costo_consulta + " consulta" : "Costo no especificado",
-    distNum: 0, distance: "—",
-    hoy: true,
     tele: !!row.teleconsulta,
     convenio: row.convenio || "Sin convenio",
     phone: row.telefono || "",
@@ -208,8 +181,59 @@ function mapearProveedor(row) {
     longitud: row.longitud ?? null,
     source: esPortal ? ETIQUETA_FUERA_DE_LA_RED : ETIQUETA_DENTRO_DE_LA_RED,
     origen: esPortal ? "portal" : "catalogo",
-    fromPlaces: false,
   };
+}
+
+/* Cifras del padrón que ya se cargó, para los KPI de Métricas. Se cuentan
+   TODOS los renglones, traigan domicilio o no (las zonas sí dependen del
+   domicilio, ver zonasDelPadron). */
+export function resumenDelPadron() {
+  const lista = catalogoReal || [];
+  const especialidades = new Set();
+  let dentro = 0;
+  let fuera = 0;
+  lista.forEach(d => {
+    if (d.origen === "portal") fuera += 1;
+    else dentro += 1;
+    if (d.clEspecialidad) especialidades.add(d.clEspecialidad);
+  });
+  return {
+    total: lista.length,
+    dentroDeRed: dentro,
+    fueraDeRed: fuera,
+    especialidadesConProveedor: especialidades.size,
+  };
+}
+
+/* ---------- Zonas del padrón ----------
+   La pantalla de Zona ofrece los estados y municipios DONDE DE VERDAD HAY
+   proveedores, calculados del padrón que ya se cargó. Antes eran seis
+   estados fijos en el código con municipios inventados, así que se podía
+   elegir una zona en la que nunca hubo nadie.
+
+   Con el portal recién desplegado esto devuelve [] y la pantalla lo dice:
+   no hay zonas porque no hay padrón todavía. */
+export function zonasDelPadron(clEspecialidad) {
+  const porEstado = new Map();
+  (catalogoReal || []).forEach(d => {
+    if (clEspecialidad && d.clEspecialidad !== clEspecialidad) return;
+    const estado = (d.estado || "").trim();
+    const municipio = (d.municipio || "").trim();
+    if (!estado || !municipio) return;
+    if (!porEstado.has(estado)) porEstado.set(estado, new Map());
+    const municipios = porEstado.get(estado);
+    municipios.set(municipio, (municipios.get(municipio) || 0) + 1);
+  });
+
+  return [...porEstado.entries()]
+    .map(([name, municipios]) => ({
+      name,
+      total: [...municipios.values()].reduce((a, b) => a + b, 0),
+      municipios: [...municipios.entries()]
+        .map(([nombre, total]) => ({ name: nombre, total }))
+        .sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /* Trae el catálogo real una vez (ver pantallas/directorio-proveedores.js,
@@ -233,8 +257,8 @@ export async function cargarCatalogoReal() {
    ahí el MISMO renglón pasa a "Dentro de la red" conservando su clave, así
    que sus citas no se pierden.
 
-   Lo único que sigue simulado aquí es la validación de la cédula contra el
-   Registro Nacional de Profesionistas. */
+   Lo único que falta conectar es la validación de la cédula contra el
+   Registro Nacional de Profesionistas: hoy solo se valida el formato. */
 export async function cargarSolicitudesReales() {
   try {
     const filas = await api("/solicitudes-alta-medico");
@@ -351,21 +375,26 @@ export function raw(s) {
   return { list: [], label: "", sub: "" };
 }
 
-/* Lista ya filtrada y ordenada (lo que se ve en Resultados y en el mapa). */
+/* Lista ya filtrada y ordenada (lo que se ve en Resultados y en el mapa).
+
+   Solo quedan los filtros y los órdenes que se pueden resolver con datos
+   reales del padrón. Se quitaron "Disponible hoy" (el padrón no dice la
+   disponibilidad; eso lo sabe la agenda, que se consulta al abrir la ficha)
+   y "Solo directorio verificado" (marcaba los importados de Google Places,
+   que nunca existieron). Ordenar por calificación o por cercanía tampoco
+   tiene con qué: no hay reseñas ni geolocalización. */
 export function visible(s) {
   const f = s.filters;
   const list = raw(s).list.filter(d =>
     d.priceNum <= f.maxPrice &&
-    (!f.hoy || d.hoy) && (!f.tele || d.tele) &&
-    (!f.seguro || d.convenio !== "Sin convenio") &&
-    (!f.soloVerificados || !d.fromPlaces)
+    (!f.tele || d.tele) &&
+    (!f.seguro || d.convenio !== "Sin convenio")
   );
   const sorters = {
-    rating: (a, b) => b.ratingNum - a.ratingNum,
+    nombre: (a, b) => a.name.localeCompare(b.name),
     precio: (a, b) => a.priceNum - b.priceNum,
-    cercania: (a, b) => a.distNum - b.distNum
   };
-  return list.slice().sort(sorters[f.orden]);
+  return list.slice().sort(sorters[f.orden] || sorters.nombre);
 }
 
 /* ---------- Búsqueda fuera de la red (DENUE del INEGI) ----------

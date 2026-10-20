@@ -13,8 +13,10 @@
        clave (PRV-000001) y ya se le pueden agendar citas.
      - Citas: se guardan contra esa clave y los horarios libres los decide
        el servidor, así que dos personas no pueden tomar el mismo.
-   Lo único que sigue simulado es la validación de la cédula contra el RNP
-   y el panel de Métricas (no hay reseñas ni geolocalización todavía).
+     - Métricas: se calculan del padrón cargado.
+   NO queda nada simulado en la pantalla: lo único pendiente de conectar es
+   la validación de la cédula contra el RNP de la SEP, y mientras tanto solo
+   se valida el formato y así se le informa al usuario.
 
    Sub-pantallas internas (por estado, no por hash): home, zone, results,
    compare, metrics, admin (Solicitudes) y register (Alta de médico), más la
@@ -23,7 +25,7 @@
    js/directorio/vistas.js. */
 import { crearModal } from "../componentes/modal.js";
 import {
-  RECENT_KEY, PROPS,
+  RECENT_KEY,
   visible, formularioVacio, cargarCatalogoReal,
   cargarSolicitudesReales, enviarSolicitudAlta, actualizarEstatusSolicitud,
   editarSolicitudAlta,
@@ -64,9 +66,10 @@ function estadoInicial() {
     // el conteo de la tarjeta y los resultados coincidan.
     specialtyId: null,
     query: "", searchTerm: null, recent: [],
-    placesSynced: false, syncing: false,
     view: "list",
-    filters: { maxPrice: 9999, hoy: false, tele: false, seguro: false, soloVerificados: false, orden: "rating" },
+    // Solo los filtros que se resuelven con datos reales del padrón (ver
+    // visible() en datos.js).
+    filters: { maxPrice: 9999, tele: false, seguro: false, orden: "nombre" },
     compare: [],
     detail: null, bookingStep: "idle", bookingDay: null, bookingSlot: null,
     // Agenda real del médico abierto (la manda el servidor, ver cargarAgenda).
@@ -233,7 +236,9 @@ function enviarMapa() {
     type: "zona", estado: estado.estado, municipio: estado.municipio,
     doctors: visible(estado).map(d => ({
       id: d.id, name: d.name, specialty: d.specialty, clinic: d.clinic, municipio: d.municipio,
-      price: d.price, rating: d.rating, fromPlaces: d.fromPlaces,
+      price: d.price, origen: d.origen,
+      // Coordenadas reales del padrón (null si el proveedor no las trae).
+      latitud: d.latitud, longitud: d.longitud,
     })),
   }, location.origin);
 }
@@ -265,32 +270,19 @@ function buscar(termino) {
   irA({ screen: "results", searchTerm: termino, query: termino, specialty: null });
 }
 
-function sincronizarPlaces() {
-  if (!PROPS.placesSync) return;
-  if (estado.syncing || estado.placesSynced) return;
-  irA({ syncing: true });
-  const g = generacion;
-  setTimeout(() => {
-    if (g !== generacion) return;
-    irA({ syncing: false, placesSynced: true });
-  }, 1400);
-}
-
+/* Valida el FORMATO de la cédula (7 u 8 dígitos). No consulta el Registro
+   Nacional de Profesionistas: esa integración está pendiente, y la pantalla
+   lo dice en vez de dar por verificada la cédula. */
 function verificarCedula() {
   const c = (estado.form.cedula || "").trim();
-  if (!/^\d{7,8}$/.test(c)) { irA({ cedulaStatus: "invalid" }); return; }
-  irA({ cedulaStatus: "loading" });
-  const g = generacion;
-  setTimeout(() => {
-    if (g !== generacion) return;
-    irA({ cedulaStatus: "valid" });
-  }, 1200);
+  // Sin espera artificial: la validación es local e inmediata. Antes había
+  // un setTimeout de 1.2 s que simulaba la consulta a un registro externo.
+  irA({ cedulaStatus: /^\d{7,8}$/.test(c) ? "valid" : "invalid" });
 }
 
-/* La solicitud SÍ se guarda de verdad en el portal (ver
-   enviarSolicitudAlta en datos.js) -- la validación de cédula de arriba
-   sigue siendo simulada, pero el registro y su folio ya no se pierden al
-   recargar la página.
+/* La solicitud se guarda de verdad en el portal (ver enviarSolicitudAlta en
+   datos.js). De la cédula solo se validó el formato (ver verificarCedula):
+   la confirmación contra el RNP sigue pendiente.
 
    El mismo botón guarda los cambios cuando se entró por "Editar"
    (estado.editandoFolio), en vez de crear una solicitud nueva. */
@@ -525,7 +517,6 @@ const ACCIONES = {
   // Inicio y zona
   "buscar": () => buscar(estado.query),
   "buscar-termino": (el) => buscar(el.dataset.valor),
-  "sincronizar": sincronizarPlaces,
   "elegir-especialidad": (el) => elegirEspecialidad(el.dataset.valor, el.dataset.id),
   "elegir-estado": (el) => irA({ estado: el.dataset.valor, municipio: null }),
   "elegir-municipio": (el) => irA({ screen: "results", municipio: el.dataset.valor, searchTerm: null }),
@@ -534,7 +525,7 @@ const ACCIONES = {
   "vista-lista": () => irA({ view: "list" }),
   "vista-mapa": () => irA({ view: "map" }),
   "precio": (el) => { ponerFiltros({ maxPrice: Number(el.dataset.valor) }); pintar(); },
-  "limpiar-filtros": () => { ponerFiltros({ maxPrice: 9999, hoy: false, tele: false, seguro: false, soloVerificados: false }); pintar(); },
+  "limpiar-filtros": () => { ponerFiltros({ maxPrice: 9999, tele: false, seguro: false }); pintar(); },
   "ficha": (el) => {
     const x = medicoVisible(el.dataset.id);
     if (x) irA({ detail: x, bookingStep: "idle", bookingDay: null, bookingSlot: null, agenda: [], bookingFolio: null });

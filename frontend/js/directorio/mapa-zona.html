@@ -48,24 +48,11 @@
 <div id="map"></div>
 <div id="fallback">No fue posible cargar el mapa base. Revisa la conexión y vuelve a abrir la vista de mapa.</div>
 <script>
-const COORDS = {
-  "Guadalajara": [20.6767, -103.3475], "Zapopan": [20.7214, -103.3918], "San Pedro Tlaquepaque": [20.6409, -103.3134],
-  "Tonalá": [20.6242, -103.2337], "Puerto Vallarta": [20.6534, -105.2253],
-  "Benito Juárez": [19.3727, -99.1588], "Cuauhtémoc": [19.4326, -99.1450], "Coyoacán": [19.3467, -99.1617],
-  "Miguel Hidalgo": [19.4284, -99.1955], "Álvaro Obregón": [19.3595, -99.2405],
-  "Monterrey": [25.6866, -100.3161], "San Pedro Garza García": [25.6560, -100.4023], "Guadalupe": [25.6775, -100.2597],
-  "Apodaca": [25.7815, -100.1885],
-  "Mérida": [20.9674, -89.5926], "Progreso": [21.2833, -89.6667], "Valladolid": [20.6896, -88.2011],
-  "Puebla": [19.0414, -98.2063], "San Andrés Cholula": [19.0333, -98.3061], "Atlixco": [18.9124, -98.4344],
-  "Querétaro": [20.5888, -100.3899], "El Marqués": [20.6167, -100.2833], "Corregidora": [20.5333, -100.4333]
-};
-
-// Mismo hash que js/directorio/datos.js: dispersa los pines alrededor del municipio.
-function hash(str) {
-  let h = 2166136261;
-  for (let i = 0; i < String(str).length; i++) { h ^= String(str).charCodeAt(i); h = Math.imul(h, 16777619); }
-  return Math.abs(h);
-}
+// El mapa solo ubica a los proveedores que traen coordenadas REALES en el
+// padrón (columnas Latitud/Longitud de la carga). Antes había aquí una tabla
+// de coordenadas por municipio y los pines se dispersaban con un hash
+// alrededor de ese punto: el mapa se veía lleno, pero ninguna posición
+// correspondía al consultorio.
 
 // Los textos del popup se meten como HTML: se escapan antes.
 function escapar(valor) {
@@ -102,28 +89,49 @@ function boot() {
   setTimeout(() => map.invalidateSize(), 250);
 }
 
+function coordenada(valor) {
+  const n = typeof valor === "number" ? valor : parseFloat(valor);
+  return Number.isFinite(n) ? n : null;
+}
+
 function render(payload) {
   if (!map) { pending = payload; return; }
   layer.clearLayers();
   const list = Array.isArray(payload.doctors) ? payload.doctors : [];
-  const fallback = COORDS[payload.municipio] || [23.2, -100.5];
   const pts = [];
+  let sinCoordenadas = 0;
+
   list.forEach((d, i) => {
-    const base = COORDS[d.municipio] || fallback;
-    const h = hash(d.id || (d.name + i));
-    const lat = base[0] + ((h % 200) - 100) / 9000;
-    const lng = base[1] + (((h >> 8) % 200) - 100) / 9000;
+    const lat = coordenada(d.latitud);
+    const lng = coordenada(d.longitud);
+    // Sin coordenadas no se dibuja: es preferible un mapa con menos pines a
+    // uno que los coloca donde no están.
+    if (lat === null || lng === null) { sinCoordenadas++; return; }
     pts.push([lat, lng]);
+    const fueraDeRed = d.origen === "portal";
     L.marker([lat, lng], {
-      icon: L.divIcon({ className: "", iconSize: [26, 26], html: '<div class="pin' + (d.fromPlaces ? " places" : "") + '">' + (i + 1) + "</div>" })
+      icon: L.divIcon({ className: "", iconSize: [26, 26], html: '<div class="pin' + (fueraDeRed ? " places" : "") + '">' + (i + 1) + "</div>" })
     }).addTo(layer).bindPopup(
-      "<b>" + escapar(d.name) + "</b><br>" + escapar(d.specialty) + "<br>" + escapar(d.clinic) + "<br>" + escapar(d.price || "") + " · " + escapar(d.rating || "")
+      "<b>" + escapar(d.name) + "</b><br>" + escapar(d.specialty) + "<br>" + escapar(d.clinic) + "<br>" + escapar(d.price || "")
     );
   });
+
+  const aviso = document.getElementById("fallback");
+  if (!pts.length) {
+    aviso.textContent = list.length
+      ? "Ninguno de los " + list.length + " proveedores de esta búsqueda tiene coordenadas en el padrón, así que no se pueden ubicar en el mapa."
+      : "No hay proveedores que mostrar en el mapa.";
+    aviso.style.display = "flex";
+  } else {
+    aviso.style.display = "none";
+    if (sinCoordenadas) {
+      aviso.textContent = sinCoordenadas + " proveedor(es) sin coordenadas en el padrón no aparecen en el mapa.";
+    }
+  }
+
   map.invalidateSize();
   if (pts.length > 1) map.fitBounds(L.latLngBounds(pts).pad(0.4));
-  else if (pts.length === 1) map.setView(pts[0], 13);
-  else if (COORDS[payload.municipio]) map.setView(COORDS[payload.municipio], 12);
+  else if (pts.length === 1) map.setView(pts[0], 14);
 }
 
 // Solo se aceptan mensajes del propio portal (mismo origen).
