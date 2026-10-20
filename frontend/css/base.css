@@ -120,8 +120,16 @@ body{
    en pantallas/expedientes.js). Tabla compacta de 5 columnas (Expediente,
    Paciente, Subservicio, Entidad, Municipio) -- letra chica pero legible,
    cada dato recortado con "..." en vez de amontonarse o partirse en varias
-   líneas. Máximo ~5 filas visibles, de ahí para arriba scroll dentro de la
-   misma alerta en vez de que crezca sin límite. */
+   líneas. Máximo 5 filas visibles, de ahí para arriba scroll dentro de la
+   misma alerta en vez de que crezca sin límite.
+
+   OJO: el tope exacto de esas 5 filas lo calcula limitarAltoDeLista() en
+   js/componentes/alerta-flotante.js, midiendo el alto ya renderizado. El
+   max-height de aquí es solo un respaldo por si el JS no alcanzara a
+   correr -- NO es el límite real. Cuando era el límite real, cada cambio de
+   tipografía o de columnas lo desfasaba en silencio: con la tabla a 11px
+   siete filas median 154px y cabían dentro de los 170px, así que el scroll
+   dejaba de salir aunque la regla pedía 5. */
 .alerta-flotante-lista{
   display:grid;grid-template-columns:minmax(52px,.7fr) minmax(80px,1.3fr) minmax(80px,1.2fr) minmax(62px,.9fr) minmax(62px,.9fr);
   column-gap:10px;row-gap:5px;margin:6px 0 0;padding:0;font-size:11px;max-height:170px;overflow-y:auto;

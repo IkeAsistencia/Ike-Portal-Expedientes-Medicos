@@ -8,6 +8,44 @@
    bloquea la pantalla, no tiene botón de "aceptar". */
 let audioCtx = null;
 
+/* Cuántos expedientes se ven sin hacer scroll dentro de la alerta (lo pidió
+   el usuario así). De ahí para arriba la lista hace scroll en vez de crecer
+   y tapar la pantalla. */
+const MAX_FILAS_VISIBLES = 5;
+
+/* Deja la lista a la altura EXACTA de MAX_FILAS_VISIBLES, midiendo dónde
+   empieza la fila que sobra.
+
+   Por qué medido y no un max-height fijo en el CSS: ese tope era un número
+   en píxeles (155 -> 200 -> 340 -> 170 a lo largo de los rediseños) que
+   dependía del alto real del renglón. Al compactar la tabla a 11px las 7
+   filas pasaron a medir 154px y cabían dentro del tope de 170px, así que el
+   scroll dejó de aparecer: la regla decía "5 filas" pero el CSS permitía 8.
+   Midiendo la geometría ya renderizada, el límite sigue siendo 5 aunque
+   cambien la tipografía, el interlineado o el número de columnas. */
+function limitarAltoDeLista(el, maxFilas = MAX_FILAS_VISIBLES) {
+  const lista = el.querySelector(".alerta-flotante-lista");
+  // Contraída está en display:none: medir ahí daría 0 (se vuelve a medir al
+  // expandirla).
+  if (!lista || !lista.offsetParent) return;
+
+  lista.style.maxHeight = "";  // se mide sin tope para saber el alto natural
+  const filas = Array.from(lista.querySelectorAll(".alerta-flotante-fila"))
+    .filter(f => !f.classList.contains("alerta-flotante-encabezado"));
+  if (filas.length <= maxFilas) return;  // caben todas: no hace falta scroll
+
+  // Las filas son display:contents (no tienen caja propia), así que se mide
+  // su primera celda.
+  const primeraQueSobra = filas[maxFilas]?.firstElementChild;
+  if (!primeraQueSobra) return;
+
+  // Si además hay scroll horizontal, su barra se come alto por dentro: se le
+  // suma para que las 5 filas se sigan viendo completas.
+  const altoBarraHorizontal = lista.offsetHeight - lista.clientHeight;
+  const alto = primeraQueSobra.getBoundingClientRect().top - lista.getBoundingClientRect().top;
+  lista.style.maxHeight = Math.round(alto + altoBarraHorizontal) + "px";
+}
+
 // Posición (desplazamiento horizontal en px) y estado de contraído que el
 // usuario le haya dado a cada alerta -- se recuerdan mientras dure la sesión
 // (sobreviven a que actualizarAlertaPersistente reconstruya el contenido),
@@ -134,6 +172,10 @@ export function actualizarAlertaPersistente(id, mensajeHtml, { tipo = "", sonar 
     ${botonColapsar}
   `;
 
+  // Después de pintar el contenido: el tope de filas visibles se calcula de
+  // lo ya renderizado (ver limitarAltoDeLista).
+  limitarAltoDeLista(el);
+
   if (alClicLink) {
     el.querySelectorAll(".alerta-flotante-link").forEach(a => {
       a.addEventListener("click", (e) => {
@@ -152,6 +194,9 @@ export function actualizarAlertaPersistente(id, mensajeHtml, { tipo = "", sonar 
       el.classList.toggle("alerta-flotante-colapsada", ahoraColapsada);
       e.currentTarget.textContent = ahoraColapsada ? "▸" : "▾";
       e.currentTarget.title = ahoraColapsada ? "Expandir" : "Contraer";
+      // Al expandir hay que volver a medir: mientras estuvo contraída la
+      // lista no tenía caja y no se pudo calcular su tope.
+      if (!ahoraColapsada) limitarAltoDeLista(el);
     });
   }
 
