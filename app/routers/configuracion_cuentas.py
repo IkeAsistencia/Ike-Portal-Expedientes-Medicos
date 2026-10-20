@@ -5,7 +5,7 @@ from app.core.security import usuario_actual
 from app.repositories import accesos_repo, cuentas_config_repo
 
 
-def _requerir_no_cabina_ni_proveedor(usuario: dict = Depends(usuario_actual)) -> dict:
+def _requerir_administrador(usuario: dict = Depends(usuario_actual)) -> dict:
     """Ver app.repositories.accesos_repo.verificar_rol_administrador: la regla
     vive ahí para que REST y GraphQL la compartan."""
     try:
@@ -18,7 +18,7 @@ def _requerir_no_cabina_ni_proveedor(usuario: dict = Depends(usuario_actual)) ->
 router = APIRouter(
     prefix="/configuracion/cuentas",
     tags=["Configuración Cuentas"],
-    dependencies=[Depends(_requerir_no_cabina_ni_proveedor)],
+    dependencies=[Depends(_requerir_administrador)],
 )
 
 

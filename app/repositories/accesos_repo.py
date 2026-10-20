@@ -61,16 +61,21 @@ _PBKDF2_ITERACIONES = 200_000
 
 def verificar_rol_administrador(usuario: dict) -> None:
     """
-    Configuración Cuentas es exclusiva de Administrador (Cabina y Proveedor
-    ya no la ven). Una sesión SISE legada (sin 'perfil' en el token) se
-    deja pasar para no romper lo ya existente (pruebas/GraphQL).
+    Exige perfil Administrador. Lo usan Configuración Cuentas (REST y
+    GraphQL) y la carga del catálogo de proveedores; está centralizado aquí
+    para que todas esas vías exijan exactamente la misma regla.
 
-    Lanza ValueError si el usuario no tiene el rol permitido. Centralizado
-    aquí para que REST (app/routers/configuracion_cuentas.py) y GraphQL
-    (app/graphql/mutation.py) exijan exactamente la misma regla.
+    Es una LISTA BLANCA (perfil == Administrador), igual que
+    app/routers/admin_accesos.py:requerir_administrador. Antes era una lista
+    negra (rechazaba Cabina y Proveedor), así que una sesión SISE legada
+    -- cuyo token no trae 'perfil' -- pasaba de largo. Eso dejaba la puerta
+    abierta justo en las dos vías que escriben configuración global del
+    portal, así que se cerró (revisión de seguridad del 19-oct-2026).
+
+    Lanza ValueError si el usuario no tiene el rol permitido.
     """
-    if usuario.get("perfil") in (PERFIL_CABINA, PERFIL_PROVEEDOR):
-        raise ValueError("Configuración Cuentas es exclusiva del perfil Administrador.")
+    if usuario.get("perfil") != PERFIL_ADMINISTRADOR:
+        raise ValueError("Esta sección es exclusiva del perfil Administrador.")
 
 
 class RfcNoAutorizado(Exception):

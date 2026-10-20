@@ -347,3 +347,141 @@ detrás.
 `portal-promedico-20261016.zip` (146 archivos, árbol de `git archive` de
 la rama `dev` menos los 5 archivos del Directorio de Proveedores) --
 listo para subir a SGI y solicitar la siguiente corrida de Checkmarx.
+
+---
+
+# Autorrevisión previa a nueva solicitud a SGI — 2026-10-19
+
+Dos revisiones propias antes de armar el paquete, porque desde el escaneo
+del 2026-10-13 entró bastante código nuevo que nunca ha pasado por
+Checkmarx: el Directorio de Proveedores ya con lógica real (padrón con
+clave propia, altas, citas y carga de Excel), el catálogo de Entidad y
+Municipio contra la base real, y el módulo de Cuentas (grupo del menú,
+pantalla "Agregar cuenta" renovada y catálogo compartido entre Expedientes
+y Cuentas Especiales).
+
+## Resumen
+
+| # | Severidad | Archivo | Vulnerabilidad | Confianza | Estado |
+|---|-----------|---------|----------------|-----------|--------|
+| 1 | 🟡 MEDIUM | `app/routers/directorio_proveedores.py` (82-87) | Cancelar cita no valida propiedad; los folios son consecutivos | 9/10 | **Pendiente** (decisión del usuario) |
+| 2 | 🟡 MEDIUM | `app/routers/directorio_proveedores.py` (49-51) | `GET /citas` sin filtro devuelve todas las citas del portal | 8/10 | **Pendiente** (decisión del usuario) |
+| 3 | 🟡 MEDIUM | `app/routers/solicitudes_alta_medico.py` (60-70) | Un perfil Proveedor puede aprobar su propia alta de médico | 8/10 | **Corregido** |
+| 4 | ⚪ LOW | `app/repositories/accesos_repo.py` (62-73) | Guard de Administrador por lista negra: una sesión SISE legada (token sin `perfil`) pasaba de largo | 7/10 | **Corregido** |
+
+Sin hallazgos de inyección SQL ni XSS. Todo el acceso a SQLite y a SQL
+Server usa parámetros vinculados (lo único interpolado en los f-strings
+son nombres de tabla/columna constantes del propio código), y el frontend
+escapa con `escapeHtml` todo lo que viene del Excel o del alta antes de
+meterlo al DOM.
+
+## Hallazgos 1 a 3 — Control de acceso en el Directorio de Proveedores
+
+Los dos de **citas** (1 y 2) quedan sin corregir a propósito (decisión del
+usuario, 2026-10-19): se van a atender en un cambio aparte. Se documentan
+aquí para que el reporte de Checkmarx se pueda triar sin volver a
+analizarlos. El 3 ya está corregido.
+
+1. `POST /directorio-proveedores/citas/{folio}/cancelar` identifica la cita
+   solo por `folio` y no compara contra `rfc_agendo` ni el perfil. Como
+   `citas_proveedor_repo._siguiente_folio()` genera folios consecutivos
+   (`CITA-00001`, `CITA-00002`, ...), no hay nada que adivinar: cualquier
+   perfil Proveedor puede iterar el rango y cancelar citas ajenas.
+2. `GET /directorio-proveedores/citas` sin `clave_proveedor` devuelve todas
+   las citas del portal, incluyendo nombre del paciente, médico y
+   `rfc_agendo`. El frontend todavía no consume ese endpoint.
+El hallazgo 3 **ya se corrigió** (ver más abajo); los dos de citas siguen
+abiertos.
+
+3. `POST /solicitudes-alta-medico/{folio}/estatus` solo exigía "no Cabina",
+   así que el mismo perfil Proveedor que crea la solicitud podía aprobarla,
+   y al aprobarse se inserta un proveedor real en el padrón. La otra vía de
+   escritura a esa misma tabla (la carga de Excel) sí exige Administrador.
+
+### Corrección del hallazgo 3 (2026-10-19)
+
+Resolver una solicitud de alta pasó a ser exclusivo de Administrador
+(`_requerir_administrador` en `app/routers/solicitudes_alta_medico.py`,
+apoyado en el mismo `verificar_rol_administrador` ya endurecido en el
+hallazgo 4). Capturar un alta sigue abierto a cualquier perfil menos
+Cabina; lo que se cerró es **aprobarla o rechazarla**.
+
+En el mismo cambio se agregó el botón "Editar" (también exclusivo de
+Administrador) para corregir una solicitud **sin resolver** -- en revisión o
+con la cédula profesional no localizada, ver `ESTATUS_EDITABLES`. Editar
+una ya aprobada o rechazada responde **409**: aprobada ya creó al proveedor
+en el padrón con su clave y puede tener citas, así que editarla dejaría los
+dos lados en desacuerdo. La restricción se valida en el servidor, no solo
+ocultando el botón.
+
+Pruebas de regresión: `test_proveedor_no_puede_aprobar_su_propia_solicitud`,
+`test_proveedor_no_puede_rechazar`, `test_proveedor_no_puede_editar_una_solicitud`,
+`test_administrador_puede_editar_una_solicitud_en_revision`,
+`test_administrador_puede_editar_una_con_cedula_no_localizada`,
+`test_no_se_edita_una_solicitud_ya_aprobada`,
+`test_no_se_edita_una_solicitud_ya_rechazada`,
+`test_marcar_cedula_no_localizada_no_da_de_alta_en_el_padron`,
+`test_editar_folio_inexistente_regresa_404` y `test_editar_rechaza_cabina`.
+
+## Hallazgo 4 — Guard de Administrador por lista negra (CORREGIDO)
+
+**Archivos:** `app/repositories/accesos_repo.py`, `app/routers/configuracion_cuentas.py`
+
+**Problema:** `verificar_rol_administrador()` rechazaba los perfiles Cabina
+y Proveedor, pero dejaba pasar cualquier token **sin** el campo `perfil` --
+que es justo lo que emite el login legado de SISE (`POST /auth/login`). El
+resto de secciones de Administrador usa una lista blanca
+(`admin_accesos.requerir_administrador`, `perfil == 1`), así que había dos
+criterios distintos para el mismo privilegio. Las tres vías afectadas
+escriben configuración global del portal:
+
+- `/configuracion/cuentas` (REST) -- la pantalla "Agregar cuenta", que
+  además acaba de dejar de estar oculta y entró al menú.
+- `/proveedores-catalogo` (REST) -- la carga del Excel del padrón.
+- `agregarCuenta` / `eliminarCuenta` / `limpiarCuentasConfiguradas` (GraphQL).
+
+No era explotable hoy porque `LOGIN_LEGADO_HABILITADO` está apagado por
+default, pero bastaba encenderlo para abrir las tres.
+
+**Remediación aplicada:** `verificar_rol_administrador()` pasó a lista
+blanca (`perfil != PERFIL_ADMINISTRADOR` -> `ValueError`). Al estar
+centralizada, el cambio cierra los cinco puntos de uso a la vez. Se
+renombró `_requerir_no_cabina_ni_proveedor` a `_requerir_administrador` en
+`configuracion_cuentas.py` para que el nombre diga lo que hace.
+
+**Pruebas de regresión:** `test_configuracion_cuentas_rechaza_sesion_sin_perfil`
+y `test_carga_del_catalogo_de_proveedores_rechaza_sesion_sin_perfil`. Las
+dos pruebas que usaban la sesión legada para estos endpoints
+(`test_configuracion_cuentas_ciclo_completo` en `test_smoke.py` y en
+`test_graphql.py`) pasaron a usar un token de Administrador.
+
+## Falsos positivos esperables en Checkmarx
+
+Revisados uno por uno; en todos lo interpolado son constantes del propio
+código y los datos del usuario viajan como parámetros:
+
+| Archivo | Qué va a marcar | Por qué no aplica |
+|---|---|---|
+| `app/db/connection.py` (81-82) | `f"EXEC {sp_name} {assignments}"` | Interpola el nombre del SP y los nombres de parámetro (literales en el código); los valores van con `?` |
+| `app/repositories/proveedores_repo.py` (100-103, 126) | `f"INSERT/UPDATE ..."` | Las columnas salen de la tupla constante `_CAMPOS_DATOS`; los valores van con parámetros nombrados |
+| `app/repositories/solicitudes_alta_medico_repo.py` (42-45) | `f"INSERT ..."` | Igual, con `_CAMPOS_SOLICITUD` |
+| `app/db/local_store.py` (309, 340) | `f"ALTER TABLE ... {columna}"`, `f"DROP TABLE {tabla}"` | Nombres de tabla/columna de tuplas literales de la migración |
+
+## Validación
+
+- `pytest tests` — **191 pruebas en verde** (incluidas las 2 de regresión
+  del hallazgo 4 y las 10 del hallazgo 3).
+- Verificación en vivo del guard, por perfil y por vía: Administrador
+  responde 200 y Cabina, Proveedor y la sesión legada sin `perfil`
+  responden 403 en `/configuracion/cuentas` (GET y POST),
+  `/proveedores-catalogo` y `/admin/cuentas-etiquetas`; la mutation
+  `agregarCuenta` de GraphQL bloquea igual a la sesión legada.
+
+## Paquete generado
+
+`portal-promedico-security-scan_20261019.zip` (142 archivos, árbol
+versionado de la rama `dir-medicos` menos `.gitignore`, `.gitattributes`,
+`dev_server_datos_prueba.py` y `prompts/`). Incluye el módulo de Cuentas
+recién integrado desde `cuentas-color` y el Directorio de Proveedores ya
+con lógica real -- a diferencia del paquete del 2026-10-16, donde se
+excluyó por ser todavía una maqueta.

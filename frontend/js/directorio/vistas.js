@@ -8,6 +8,13 @@
    pasa por escapeHtml; los clics se resuelven por delegación con
    data-accion (ver pantallas/directorio-proveedores.js). */
 import { escapeHtml as e } from "../core/formato.js";
+import { esPerfilAdministrador } from "../core/sesion.js";
+
+/* Estatus en los que una solicitud de alta todavía se puede corregir --
+   mismo criterio que ESTATUS_EDITABLES en
+   app/repositories/solicitudes_alta_medico_repo.py (el backend lo exige
+   igual: editar una ya resuelta responde 409). */
+const ESTATUS_EDITABLES = ["En revisión", "Cédula no localizada"];
 import { ICONOS } from "../componentes/iconos.js";
 import {
   SPECIALTIES, ESTADOS, PRICE_OPTIONS, PROPS,
@@ -61,6 +68,7 @@ export function calcular(s) {
   const d = s.detail;
   const vs = s.cedulaStatus;
   const compareItems = visible(s).filter(x => s.compare.indexOf(x.id) >= 0);
+  const esAdministrador = esPerfilAdministrador();
 
   const coverageRaw = ESTADOS.map(x => ({ name: x.name, total: x.municipios.reduce((acc, m) => acc + num(x.name + m, "cov", 12, 68), 0) }));
   const maxCov = Math.max.apply(null, coverageRaw.map(c => c.total));
@@ -181,12 +189,25 @@ export function calcular(s) {
       // La clave que le tocó al aprobarse: es con la que ya se le pueden
       // agendar citas, y la conserva aunque después llegue en la carga.
       claveProveedor: r.claveProveedor || "—",
+      // Revisar una solicitud (aprobar, rechazar o corregirla antes) es
+      // exclusivo de Administrador; el backend lo exige igual, esto solo
+      // evita mostrar botones que iban a responder 403.
+      puedeResolver: esAdministrador,
+      // Editar solo mientras nadie la haya resuelto -- es decir, mientras
+      // siga en revisión o su cédula profesional no se haya localizado en
+      // el registro, que es el caso que de verdad hay que poder corregir.
+      // Ya aprobada, el proveedor existe en el padrón con su clave y puede
+      // tener citas (ver ESTATUS_EDITABLES en el repositorio).
+      puedeEditar: esAdministrador && ESTATUS_EDITABLES.includes(r.status),
       statusClass: r.status === "Aprobada" || r.status === "Validada" ? "activo" : r.status === "Rechazada" || r.status === "Cédula no localizada" ? "inactivo" : "pendiente",
     })),
 
-    // Alta de médico
+    // Alta de médico (la misma pantalla sirve para capturar un alta nueva y
+    // para corregir una solicitud en revisión -- ver editandoFolio).
     registered: !!s.registered,
     regName: s.registered ? s.registered.name : "", regFolio: s.registered ? s.registered.folio : "",
+    editando: !!s.editandoFolio,
+    editandoFolio: s.editandoFolio || "",
     form: s.form,
     formEntidades: entidadesAltaCache(),
     formMunicipios: municipiosAltaCache(s.form.estado),
@@ -198,7 +219,9 @@ export function calcular(s) {
     verifyTitle: "Médico Cirujano y Partero · " + s.form.specialty,
     verifyInstitution: pick(["Universidad de Guadalajara", "UNAM", "UANL", "Universidad Autónoma de Yucatán", "BUAP"], s.form.cedula || "x", "u"),
     verifyYear: String(num(s.form.cedula || "x", "y", 1996, 2019)),
-    submitNote: vs === "valid" ? "Cédula validada. Puedes enviar la solicitud." : "Verifica la cédula profesional antes de enviar.",
+    submitNote: vs === "valid"
+      ? (s.editandoFolio ? "Cédula validada. Puedes guardar los cambios." : "Cédula validada. Puedes enviar la solicitud.")
+      : (s.editandoFolio ? "Cambiaste la cédula: vuelve a verificarla antes de guardar." : "Verifica la cédula profesional antes de enviar."),
 
     footerCount: s.placesSynced ? "Fuentes: directorio interno + Google Places" : "Fuente: directorio interno",
   };
@@ -545,7 +568,10 @@ export function pantallaSolicitudes(v) {
   return `
     ${encabezado({
       volver: "← Volver al directorio", accionVolver: "ir-inicio",
-      titulo: "Solicitudes de alta", texto: "Validación de cédula profesional (RNP) y cédula fiscal (SAT) por solicitud.",
+      titulo: "Solicitudes de alta",
+      texto: "Validación de cédula profesional (RNP) y cédula fiscal (SAT) por solicitud. "
+        + "Aprobar, rechazar y corregir una solicitud es exclusivo del perfil Administrador; "
+        + "«Editar» solo aparece mientras está sin resolver (en revisión o con la cédula no localizada).",
       extra: `<span class="dp-nota">${e(v.adminSummary)}</span>`,
     })}
     <div class="card tono-verdeazul">
@@ -569,8 +595,11 @@ export function pantallaSolicitudes(v) {
                 <td data-label="Estatus"><span class="badge ${r.statusClass}">${e(r.status)}</span></td>
                 <td data-label="Acciones">
                   <div class="dp-acciones">
-                    <button class="btn btn-primary" data-accion="aprobar" data-indice="${r.indice}">Aprobar</button>
-                    <button class="btn btn-secondary" data-accion="rechazar" data-indice="${r.indice}">Rechazar</button>
+                    ${r.puedeEditar ? `<button class="btn btn-secondary" data-accion="editar-solicitud" data-indice="${r.indice}">Editar</button>` : ""}
+                    ${r.puedeResolver ? `
+                      <button class="btn btn-primary" data-accion="aprobar" data-indice="${r.indice}">Aprobar</button>
+                      <button class="btn btn-secondary" data-accion="rechazar" data-indice="${r.indice}">Rechazar</button>` : ""}
+                    ${!r.puedeResolver && !r.puedeEditar ? `<span class="dp-nota">Solo Administrador</span>` : ""}
                   </div>
                 </td>
               </tr>`).join("")}
@@ -628,11 +657,19 @@ export function opcionesMunicipio(v) {
 }
 
 export function pantallaAlta(v) {
-  const cabecera = encabezado({
-    volver: "← Volver al directorio", accionVolver: "ir-inicio",
-    titulo: "Alta de médico",
-    texto: "Registra tu consultorio en el directorio. La cédula profesional se valida contra el Registro Nacional de Profesionistas y la cédula fiscal (RFC) contra el padrón del SAT.",
-  });
+  // La misma pantalla captura un alta nueva y corrige una en revisión
+  // (botón "Editar" de Solicitudes, solo Administrador).
+  const cabecera = v.editando
+    ? encabezado({
+        volver: "← Volver a solicitudes", accionVolver: "ir-solicitudes",
+        titulo: "Editar solicitud " + v.editandoFolio,
+        texto: "Corrige los datos antes de aprobarla o rechazarla. Al guardar, la solicitud sigue en revisión.",
+      })
+    : encabezado({
+        volver: "← Volver al directorio", accionVolver: "ir-inicio",
+        titulo: "Alta de médico",
+        texto: "Registra tu consultorio en el directorio. La cédula profesional se valida contra el Registro Nacional de Profesionistas y la cédula fiscal (RFC) contra el padrón del SAT.",
+      });
   if (v.registered) {
     return `
       ${cabecera}
@@ -696,7 +733,8 @@ export function pantallaAlta(v) {
             ${campo("dp-mail", "email", "Correo electrónico", "consultorio@correo.mx")}
           </div>
           <div class="dp-acciones dp-enviar">
-            <button class="btn btn-primary" data-accion="enviar-alta">Enviar solicitud de alta</button>
+            <button class="btn btn-primary" data-accion="enviar-alta">${v.editando ? "Guardar cambios" : "Enviar solicitud de alta"}</button>
+            ${v.editando ? `<button class="btn btn-secondary" data-accion="cancelar-edicion">Cancelar</button>` : ""}
             <span class="dp-nota" id="dp-alta-nota">${altaNota(v)}</span>
           </div>
         </div>

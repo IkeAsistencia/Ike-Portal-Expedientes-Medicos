@@ -1385,7 +1385,7 @@ def test_bitacora_rechaza_comentario_que_no_cabe_con_encabezado(client):
 
 
 def test_configuracion_cuentas_ciclo_completo(client):
-    headers = _auth_headers(client)
+    headers = _auth_headers_admin(client)
 
     assert client.get("/configuracion/cuentas", headers=headers).json() == []
 
@@ -1567,6 +1567,34 @@ def test_catalogos_acotan_el_rango_de_cl_servicio(client):
         assert client.get(ruta, params={"cl_servicio": 10**9}, headers=headers).status_code == 422
         # El valor que de verdad usa el portal sigue pasando.
         assert client.get(ruta, params={"cl_servicio": 4}, headers=headers).status_code == 200
+
+
+def test_configuracion_cuentas_rechaza_sesion_sin_perfil(client):
+    """
+    Revisión de seguridad del 19-oct-2026: el guard era una lista negra
+    (rechazaba Cabina y Proveedor), así que una sesión SISE legada -- cuyo
+    token no trae 'perfil' -- entraba a configuración global del portal.
+    Ahora es lista blanca, igual que el resto de secciones de Administrador.
+    """
+    headers = _auth_headers(client)  # login legado de SISE: token sin 'perfil'
+
+    assert client.get("/configuracion/cuentas", headers=headers).status_code == 403
+    r = client.post(
+        "/configuracion/cuentas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo"}, headers=headers
+    )
+    assert r.status_code == 403
+    assert client.delete("/configuracion/cuentas/2819", headers=headers).status_code == 403
+    assert client.post("/configuracion/cuentas/limpiar", headers=headers).status_code == 403
+
+
+def test_carga_del_catalogo_de_proveedores_rechaza_sesion_sin_perfil(client):
+    """Misma regla compartida (verificar_rol_administrador): la carga del
+    Excel también escribe configuración global, así que tampoco debe
+    aceptar un token sin perfil."""
+    headers = _auth_headers(client)
+
+    assert client.get("/proveedores-catalogo", headers=headers).status_code == 403
+    assert client.get("/proveedores-catalogo/plantilla", headers=headers).status_code == 403
 
 
 def test_sanear_para_log_no_deja_forjar_renglones():

@@ -91,6 +91,145 @@ def test_proveedor_y_administrador_pueden_crear_solicitud(client):
     assert client.post("/solicitudes-alta-medico", headers=_auth_headers_admin(client), json=SOLICITUD_VALIDA).status_code == 200
 
 
+# ---------- Revisión: aprobar / rechazar / editar son solo de Administrador ----------
+# Decisión del usuario (2026-10-19): capturar un alta lo puede hacer
+# cualquier perfil menos Cabina, pero RESOLVERLA (o corregirla antes de
+# resolverla) es acto de revisión y queda en Administrador -- si no, quien
+# captura se aprueba a sí mismo y mete un proveedor real al padrón.
+
+
+def test_proveedor_no_puede_aprobar_su_propia_solicitud(client):
+    proveedor = _auth_headers_proveedor(client)
+    folio = client.post("/solicitudes-alta-medico", headers=proveedor, json=SOLICITUD_VALIDA).json()["folio"]
+
+    r = client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=proveedor, json={"estatus": "Aprobada"})
+    assert r.status_code == 403
+    assert "Administrador" in r.json()["detail"]
+
+    # Y no quedó nada en el padrón.
+    assert client.get("/directorio-proveedores", headers=proveedor).json() == []
+
+
+def test_proveedor_no_puede_rechazar(client):
+    proveedor = _auth_headers_proveedor(client)
+    folio = client.post("/solicitudes-alta-medico", headers=proveedor, json=SOLICITUD_VALIDA).json()["folio"]
+
+    r = client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=proveedor, json={"estatus": "Rechazada"})
+    assert r.status_code == 403
+    assert client.get("/solicitudes-alta-medico", headers=proveedor).json()[0]["estatus"] == "En revisión"
+
+
+def test_proveedor_no_puede_editar_una_solicitud(client):
+    proveedor = _auth_headers_proveedor(client)
+    folio = client.post("/solicitudes-alta-medico", headers=proveedor, json=SOLICITUD_VALIDA).json()["folio"]
+
+    r = client.put(
+        f"/solicitudes-alta-medico/{folio}",
+        headers=proveedor,
+        json={**SOLICITUD_VALIDA, "nombre": "Dr. Nombre Cambiado"},
+    )
+    assert r.status_code == 403
+    assert client.get("/solicitudes-alta-medico", headers=proveedor).json()[0]["nombre"] == SOLICITUD_VALIDA["nombre"]
+
+
+# ---------- Editar (botón "Editar", solo mientras siga en revisión) ----------
+
+def test_administrador_puede_editar_una_solicitud_en_revision(client):
+    admin = _auth_headers_admin(client)
+    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
+
+    r = client.put(f"/solicitudes-alta-medico/{folio}", headers=admin, json={
+        **SOLICITUD_VALIDA,
+        "nombre": "Dra. Nombre Corregido",
+        "calle_num_ext_int": "Av. Corregida 500, Int. 9",
+        "telefono": "33 1111 2222",
+    })
+    assert r.status_code == 200, r.text
+
+    solicitud = client.get("/solicitudes-alta-medico", headers=admin).json()[0]
+    assert solicitud["nombre"] == "Dra. Nombre Corregido"
+    assert solicitud["calle_num_ext_int"] == "Av. Corregida 500, Int. 9"
+    assert solicitud["telefono"] == "33 1111 2222"
+    assert solicitud["estatus"] == "En revisión", "editar no debe resolverla"
+    assert solicitud["folio"] == folio, "el folio no cambia"
+
+
+def test_administrador_puede_editar_una_con_cedula_no_localizada(client):
+    """El caso que de verdad hay que poder corregir: la cédula profesional no
+    se localizó en el registro, así que hay que arreglar el dato y volver a
+    intentar (decisión del usuario, 2026-10-19)."""
+    admin = _auth_headers_admin(client)
+    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
+    marcar = client.post(
+        f"/solicitudes-alta-medico/{folio}/estatus", headers=admin,
+        json={"estatus": "Cédula no localizada"},
+    )
+    assert marcar.status_code == 200, marcar.text
+
+    r = client.put(f"/solicitudes-alta-medico/{folio}", headers=admin, json={
+        **SOLICITUD_VALIDA, "cedula": "87654321",
+    })
+    assert r.status_code == 200, r.text
+
+    solicitud = client.get("/solicitudes-alta-medico", headers=admin).json()[0]
+    assert solicitud["cedula"] == "87654321"
+    assert solicitud["estatus"] == "Cédula no localizada", "editar no cambia el estatus"
+
+
+def test_marcar_cedula_no_localizada_no_da_de_alta_en_el_padron(client):
+    """Solo "Aprobada" crea el proveedor; los demás estatus no tocan el padrón."""
+    admin = _auth_headers_admin(client)
+    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
+    client.post(
+        f"/solicitudes-alta-medico/{folio}/estatus", headers=admin,
+        json={"estatus": "Cédula no localizada"},
+    )
+    assert client.get("/directorio-proveedores", headers=admin).json() == []
+
+
+def test_no_se_edita_una_solicitud_ya_aprobada(client):
+    """Ya aprobada, el proveedor existe en el padrón con su clave y puede
+    tener citas: editar aquí dejaría los dos lados en desacuerdo."""
+    admin = _auth_headers_admin(client)
+    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
+    client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"})
+
+    r = client.put(
+        f"/solicitudes-alta-medico/{folio}", headers=admin,
+        json={**SOLICITUD_VALIDA, "nombre": "Dr. Ya No Se Puede"},
+    )
+    assert r.status_code == 409
+    assert "aprobada" in r.json()["detail"].lower()
+    assert client.get("/solicitudes-alta-medico", headers=admin).json()[0]["nombre"] == SOLICITUD_VALIDA["nombre"]
+
+
+def test_no_se_edita_una_solicitud_ya_rechazada(client):
+    admin = _auth_headers_admin(client)
+    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
+    client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Rechazada"})
+
+    r = client.put(
+        f"/solicitudes-alta-medico/{folio}", headers=admin,
+        json={**SOLICITUD_VALIDA, "nombre": "Dr. Ya No Se Puede"},
+    )
+    assert r.status_code == 409
+    assert "rechazada" in r.json()["detail"].lower()
+
+
+def test_editar_folio_inexistente_regresa_404(client):
+    r = client.put(
+        "/solicitudes-alta-medico/ALT-00000", headers=_auth_headers_admin(client), json=SOLICITUD_VALIDA
+    )
+    assert r.status_code == 404
+
+
+def test_editar_rechaza_cabina(client):
+    admin = _auth_headers_admin(client)
+    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
+    r = client.put(f"/solicitudes-alta-medico/{folio}", headers=_auth_headers_cabina(client), json=SOLICITUD_VALIDA)
+    assert r.status_code == 403
+
+
 # ---------- Flujo completo ----------
 
 def test_crear_solicitud_queda_en_revision_y_con_folio(client):

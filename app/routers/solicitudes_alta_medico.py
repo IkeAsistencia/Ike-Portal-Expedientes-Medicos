@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.core.security import usuario_actual
-from app.repositories import solicitudes_alta_medico_repo
+from app.repositories import accesos_repo, solicitudes_alta_medico_repo
 from app.repositories.accesos_repo import PERFIL_CABINA
 
 
@@ -12,6 +12,24 @@ def _requerir_proveedor_o_administrador(usuario: dict = Depends(usuario_actual))
     Administrador) -- Cabina no la usa."""
     if usuario.get("perfil") == PERFIL_CABINA:
         raise HTTPException(403, "Esta función no aplica para el perfil Cabina.")
+    return usuario
+
+
+def _requerir_administrador(usuario: dict = Depends(usuario_actual)) -> dict:
+    """
+    Resolver una solicitud (aprobar/rechazar) y corregirla antes de
+    resolverla son actos de REVISIÓN: solo Administrador (decisión del
+    usuario, 2026-10-19). Cualquier perfil puede capturar su alta, pero
+    nadie se aprueba a sí mismo -- aprobar inserta un proveedor real en el
+    padrón, igual que la carga de Excel, que también es exclusiva de
+    Administrador (ver app/routers/proveedores_catalogo.py).
+    """
+    try:
+        accesos_repo.verificar_rol_administrador(usuario)
+    except ValueError:
+        raise HTTPException(
+            403, "Revisar solicitudes de alta es exclusivo del perfil Administrador."
+        )
     return usuario
 
 
@@ -57,7 +75,25 @@ def crear(data: SolicitudAltaInput, usuario: dict = Depends(usuario_actual)):
     return solicitudes_alta_medico_repo.crear_solicitud(data.model_dump(), rfc_usuario)
 
 
-@router.post("/{folio}/estatus")
+@router.put("/{folio}", dependencies=[Depends(_requerir_administrador)])
+def editar(folio: str, data: SolicitudAltaInput):
+    """
+    Corrige los datos de una solicitud ANTES de resolverla (botón "Editar").
+    Solo mientras siga "En revisión": una vez aprobada ya existe el
+    proveedor en el padrón con su clave y sus citas, y una vez rechazada el
+    expediente quedó cerrado -- en ninguno de los dos casos se edita desde
+    aquí.
+    """
+    try:
+        solicitud = solicitudes_alta_medico_repo.actualizar_solicitud(folio, data.model_dump())
+    except solicitudes_alta_medico_repo.SolicitudYaResuelta as e:
+        raise HTTPException(409, str(e))
+    if solicitud is None:
+        raise HTTPException(404, "No se encontró esa solicitud.")
+    return {"ok": True, "folio": folio}
+
+
+@router.post("/{folio}/estatus", dependencies=[Depends(_requerir_administrador)])
 def actualizar_estatus(folio: str, data: EstatusInput):
     """
     Aprobar da de alta al médico en el padrón con origen='portal' ("Fuera de

@@ -26,6 +26,7 @@ import {
   RECENT_KEY, PROPS,
   visible, formularioVacio, cargarCatalogoReal,
   cargarSolicitudesReales, enviarSolicitudAlta, actualizarEstatusSolicitud,
+  editarSolicitudAlta,
   cargarAgenda, agendarCita,
   cargarEntidadesAltaReal, cargarMunicipiosAltaReal,
 } from "../directorio/datos.js";
@@ -65,9 +66,17 @@ function estadoInicial() {
     // Agenda real del médico abierto (la manda el servidor, ver cargarAgenda).
     agenda: [], bookingFolio: null, bookingGuardando: false,
     cedulaStatus: "idle", registered: null, requests: [],
+    // Folio de la solicitud que se está corrigiendo (botón "Editar" de
+    // Solicitudes); null = la pantalla de alta captura una nueva.
+    editandoFolio: null,
     form: formularioVacio(),
   };
 }
+
+/* Salir del modo "Editar": el formulario de alta vuelve a estar en blanco
+   para capturar uno nuevo. Se aplica al navegar con la barra, para no
+   quedarse editando un folio sin darse cuenta. */
+const sinEdicion = () => ({ editandoFolio: null, cedulaStatus: "idle", form: formularioVacio() });
 
 /* Búsquedas recientes en localStorage. Si el navegador no deja leer o
    escribir (modo privado, almacenamiento bloqueado), simplemente no hay
@@ -270,17 +279,57 @@ function verificarCedula() {
 /* La solicitud SÍ se guarda de verdad en el portal (ver
    enviarSolicitudAlta en datos.js) -- la validación de cédula de arriba
    sigue siendo simulada, pero el registro y su folio ya no se pierden al
-   recargar la página. */
+   recargar la página.
+
+   El mismo botón guarda los cambios cuando se entró por "Editar"
+   (estado.editandoFolio), en vez de crear una solicitud nueva. */
 async function enviarAlta() {
   if (estado.cedulaStatus !== "valid") { irA({ cedulaStatus: "invalid" }); return; }
   const fm = estado.form;
   try {
+    if (estado.editandoFolio) {
+      await editarSolicitudAlta(estado.editandoFolio, fm);
+      toast("Solicitud " + estado.editandoFolio + " actualizada.", "success");
+      irA({ screen: "admin", ...sinEdicion() });
+      await cargarSolicitudes();
+      return;
+    }
     const { folio } = await enviarSolicitudAlta(fm);
     irA({ registered: { name: fm.name || "El médico", folio } });
     cargarSolicitudes();
   } catch (err) {
     toast(err.message, "error");
   }
+}
+
+/* "Editar" (solo Administrador, y solo mientras la solicitud siga en
+   revisión): abre el mismo formulario del alta con los datos cargados.
+   La cédula entra como ya verificada -- lo fue al capturarse -- y si se
+   cambia, alEscribir la vuelve a poner en "idle" y hay que verificarla
+   otra vez. */
+async function editarSolicitud(indice) {
+  const solicitud = estado.requests[indice];
+  if (!solicitud || !solicitud.form) return;
+  irA({
+    screen: "register",
+    editandoFolio: solicitud.folio,
+    form: { ...formularioVacio(), ...solicitud.form },
+    cedulaStatus: "valid",
+    registered: null,
+  });
+  // El combo de Municipio depende de la entidad: se piden los de la entidad
+  // guardada para que el municipio ya grabado aparezca seleccionado y no
+  // vacío (mismo catálogo que usa cambiarCombo).
+  if (solicitud.form.estado) {
+    const g = generacion;
+    await cargarMunicipiosAltaReal(solicitud.form.estado);
+    if (g !== generacion || estado.editandoFolio !== solicitud.folio) return;
+    pintar();
+  }
+}
+
+function cancelarEdicion() {
+  irA({ screen: "admin", ...sinEdicion() });
 }
 
 /* Aprobar/Rechazar sí actualiza el estatus real de la solicitud -- un
@@ -343,10 +392,10 @@ const medicoVisible = (id) => visible(estado).find(x => x.id === id) || null;
 
 const ACCIONES = {
   // Barra propia y "volver"
-  "ir-inicio": () => irA({ screen: "home", searchTerm: null, detail: null }),
-  "ir-metricas": () => irA({ screen: "metrics", detail: null }),
-  "ir-solicitudes": () => irA({ screen: "admin", detail: null }),
-  "ir-alta": () => irA({ screen: "register", detail: null }),
+  "ir-inicio": () => irA({ screen: "home", searchTerm: null, detail: null, ...sinEdicion() }),
+  "ir-metricas": () => irA({ screen: "metrics", detail: null, ...sinEdicion() }),
+  "ir-solicitudes": () => irA({ screen: "admin", detail: null, ...sinEdicion() }),
+  "ir-alta": () => irA({ screen: "register", detail: null, ...sinEdicion() }),
   "volver-zona": () => irA({ screen: estado.searchTerm ? "home" : "zone", searchTerm: null }),
   "volver-resultados": () => irA({ screen: "results" }),
 
@@ -384,13 +433,16 @@ const ACCIONES = {
   "elegir-dia": (el) => irA({ bookingDay: Number(el.dataset.indice), bookingSlot: null }),
   "elegir-horario": (el) => irA({ bookingSlot: el.dataset.valor }),
 
-  // Solicitudes
+  // Solicitudes (aprobar/rechazar/editar: solo Administrador, ver
+  // _requerir_administrador en app/routers/solicitudes_alta_medico.py)
   "aprobar": (el) => cambiarEstatusSolicitud(Number(el.dataset.indice), "Aprobada"),
   "rechazar": (el) => cambiarEstatusSolicitud(Number(el.dataset.indice), "Rechazada"),
+  "editar-solicitud": (el) => editarSolicitud(Number(el.dataset.indice)),
 
   // Alta de médico
   "verificar-cedula": verificarCedula,
   "enviar-alta": enviarAlta,
+  "cancelar-edicion": cancelarEdicion,
   "registrar-otro": () => irA({ registered: null, cedulaStatus: "idle", form: formularioVacio() }),
 };
 

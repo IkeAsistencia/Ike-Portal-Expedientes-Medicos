@@ -246,7 +246,7 @@ def test_actualizar_estatus_se_refleja_en_listado(client):
 
 
 def test_configuracion_cuentas_ciclo_completo(client):
-    headers = _login_headers(client)
+    headers = _headers_admin(client)
 
     r = _graphql(client, "{ cuentasConfiguradas { clCuenta nombre } }", headers)
     assert r.json()["data"]["cuentasConfiguradas"] == []

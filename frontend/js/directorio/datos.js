@@ -203,10 +203,37 @@ export async function cargarSolicitudesReales() {
       zone: [f.municipio, f.estado].filter(Boolean).join(", "),
       cedula: f.cedula, rfc: f.rfc || "—", status: f.estatus,
       claveProveedor: f.clave_proveedor || "",
+      // Los datos crudos, con los que el botón "Editar" rellena el
+      // formulario (el resto de campos de arriba ya vienen formateados
+      // para la tabla, con "—" y zonas concatenadas).
+      form: {
+        name: f.nombre || "", specialty: f.especialidad || "",
+        cedula: f.cedula || "", rfc: f.rfc || "",
+        estado: f.estado || "", municipio: f.municipio || "",
+        calleNumExtInt: f.calle_num_ext_int || "", colonia: f.colonia || "",
+        codigoPostal: f.codigo_postal || "",
+        phone: f.telefono || "", email: f.email || "",
+      },
     }));
   } catch (err) {
     return [];
   }
+}
+
+/* Corrige una solicitud que sigue "En revisión" (solo Administrador, ver
+   app/routers/solicitudes_alta_medico.py). */
+export function editarSolicitudAlta(folio, form) {
+  return api("/solicitudes-alta-medico/" + encodeURIComponent(folio), {
+    method: "PUT",
+    body: {
+      nombre: form.name, especialidad: form.specialty, cedula: form.cedula, rfc: form.rfc || null,
+      estado: form.estado || null, municipio: form.municipio || null,
+      calle_num_ext_int: form.calleNumExtInt || null,
+      colonia: form.colonia || null,
+      codigo_postal: form.codigoPostal || null,
+      telefono: form.phone || null, email: form.email || null,
+    },
+  });
 }
 
 export function enviarSolicitudAlta(form) {
