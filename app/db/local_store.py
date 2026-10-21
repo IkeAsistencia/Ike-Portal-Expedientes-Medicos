@@ -225,6 +225,12 @@ CREATE TABLE IF NOT EXISTS proveedores (
     teleconsulta        INTEGER NOT NULL DEFAULT 0,
     latitud             REAL,
     longitud            REAL,
+    -- De dónde salieron esas coordenadas: NULL/'carga' = vinieron en el Excel
+    -- del área (fuente autorizada, no se toca), 'clues' = las puso el
+    -- enriquecimiento con el Catálogo CLUES de la Secretaría de Salud
+    -- (ver scripts/enriquecer_coordenadas_clues.py). Importa poder
+    -- distinguirlas para no pisar el dato bueno y para saber qué auditar.
+    origen_coordenadas  TEXT,
     folio_alta          TEXT,               -- folio de la solicitud, si nació en el portal
     fecha_alta          TEXT NOT NULL,
     fecha_actualizacion TEXT
@@ -334,6 +340,8 @@ def _migrar_columnas_faltantes(conn: sqlite3.Connection) -> None:
     columnas_proveedores = {row["name"] for row in conn.execute("PRAGMA table_info(proveedores)")}
     if "cl_especialidad" not in columnas_proveedores:
         conn.execute("ALTER TABLE proveedores ADD COLUMN cl_especialidad INTEGER")
+    if "origen_coordenadas" not in columnas_proveedores:
+        conn.execute("ALTER TABLE proveedores ADD COLUMN origen_coordenadas TEXT")
 
 
 def _migrar_tablas_renombradas(conn: sqlite3.Connection) -> None:

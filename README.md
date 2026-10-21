@@ -273,6 +273,26 @@ pip install -r requirements-dev.txt
 pytest tests/ -v
 ```
 
+## Utilidades (`scripts/`)
+
+```bash
+# RFC de prueba (uno por perfil) en la base local
+python -m scripts.seed_usuarios_prueba --password 'Qwer1234$'
+
+# Llena las coordenadas que le faltan al padrón con el Catálogo CLUES de la
+# Secretaría de Salud, para que el mapa del Directorio pueda ubicar a los
+# proveedores. Arranca en seco: muestra qué haría y NO escribe nada hasta que
+# se le agrega --aplicar. El .xlsx se baja de la DGIS (ver el encabezado del
+# script) y nunca pisa las coordenadas que vinieron en el Excel del área.
+python -m scripts.enriquecer_coordenadas_clues ESTABLECIMIENTO_SALUD.xlsx
+python -m scripts.enriquecer_coordenadas_clues ESTABLECIMIENTO_SALUD.xlsx --detalle
+python -m scripts.enriquecer_coordenadas_clues ESTABLECIMIENTO_SALUD.xlsx --aplicar
+
+# Convierte un documento de análisis a Word, para compartirlo con áreas que no
+# leen el repositorio (el .docx no se versiona: el Markdown es la fuente).
+python -m scripts.md_a_word WEB-SCRAPING-DOCTORALIA.md
+```
+
 ## Flujo de autenticación
 
 1. El portal entra **por RFC**: `POST /auth/rfc/estado` revisa si el RFC

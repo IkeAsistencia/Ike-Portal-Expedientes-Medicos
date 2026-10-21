@@ -274,10 +274,9 @@ al suyo:
 3. **Registro Nacional de Profesionistas (SEP).** Fuente oficial para validar
    cédulas, que además es un pendiente real del proyecto: hoy la validación de
    cédula sigue simulada.
-4. **Google Places API.** Servicio de pago con términos que sí permiten el uso
-   programático, con las restricciones de caché y atribución que marca su
-   licencia. Ya existe un botón de "Sincronizar con Google Places" en la
-   interfaz, hoy sin conexión real.
+4. **Google Maps Platform (Geocoding / Places).** Permite el uso programático,
+   pero con restricciones fuertes de almacenamiento y de con qué mapa se puede
+   mostrar. Se evaluó a detalle en la sección 11.
 5. **Alta directa de proveedores.** La vía que ya opera: el propio médico se
    registra, se valida su cédula y un Administrador lo aprueba. Es la única que
    produce un proveedor realmente contratable, con tarifa y convenio acordados.
@@ -398,10 +397,171 @@ concretas:
    cobertura, como complemento del DENUE.
 
 Recomendación: tratarlo como **fuente de enriquecimiento y verificación**, no
-como fuente de alta de proveedores, y decidir su integración por separado (ver
-Anexo B).
+como fuente de alta de proveedores.
 
-## 11. Conclusión
+### 10.5 Implementado: enriquecimiento de coordenadas
+
+Se implementó el punto 1 de esa recomendación.
+
+- Lógica: `app/services/clues_service.py`
+- Para correrlo: `python -m scripts.enriquecer_coordenadas_clues <archivo.xlsx>`
+
+Arranca **en seco**: muestra qué haría y solo escribe si se le agrega
+`--aplicar`. Reglas con las que se construyó:
+
+- **Nunca pisa coordenadas existentes.** Las que vienen en el Excel del área
+  son la fuente autorizada; aquí solo se llenan las vacías.
+- **Todo cruce exige municipio y código postal**, además de RFC o nombre. Sin
+  ese candado, el RFC (que en CLUES es de la persona moral) le asignaba a 12
+  proveedores las coordenadas de un establecimiento de otro municipio.
+- **Lo ambiguo se descarta.** Si una llave apunta a dos establecimientos, el
+  proveedor se queda sin coordenadas: es preferible a ubicarlo mal.
+- **Queda registrada la procedencia** en `proveedores.origen_coordenadas`
+  (`carga` o `clues`), para saber qué auditar.
+- **Una carga posterior no borra lo enriquecido.** El Excel entrega las
+  coordenadas vacías y la carga es incremental, así que sin este cuidado la
+  siguiente carga dejaba en NULL lo ya llenado.
+
+Resultado sobre el padrón real (666 proveedores, 1 con coordenadas):
+
+| | |
+|---|---|
+| Enriquecidos | **74** (73 por RFC + 1 por nombre) |
+| Ubicables en el mapa ahora | **75 de 666** (11.3 %) |
+| Sin coincidencia confiable | 591 |
+
+Para el 89 % restante sigue haciendo falta que el área llene las columnas de
+coordenadas del Excel (sección 11.6).
+
+## 11. Google Maps / Places para el mapa del Directorio
+
+Se evaluó aparte, a petición del usuario, porque es la otra vía que se suele
+proponer para resolver lo mismo. Verificado el **2026-10-20** contra la
+documentación y los términos vigentes.
+
+### 11.1 El punto de partida: el mapa no está roto, está vacío
+
+El mapa del Directorio ya funciona (Leaflet sobre teselas de Esri y
+OpenStreetMap) y solo ubica a quien trae coordenadas reales. El problema es que
+casi nadie las trae:
+
+| Concepto | Cantidad |
+|---|---|
+| Proveedores en el padrón | 666 |
+| **Con latitud y longitud** | **1** |
+| Sin coordenadas | 665 |
+| Con domicilio geocodificable (calle + CP) | 660 |
+
+Las columnas `Latitud Consultorio*` y `Longitud Consultorio*` existen en el
+layout que validó el área, pero vienen **vacías en las 662 filas**.
+
+Por eso "usar el mapa con Google" son en realidad dos cosas distintas:
+
+- **(A)** Cambiar la base del mapa (Leaflet -> Google Maps).
+- **(B)** Usar Google para **obtener las coordenadas** que hoy faltan
+  (Geocoding API o Places API).
+
+Lo que haría falta de verdad es (B). Y como se ve abajo, (B) obliga a (A).
+
+### 11.2 Lo que se necesita técnicamente
+
+1. **Cuenta de facturación de Google Cloud y una API key.** La facturación es
+   obligatoria aunque el consumo caiga en el tramo gratuito: sin ella las APIs
+   no responden.
+2. **Habilitar dos APIs:** *Maps JavaScript API* (mostrar el mapa) y
+   *Geocoding API* (convertir domicilio en coordenadas).
+3. **Restringir la key** por dominio (HTTP referrer) y fijar cuotas diarias en
+   la consola, para que una fuga de la llave no se vuelva consumo.
+4. **Publicar Términos de Uso y Aviso de Privacidad** que incorporen los de
+   Google: es requisito explícito de la política de ambas APIs.
+5. **Mostrar la atribución** de Google donde se despliegue su contenido.
+6. **Migrar el mapa de Leaflet a Google Maps** (ver 11.3).
+
+### 11.3 El impedimento real no es el costo, son los términos
+
+Citas literales de los *Google Maps Platform Service Terms* vigentes:
+
+> **6.2 No use with a non-Google map.** Customer must not use Google Maps
+> Content from the Geocoding API in conjunction with a non-Google map.
+
+Es decir: si las coordenadas se obtienen con Google, **no se pueden pintar en
+el mapa actual** (Leaflet con teselas de OpenStreetMap/Esri). Tendría que ser
+un mapa de Google. La misma restricción aplica a Places (cláusula 14.2).
+
+Y sobre guardarlas, que es lo que el padrón necesita:
+
+> **6.3.1** Customer may temporarily cache latitude (lat) and longitude (lng)
+> values from the Geocoding API for up to **30 consecutive calendar days**,
+> after which Customer must delete the cached latitude and longitude values.
+
+> **6.3.2** Customer may indefinitely cache latitude (lat), longitude (lng),
+> formatted_address, and the structured address values from the Geocoding API
+> **solely to support the direct, End User facing functionality of the Customer
+> Application that initiated the request** […]. **Cached data must be logically
+> isolated to the specific End User it is associated with and must not be used
+> across multiple End Users.**
+
+La excepción de 6.3.2 **no nos aplica**: el padrón es un catálogo compartido
+que consultan todas las personas de Cabina, no un dato aislado por usuario
+final. Queda entonces la regla general:
+
+> **No se pueden guardar de forma permanente en el padrón las coordenadas
+> obtenidas de Google.** O se re-geocodifica cada 30 días o menos, o se
+> geocodifica al vuelo cada vez que se abre el mapa.
+
+Con Places es todavía más estricto: su política dice que el contenido **no se
+puede almacenar**, y el único campo exento de esa restricción es el
+`place_id`, que sí se puede guardar indefinidamente.
+
+### 11.4 El costo, para dimensionarlo
+
+A la escala de este portal el costo es prácticamente nulo, así que no es el
+criterio de decisión:
+
+- *Dynamic Maps* (cargas del mapa): **10,000 gratis al mes**, después 7.00 USD
+  por cada 1,000.
+- Geocodificar los 660 domicilios una sola vez cae dentro del tramo gratuito
+  del SKU de Geocoding.
+- El crédito mensual de 200 USD **ya no existe**: terminó el 28 de febrero de
+  2025 y se reemplazó por topes gratuitos por SKU.
+
+El problema es la obligación de borrar el dato, no pagarlo.
+
+### 11.5 Qué implicaría en arquitectura, si se decidiera hacerlo
+
+- Reescribir `frontend/js/directorio/mapa-zona.html` sobre el SDK de Google en
+  vez de Leaflet.
+- Un trabajo recurrente que re-geocodifique el padrón al menos cada 30 días, o
+  geocodificar en cada apertura del mapa (más llamadas, más costo, más
+  dependencia de que el servicio responda).
+- Un campo que distinga las coordenadas "de Google" (borrables) de las propias
+  (permanentes), porque no se pueden tratar igual.
+
+### 11.6 Las alternativas que sí permiten conservar el dato
+
+Tres fuentes dan coordenadas sin restricción de almacenamiento:
+
+1. **La propia columna del Excel.** Ya existe en el layout y el cargador ya la
+   lee. Si el área la llena, el mapa funciona sin costo, sin migración y sin
+   obligación de borrar nada. Es la vía más barata de todas.
+2. **CLUES** (sección 10): coordenadas oficiales en el 92.4 % de sus
+   establecimientos privados.
+3. **DENUE** (INEGI): ya integrado y **ya devuelve** latitud y longitud de los
+   candidatos fuera de la red.
+
+### 11.7 Conclusión sobre Google
+
+Para solo pintar pines en un mapa, Google **cuesta más en restricciones que en
+dinero**: obliga a cambiar la base del mapa y a borrar las coordenadas cada 30
+días. La recomendación es pedir primero que el Excel del área traiga llenas sus
+dos columnas de coordenadas, que es el mismo dato sin ninguna de esas
+ataduras.
+
+Google Maps se justifica si además se quiere Street View, rutas o autocompletado
+de direcciones en el Alta de médico: ahí sí aporta algo que las fuentes
+oficiales no dan.
+
+## 12. Conclusión
 
 El web scraping a Doctoralia **no es viable** y la recomendación es no
 implementarlo. El impedimento no es técnico sino contractual, y es explícito:
@@ -429,6 +589,10 @@ comprobación: **2026-10-20**.
 | El orden depende del plan de suscripción | Visitar `https://www.doctoralia.com.mx/cardiologo/guadalajara` y leer la nota del primer resultado |
 | Existencia y contenido del Catálogo CLUES | `http://www.dgis.salud.gob.mx/contenidos/intercambio/clues_gobmx.html` → enlace "Establecimientos de Salud (Formato XLSX)" |
 | Cifras de la sección 10 | Descargar ese `.xlsx` y agrupar la hoja `CLUES_202608` por `NOMBRE DE LA INSTITUCION`, `ESTATUS DE OPERACION` y `NOMBRE DE TIPOLOGIA` |
+| Cláusulas 6.2, 6.3.1, 6.3.2 y 14.2 de Google | `https://cloud.google.com/maps-platform/terms/maps-service-terms`, secciones "6. Geocoding API" y "14. Places API" |
+| Places no permite almacenar su contenido | `https://developers.google.com/maps/documentation/places/web-service/policies` |
+| Tramo gratuito de 10,000 cargas de mapa | `https://developers.google.com/maps/billing-and-pricing/pricing`, tabla "Maps - loads", SKU Dynamic Maps |
+| Proveedores sin coordenadas en el padrón | `SELECT COUNT(*) FROM proveedores WHERE latitud IS NULL OR longitud IS NULL` en la base SQLite del portal |
 
 ## Anexo B — Puntos que requieren validación de otras áreas
 
@@ -437,4 +601,6 @@ comprobación: **2026-10-20**.
 | Encuadre y obligaciones en materia de datos personales (sección 5) | Jurídico / Privacidad | El equipo técnico no puede emitir la conclusión legal; aquí solo se documenta la naturaleza del dato |
 | Interés real en un convenio con Doctoralia / Docplanner | Negocio / Compras | Es la única vía que los T&C admiten para acceder a ese padrón |
 | Alcance deseado de la validación contra el RNP (SEP) | Negocio | Hoy la validación de cédula del portal sigue simulada |
-| Integrar o no el Catálogo CLUES (sección 10) | Negocio / Desarrollo | Aporta coordenadas al 11 % del padrón y verificación oficial, pero no resuelve la búsqueda por especialidad; conviene decidirlo como trabajo aparte |
+| Revisar los cruces de CLUES antes de confiar en ellos (sección 10.5) | Negocio | Son 74 y se pueden listar con `--detalle`. En algunos, el nombre del establecimiento en CLUES no se parece al del padrón aunque coincidan RFC, municipio y CP |
+| Pedir al área que llene Latitud y Longitud en el Excel (sección 11) | Negocio | Es la vía más barata para que el mapa funcione: el dato ya cabe en el layout vigente y no tiene restricción de almacenamiento |
+| Contratar o no Google Maps Platform (sección 11) | Negocio / Jurídico | Obliga a migrar el mapa y a borrar las coordenadas cada 30 días; solo se justifica si además se quiere Street View, rutas o autocompletado de direcciones |

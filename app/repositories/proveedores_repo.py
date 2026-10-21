@@ -29,6 +29,12 @@ ORIGEN_PORTAL = "portal"
 PREFIJO_CLAVE = "PRV-"
 _LARGO_CONSECUTIVO = 6
 
+# De dónde salieron las coordenadas de un proveedor (columna
+# origen_coordenadas): el Excel del área es la fuente autorizada y no se pisa;
+# 'clues' marca las que puso el enriquecimiento con el Catálogo CLUES.
+ORIGEN_COORDENADAS_CARGA = "carga"
+ORIGEN_COORDENADAS_CLUES = "clues"
+
 # Campos que trae el Excel y que una carga posterior puede refrescar. La
 # clave, la llave de identidad y el origen NO están aquí a propósito: son del
 # portal, no del archivo.
@@ -138,13 +144,22 @@ def _altas_del_portal_por_nombre(conn) -> dict:
 
 def _insertar(conn, registro: dict, llave: str, origen: str, folio_alta: str | None) -> str:
     clave = _siguiente_clave(conn)
-    columnas = ("clave", "llave_identidad", "origen", "folio_alta", "fecha_alta") + _CAMPOS_DATOS
+    columnas = (
+        "clave", "llave_identidad", "origen", "folio_alta", "fecha_alta", "origen_coordenadas",
+    ) + _CAMPOS_DATOS
     valores = {
         "clave": clave, "llave_identidad": llave, "origen": origen,
         "folio_alta": folio_alta, "fecha_alta": ahora_local(),
         **{c: registro.get(c) for c in _CAMPOS_DATOS},
     }
     valores["teleconsulta"] = 1 if valores.get("teleconsulta") else 0
+    # Si el alta trae coordenadas, quedan marcadas como venidas del archivo
+    # (la fuente autorizada), para distinguirlas de las que ponga CLUES.
+    valores["origen_coordenadas"] = (
+        ORIGEN_COORDENADAS_CARGA
+        if valores.get("latitud") is not None and valores.get("longitud") is not None
+        else None
+    )
     conn.execute(
         f"INSERT INTO proveedores ({', '.join(columnas)}) "
         f"VALUES ({', '.join(':' + c for c in columnas)})",
@@ -162,6 +177,15 @@ def _actualizar(conn, fila, registro: dict, llave_fuerte: str, origen: str) -> N
     """
     asignaciones = {c: registro.get(c) for c in _CAMPOS_DATOS}
     asignaciones["teleconsulta"] = 1 if asignaciones.get("teleconsulta") else 0
+    # Las coordenadas NO se borran con una carga que venga sin ellas: el Excel
+    # del área las entrega vacías, así que sobrescribir con NULL tiraría lo que
+    # ya se hubiera enriquecido con CLUES (ver asignar_coordenadas). Si el
+    # archivo SÍ trae coordenadas, esas mandan y se marcan como 'carga'.
+    if asignaciones.get("latitud") is None or asignaciones.get("longitud") is None:
+        asignaciones.pop("latitud", None)
+        asignaciones.pop("longitud", None)
+    else:
+        asignaciones["origen_coordenadas"] = ORIGEN_COORDENADAS_CARGA
     # Si antes se le reconocía por nombre y ahora ya trae cédula, se queda con
     # la llave fuerte (la de la cédula) para las cargas siguientes.
     asignaciones["llave_identidad"] = llave_fuerte
@@ -274,6 +298,59 @@ def contar_por_origen() -> dict:
     with get_local_connection() as conn:
         filas = conn.execute("SELECT origen, COUNT(*) AS total FROM proveedores GROUP BY origen").fetchall()
     return {f["origen"]: f["total"] for f in filas}
+
+
+def contar_coordenadas() -> dict:
+    """Cuántos proveedores se pueden ubicar en el mapa y de dónde salió su
+    ubicación (ver la columna origen_coordenadas)."""
+    with get_local_connection() as conn:
+        total = conn.execute("SELECT COUNT(*) FROM proveedores").fetchone()[0]
+        con = conn.execute(
+            "SELECT COUNT(*) FROM proveedores WHERE latitud IS NOT NULL AND longitud IS NOT NULL"
+        ).fetchone()[0]
+        # OJO con el nombre del alias: la tabla YA tiene una columna `origen`
+        # ('catalogo'/'portal'), así que un alias llamado igual haría que
+        # SQLite agrupara por esa columna en vez de por la del SELECT.
+        filas = conn.execute(
+            "SELECT COALESCE(origen_coordenadas, ?) AS fuente_coordenadas, COUNT(*) AS total "
+            "FROM proveedores WHERE latitud IS NOT NULL AND longitud IS NOT NULL "
+            "GROUP BY fuente_coordenadas",
+            (ORIGEN_COORDENADAS_CARGA,),
+        ).fetchall()
+    return {
+        "total": total,
+        "con_coordenadas": con,
+        "sin_coordenadas": total - con,
+        "por_origen": {f["fuente_coordenadas"]: f["total"] for f in filas},
+    }
+
+
+def asignar_coordenadas(asignaciones, origen: str = ORIGEN_COORDENADAS_CLUES) -> int:
+    """
+    Pone latitud/longitud a los proveedores de `asignaciones`
+    [{clave, latitud, longitud}, ...] y marca de dónde salieron.
+
+    El UPDATE exige que las coordenadas sigan vacías: si entre que se calculó
+    el plan y se aplica llegó una carga del área con las suyas, gana la del
+    Excel, que es la fuente autorizada. Devuelve cuántos renglones cambiaron.
+    """
+    datos = [
+        (a["latitud"], a["longitud"], origen, a["clave"])
+        for a in asignaciones
+        if a.get("clave") and a.get("latitud") is not None and a.get("longitud") is not None
+    ]
+    if not datos:
+        return 0
+    with get_local_connection() as conn:
+        cursor = conn.executemany(
+            "UPDATE proveedores SET latitud = ?, longitud = ?, origen_coordenadas = ?, "
+            "fecha_actualizacion = datetime('now','localtime') "
+            "WHERE clave = ? AND latitud IS NULL AND longitud IS NULL",
+            datos,
+        )
+        cambiados = cursor.rowcount
+        conn.commit()
+    return cambiados
 
 
 def obtener_ultima_carga() -> dict | None:
