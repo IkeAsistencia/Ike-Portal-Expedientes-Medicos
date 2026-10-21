@@ -7,7 +7,7 @@
    el diseño del portal (tarjetas, botones, tablas, badges). Todo texto
    pasa por escapeHtml; los clics se resuelven por delegación con
    data-accion (ver pantallas/directorio-proveedores.js). */
-import { escapeHtml as e } from "../core/formato.js";
+import { escapeHtml as e, normalizarTexto } from "../core/formato.js";
 import { esPerfilAdministrador } from "../core/sesion.js";
 import { coordinacionActual } from "../core/coordinar-cita.js";
 
@@ -56,13 +56,16 @@ const ICONO_KPI = {
    en datos.js), no de datos simulados -- así lo que se sugiere siempre
    existe de verdad en los resultados. */
 export function calcularSugerencias(s) {
-  const q = s.query.trim().toLowerCase();
+  // Sin acentos de los dos lados: el padrón los guarda como el sistema
+  // central ("MERIDA") y quien busca escribe "Mér...".
+  const q = normalizarTexto(s.query);
   const sugg = [];
   if (q.length >= 2 && s.screen === "home") {
-    valoresUnicosCatalogo("municipio").forEach(m => { if (m.toLowerCase().includes(q)) sugg.push({ label: m, kind: "Municipio", term: m }); });
-    valoresUnicosCatalogo("estado").forEach(es => { if (es.toLowerCase().includes(q)) sugg.push({ label: es, kind: "Estado", term: es }); });
-    valoresUnicosCatalogo("specialty").forEach(sp => { if (sp.toLowerCase().includes(q)) sugg.push({ label: sp, kind: "Especialidad", term: sp }); });
-    valoresUnicosCatalogo("name").forEach(n => { if (n.toLowerCase().includes(q)) sugg.push({ label: n, kind: "Médico", term: n }); });
+    const coincide = (valor) => normalizarTexto(valor).includes(q);
+    valoresUnicosCatalogo("municipio").forEach(m => { if (coincide(m)) sugg.push({ label: m, kind: "Municipio", term: m }); });
+    valoresUnicosCatalogo("estado").forEach(es => { if (coincide(es)) sugg.push({ label: es, kind: "Estado", term: es }); });
+    valoresUnicosCatalogo("specialty").forEach(sp => { if (coincide(sp)) sugg.push({ label: sp, kind: "Especialidad", term: sp }); });
+    valoresUnicosCatalogo("name").forEach(n => { if (coincide(n)) sugg.push({ label: n, kind: "Médico", term: n }); });
   }
   return sugg.slice(0, 6);
 }

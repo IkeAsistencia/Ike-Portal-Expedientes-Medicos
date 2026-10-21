@@ -328,8 +328,17 @@ export function actualizarEstatusSolicitud(folio, estatus) {
   });
 }
 
+/* Normaliza para comparar texto escrito por una persona contra el padrón.
+   Quita los acentos a propósito: el padrón guarda los municipios como los
+   entrega el sistema central ("MERIDA", "YUCATAN"), pero quien busca escribe
+   "Mérida". Sin esto, la búsqueda con acento no encontraba nada. */
 function normalizar(texto) {
-  return (texto || "").toString().trim().toLowerCase();
+  return (texto || "")
+    .toString()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase();
 }
 
 /* Valores únicos de un campo del catálogo real, para las sugerencias del
@@ -463,7 +472,7 @@ export async function cargarCitas(claveProveedor) {
    red. La especialidad se compara por nombre completo, sin acentos ni
    mayúsculas: viene del mismo catálogo del sistema central que usa el
    directorio, así que cuando existe, coincide. */
-const sinAcentos = (t) => (t || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+const sinAcentos = (t) => normalizar(t).toUpperCase();
 
 export function buscarEspecialidadPorNombre(nombre) {
   const buscado = sinAcentos(nombre);
