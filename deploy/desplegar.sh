@@ -3,9 +3,12 @@
 # portal responda. Lo puede correr una persona por SSH o un workflow de
 # GitHub Actions (ver github-actions-deploy.yml.ejemplo).
 #
-# Uso:  deploy/desplegar.sh <rama-o-etiqueta>
-#   ej. deploy/desplegar.sh test      (QA)
-#       deploy/desplegar.sh v1.0.0    (producción, siempre por etiqueta)
+# Uso:  deploy/desplegar.sh <etiqueta>
+#   ej. deploy/desplegar.sh v1.0.0
+#
+# En producción se despliega siempre por etiqueta, no por rama. Acepta una
+# rama porque sirve para probar el propio script en un servidor de pruebas,
+# pero una rama se mueve: no deja registro de qué versión quedó corriendo.
 set -euo pipefail
 
 REF="${1:?Indica la rama o etiqueta a desplegar, ej. test o v1.0.0}"

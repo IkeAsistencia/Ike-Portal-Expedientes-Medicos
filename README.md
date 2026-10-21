@@ -204,9 +204,11 @@ En cualquier sistema operativo, el portal necesita lo mismo:
   estatus, comentarios, comprobantes y cortes.
 - El job de alertas programado cada hora (ver `jobs/README.md`).
 
-Para **AWS** (EC2 Linux detrás de CloudFront y ALB, QA y producción) hay
-plantillas listas en [`deploy/`](deploy/README.md): servicio systemd, script
-de despliegue con verificación, workflow de ejemplo y el `.env` por ambiente.
+Para **AWS** (EC2 Linux detrás de CloudFront y ALB) hay plantillas listas en
+[`deploy/`](deploy/README.md): servicio systemd, script de despliegue con
+verificación, workflow de ejemplo, el `.env` de producción y lo que hay que
+pedirle a la nube (security groups, health check, caché y la salida a
+internet que necesita la búsqueda del DENUE).
 
 ### Windows
 
