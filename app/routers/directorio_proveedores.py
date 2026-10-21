@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -8,8 +10,13 @@ from app.repositories import (
     especialidades_repo,
     proveedores_repo,
 )
-from app.repositories.accesos_repo import PERFIL_CABINA
-from app.services import agenda_proveedores_service, denue_service
+from app.repositories.accesos_repo import PERFIL_ADMINISTRADOR, PERFIL_CABINA
+from app.services import (
+    agenda_proveedores_service,
+    cita_texto_service,
+    coordinar_cita_service,
+    denue_service,
+)
 
 
 def _requerir_proveedor_o_administrador(usuario: dict = Depends(usuario_actual)) -> dict:
@@ -34,6 +41,9 @@ class CitaInput(BaseModel):
     fecha: str = Field(min_length=10, max_length=10, description="YYYY-MM-DD")
     hora: str = Field(min_length=5, max_length=5, description="HH:MM")
     paciente: str | None = Field(default=None, max_length=150)
+    # Si la cita se coordina desde un expediente (botón "Coordinar cita" de
+    # Seguimiento): el paciente sale del expediente y solo hay una activa.
+    cl_expediente: int | None = Field(default=None, ge=1)
 
 
 @router.get("")
@@ -136,27 +146,76 @@ def agendar_cita(data: CitaInput, usuario: dict = Depends(usuario_actual)):
         raise HTTPException(
             400,
             "La fecha de la cita debe ser de hoy en adelante y dentro de los próximos "
-            f"{agenda_proveedores_service.DIAS_AGENDA_MAXIMO} días.",
+            f"{agenda_proveedores_service.DIAS_CITA_MAXIMO} días.",
         )
     if not agenda_proveedores_service.horario_valido(data.hora):
-        raise HTTPException(400, "Ese horario no está dentro de los que maneja la agenda.")
+        raise HTTPException(400, "La hora debe tener el formato HH:MM de 24 horas (por ejemplo 12:45).")
+    if agenda_proveedores_service.hora_pasada(data.fecha, data.hora):
+        raise HTTPException(400, "Esa hora de hoy ya pasó: elige una posterior o cambia la fecha.")
+
+    paciente = data.paciente
+    if data.cl_expediente:
+        expediente = coordinar_cita_service.expediente_para_coordinar(data.cl_expediente, usuario)
+        paciente = expediente.nombre_paciente
+        vigente = citas_proveedor_repo.cita_activa_de_expediente(data.cl_expediente)
+        if vigente:
+            raise HTTPException(409, _mensaje_expediente_con_cita(vigente))
 
     rfc_usuario = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
     try:
         cita = citas_proveedor_repo.agendar(
-            data.clave_proveedor, data.fecha, data.hora, data.paciente, rfc_usuario
+            data.clave_proveedor, data.fecha, data.hora, paciente, rfc_usuario, data.cl_expediente
         )
     except citas_proveedor_repo.HorarioOcupado as e:
         raise HTTPException(409, str(e))
-    return {
+    except citas_proveedor_repo.ExpedienteConCita as e:
+        raise HTTPException(409, str(e))
+    respuesta = {
         **cita,
         "proveedor_nombre": proveedor["nombre"],
         "proveedor_especialidad": proveedor["especialidad"],
     }
+    if data.cl_expediente:
+        # Lo que la pantalla pega en "Observaciones" para que el Proveedor lo
+        # revise (ver app/services/cita_texto_service.py).
+        respuesta["observaciones_sugeridas"] = cita_texto_service.observaciones_de_cita(proveedor, cita, paciente)
+    return respuesta
+
+
+def _mensaje_expediente_con_cita(cita: dict) -> str:
+    medico = cita.get("proveedor_nombre") or "un médico"
+    return (
+        f"Este expediente ya tiene una cita agendada con {medico} "
+        f"({cita['fecha']} a las {cita['hora']}, folio {cita['folio']}). "
+        "Para agendar otra, primero cancela la que tiene."
+    )
+
+
+@router.get("/citas/expediente/{cl_expediente}")
+def cita_del_expediente(cl_expediente: int, usuario: dict = Depends(usuario_actual)):
+    """La cita vigente de un expediente, con el texto listo para copiar a
+    Observaciones. Regresa {"cita": null} si no tiene."""
+    if usuario.get("perfil") != PERFIL_ADMINISTRADOR:
+        # El nombre del paciente viaja en la cita: solo se entrega si el
+        # Proveedor realmente puede actuar sobre ese expediente.
+        coordinar_cita_service.expediente_para_coordinar(cl_expediente, usuario)
+    cita = citas_proveedor_repo.cita_activa_de_expediente(cl_expediente)
+    if not cita:
+        return {"cita": None}
+    proveedor = proveedores_repo.obtener_por_clave(cita["clave_proveedor"]) or {}
+    return {"cita": {**cita, "observaciones_sugeridas": cita_texto_service.observaciones_de_cita(
+        proveedor, cita, cita.get("paciente"))}}
 
 
 @router.post("/citas/{folio}/cancelar")
-def cancelar_cita(folio: str):
+def cancelar_cita(folio: str, usuario: dict = Depends(usuario_actual)):
+    cita = citas_proveedor_repo.obtener_por_folio(folio)
+    if cita is None:
+        raise HTTPException(404, "No se encontró esa cita agendada.")
+    # Una cita ligada a un expediente solo se cambia mientras el Proveedor
+    # todavía puede actuar sobre él; después queda en manos del coordinador.
+    if cita["cl_expediente"] and usuario.get("perfil") != PERFIL_ADMINISTRADOR:
+        coordinar_cita_service.expediente_para_coordinar(cita["cl_expediente"], usuario)
     if not citas_proveedor_repo.cancelar(folio):
         raise HTTPException(404, "No se encontró esa cita agendada.")
     return {"ok": True}
@@ -170,8 +229,14 @@ def agenda(
         ge=1,
         le=agenda_proveedores_service.DIAS_AGENDA_MAXIMO,
     ),
+    desde: str | None = Query(default=None, description="YYYY-MM-DD; por default hoy"),
 ):
-    """Horarios realmente libres de ese proveedor (los ya apartados no salen)."""
+    """Horarios sugeridos que siguen libres de ese proveedor (los ya apartados
+    no salen). Con `desde` se consulta otro día (ej. el que se eligió en la
+    fecha libre). Cualquier otra hora también se puede agendar."""
     if proveedores_repo.obtener_por_clave(clave) is None:
         raise HTTPException(404, "No se encontró ese proveedor en el padrón.")
-    return agenda_proveedores_service.agenda_disponible(clave, dias)
+    if desde is not None and not agenda_proveedores_service.fecha_valida(desde):
+        raise HTTPException(400, "La fecha debe ser de hoy en adelante y dentro del tiempo permitido.")
+    inicio = date.fromisoformat(desde) if desde else None
+    return agenda_proveedores_service.agenda_disponible(clave, dias, inicio)

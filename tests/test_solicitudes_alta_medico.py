@@ -355,9 +355,12 @@ def test_cuando_el_medico_del_portal_llega_en_la_carga_conserva_su_clave_y_pasa_
     clave = aprobar.json()["clave_proveedor"]
 
     # Una cita agendada ANTES de que llegue en la carga.
-    from datetime import date
+    from datetime import date, timedelta
+    # Mañana, no hoy: una hora de hoy que ya pasó se rechaza, y esta prueba no debe
+    # depender de a qué hora del día se corra.
+    manana = (date.today() + timedelta(days=1)).isoformat()
     cita = client.post("/directorio-proveedores/citas", headers=admin, json={
-        "clave_proveedor": clave, "fecha": date.today().isoformat(), "hora": "09:00",
+        "clave_proveedor": clave, "fecha": manana, "hora": "09:00",
     })
     assert cita.status_code == 200, cita.text
 

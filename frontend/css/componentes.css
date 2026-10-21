@@ -506,3 +506,12 @@ tbody tr:hover{background:#FAFAFA;}
 @media (max-width:640px){ .cfg-filtro{width:100%;} }
 .cfg-nota{margin-top:10px;}
 .cc-aviso-cuentas{margin:-2px 0 6px;}
+
+/* ---------- Coordinar cita (bloque dentro de "Registrar seguimiento") ---------- */
+.sg-cita{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin-bottom:16px;padding:12px 14px;background:var(--tono-azul);
+  border:1px solid var(--tono-azul-borde);border-radius:var(--radius);
+}
+.sg-cita-estado{flex:1;min-width:240px;font-size:13px;line-height:1.45;color:var(--navy);}
+.sg-cita-acciones{display:flex;gap:8px;flex-wrap:wrap;}

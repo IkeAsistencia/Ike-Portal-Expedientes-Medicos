@@ -23,6 +23,11 @@ class HorarioOcupado(Exception):
     """Ese médico ya tiene una cita en esa fecha y hora."""
 
 
+class ExpedienteConCita(Exception):
+    """Ese expediente ya tiene una cita activa: para agendar otra hay que
+    cancelar primero la que tiene."""
+
+
 def _siguiente_folio(conn) -> str:
     fila = conn.execute(
         f"SELECT MAX(CAST(SUBSTR(folio, {len(PREFIJO_FOLIO) + 1}) AS INTEGER)) AS maximo FROM citas_proveedor"
@@ -30,23 +35,32 @@ def _siguiente_folio(conn) -> str:
     return PREFIJO_FOLIO + str((fila["maximo"] or 0) + 1).zfill(_LARGO_CONSECUTIVO)
 
 
-def agendar(clave_proveedor: str, fecha: str, hora: str, paciente: str | None, rfc_agendo: str) -> dict:
+def agendar(
+    clave_proveedor: str, fecha: str, hora: str, paciente: str | None, rfc_agendo: str,
+    cl_expediente: int | None = None,
+) -> dict:
     with get_local_connection() as conn:
         folio = _siguiente_folio(conn)
         try:
             conn.execute(
                 "INSERT INTO citas_proveedor "
-                "(folio, clave_proveedor, fecha, hora, paciente, rfc_agendo, estatus, fecha_registro) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (folio, clave_proveedor, fecha, hora, paciente, rfc_agendo, ESTATUS_AGENDADA, ahora_local()),
+                "(folio, clave_proveedor, fecha, hora, paciente, cl_expediente, rfc_agendo, estatus, fecha_registro) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (folio, clave_proveedor, fecha, hora, paciente, cl_expediente, rfc_agendo,
+                 ESTATUS_AGENDADA, ahora_local()),
             )
         except sqlite3.IntegrityError as e:
-            # Lo garantiza el UNIQUE (clave_proveedor, fecha, hora) de la
-            # tabla, no una consulta previa: entre el "ya está libre" y el
-            # INSERT puede colarse otra petición.
+            # Lo garantizan los índices únicos de la tabla, no una consulta
+            # previa: entre el "ya está libre" y el INSERT puede colarse otra
+            # petición. El mensaje de SQLite dice cuál de los dos fue.
+            if "cl_expediente" in str(e):
+                raise ExpedienteConCita("Este expediente ya tiene una cita agendada.") from e
             raise HorarioOcupado("Ese horario ya fue apartado con este médico.") from e
         conn.commit()
-    return {"folio": folio, "clave_proveedor": clave_proveedor, "fecha": fecha, "hora": hora}
+    return {
+        "folio": folio, "clave_proveedor": clave_proveedor, "fecha": fecha, "hora": hora,
+        "cl_expediente": cl_expediente,
+    }
 
 
 def horarios_ocupados(clave_proveedor: str, fecha: str) -> list[str]:
@@ -67,7 +81,7 @@ def listar_citas(clave_proveedor: str | None = None) -> list[dict]:
     control.
     """
     sql = (
-        "SELECT c.folio, c.clave_proveedor, c.fecha, c.hora, c.paciente, c.rfc_agendo, "
+        "SELECT c.folio, c.clave_proveedor, c.fecha, c.hora, c.paciente, c.cl_expediente, c.rfc_agendo, "
         "       c.estatus, c.fecha_registro, "
         "       p.nombre AS proveedor_nombre, p.especialidad AS proveedor_especialidad, "
         "       p.origen AS proveedor_origen "
@@ -81,6 +95,26 @@ def listar_citas(clave_proveedor: str | None = None) -> list[dict]:
     sql += "ORDER BY c.fecha DESC, c.hora DESC"
     with get_local_connection() as conn:
         return [dict(r) for r in conn.execute(sql, parametros).fetchall()]
+
+
+def cita_activa_de_expediente(cl_expediente: int) -> dict | None:
+    """La cita vigente de un expediente (None si no tiene o ya la canceló)."""
+    with get_local_connection() as conn:
+        fila = conn.execute(
+            "SELECT c.folio, c.clave_proveedor, c.fecha, c.hora, c.paciente, c.cl_expediente, "
+            "       c.rfc_agendo, c.estatus, c.fecha_registro, "
+            "       p.nombre AS proveedor_nombre, p.especialidad AS proveedor_especialidad "
+            "FROM citas_proveedor c LEFT JOIN proveedores p ON p.clave = c.clave_proveedor "
+            "WHERE c.cl_expediente = ? AND c.estatus = ?",
+            (cl_expediente, ESTATUS_AGENDADA),
+        ).fetchone()
+    return dict(fila) if fila else None
+
+
+def obtener_por_folio(folio: str) -> dict | None:
+    with get_local_connection() as conn:
+        fila = conn.execute("SELECT * FROM citas_proveedor WHERE folio = ?", (folio,)).fetchone()
+    return dict(fila) if fila else None
 
 
 def cancelar(folio: str) -> bool:

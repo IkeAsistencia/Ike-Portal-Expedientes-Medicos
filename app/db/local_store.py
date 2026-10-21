@@ -279,6 +279,7 @@ CREATE TABLE IF NOT EXISTS citas_proveedor (
     fecha           TEXT NOT NULL,   -- YYYY-MM-DD
     hora            TEXT NOT NULL,   -- HH:MM
     paciente        TEXT,
+    cl_expediente   INTEGER,         -- si se coordinó desde un expediente (Seguimiento)
     rfc_agendo      TEXT NOT NULL,
     estatus         TEXT NOT NULL DEFAULT 'Agendada',
     fecha_registro  TEXT NOT NULL,
@@ -342,6 +343,17 @@ def _migrar_columnas_faltantes(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE proveedores ADD COLUMN cl_especialidad INTEGER")
     if "origen_coordenadas" not in columnas_proveedores:
         conn.execute("ALTER TABLE proveedores ADD COLUMN origen_coordenadas TEXT")
+
+    columnas_citas = {row["name"] for row in conn.execute("PRAGMA table_info(citas_proveedor)")}
+    if "cl_expediente" not in columnas_citas:
+        conn.execute("ALTER TABLE citas_proveedor ADD COLUMN cl_expediente INTEGER")
+    # Un expediente tiene UNA sola cita activa (las canceladas no cuentan). Lo
+    # garantiza la base, no solo una consulta previa: dos clics casi al mismo
+    # tiempo no pueden dejar dos citas vivas para el mismo expediente.
+    conn.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS ux_cita_activa_por_expediente "
+        "ON citas_proveedor (cl_expediente) WHERE cl_expediente IS NOT NULL AND estatus = 'Agendada'"
+    )
 
 
 def _migrar_tablas_renombradas(conn: sqlite3.Connection) -> None:
