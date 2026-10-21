@@ -58,7 +58,7 @@ CREATE TABLE #Muestra (clSubServicio INT, clExpediente INT);
 -- NULL, hay que llenarlas a mano al revisar).
 INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 226 FROM dbo.Expediente E
-WHERE E.clSubServicio = 226 AND EXISTS (SELECT 1 FROM dbo.S2_ReferciasMedicas RM WHERE RM.clExpediente = E.clExpediente)
+WHERE E.clSubServicio = 226 and  ISNULL(E.CodEnt,'') != '' AND ISNULL(E.codmd,'') != '' AND EXISTS (SELECT 1 FROM dbo.S2_ReferciasMedicas RM WHERE RM.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
 INSERT INTO #Muestra (clExpediente, clSubServicio)
@@ -73,27 +73,27 @@ ORDER BY NEWID();
 
 INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 377 FROM dbo.Expediente E
-WHERE E.clSubServicio = 377 AND EXISTS (SELECT 1 FROM dbo.Check_Up CKP WHERE CKP.clExpediente = E.clExpediente)
+WHERE E.clSubServicio = 377 AND ISNULL(E.CodEnt,'') != '' AND ISNULL(E.codmd,'') != ''  AND EXISTS (SELECT 1 FROM dbo.Check_Up CKP WHERE CKP.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
 INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 403 FROM dbo.Expediente E
-WHERE E.clSubServicio = 403 AND EXISTS (SELECT 1 FROM dbo.s2_RentaEquipoMedico REM WHERE REM.clExpediente = E.clExpediente)
+WHERE E.clSubServicio = 403 AND ISNULL(E.CodEnt,'') != '' AND ISNULL(E.codmd,'') != '' AND EXISTS (SELECT 1 FROM dbo.s2_RentaEquipoMedico REM WHERE REM.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
 INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 404 FROM dbo.Expediente E
-WHERE E.clSubServicio = 404 AND EXISTS (SELECT 1 FROM dbo.s2_EnfermeriaDomicilio ED WHERE ED.clExpediente = E.clExpediente)
+WHERE E.clSubServicio = 404 AND ISNULL(E.CodEnt,'') != '' AND ISNULL(E.codmd,'') != '' AND EXISTS (SELECT 1 FROM dbo.s2_EnfermeriaDomicilio ED WHERE ED.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
 INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 420 FROM dbo.Expediente E
-WHERE E.clSubServicio = 420 AND EXISTS (SELECT 1 FROM dbo.s2_cPuntoVision PV WHERE PV.clExpediente = E.clExpediente)
+WHERE E.clSubServicio = 420 AND ISNULL(E.CodEnt,'') != '' AND ISNULL(E.codmd,'') != '' AND EXISTS (SELECT 1 FROM dbo.s2_cPuntoVision PV WHERE PV.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
 INSERT INTO #Muestra (clExpediente, clSubServicio)
 SELECT TOP 3 E.clExpediente, 432 FROM dbo.Expediente E
-WHERE E.clSubServicio = 432 AND EXISTS (SELECT 1 FROM dbo.s2_EnvioDeMedicamentos EM WHERE EM.clExpediente = E.clExpediente)
+WHERE E.clSubServicio = 432 AND ISNULL(E.CodEnt,'') != '' AND ISNULL(E.codmd,'') != '' AND EXISTS (SELECT 1 FROM dbo.s2_EnvioDeMedicamentos EM WHERE EM.clExpediente = E.clExpediente)
 ORDER BY NEWID();
 
 IF OBJECT_ID('tempdb..#Resultado') IS NOT NULL DROP TABLE #Resultado;
