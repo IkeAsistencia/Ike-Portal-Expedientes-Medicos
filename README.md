@@ -204,11 +204,12 @@ En cualquier sistema operativo, el portal necesita lo mismo:
   estatus, comentarios, comprobantes y cortes.
 - El job de alertas programado cada hora (ver `jobs/README.md`).
 
-Para **AWS** (EC2 Linux detrás de CloudFront y ALB) hay plantillas listas en
-[`deploy/`](deploy/README.md): servicio systemd, script de despliegue con
-verificación, workflow de ejemplo, el `.env` de producción y lo que hay que
-pedirle a la nube (security groups, health check, caché y la salida a
-internet que necesita la búsqueda del DENUE).
+Para **producción en AWS** (EC2 Linux detrás de CloudFront y ALB) el
+procedimiento completo está en
+[`DESPLIEGUE-PRODUCCION.md`](DESPLIEGUE-PRODUCCION.md): requerimientos de
+cada área, los 7 pasos de preparación del servidor, las variables del
+`.env`, la verificación posterior y la operación. Las plantillas que ese
+documento usa están en [`deploy/`](deploy/README.md).
 
 ### Windows
 
