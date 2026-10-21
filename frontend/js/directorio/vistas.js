@@ -9,6 +9,7 @@
    data-accion (ver pantallas/directorio-proveedores.js). */
 import { escapeHtml as e } from "../core/formato.js";
 import { esPerfilAdministrador } from "../core/sesion.js";
+import { coordinacionActual } from "../core/coordinar-cita.js";
 
 /* Estatus en los que una solicitud de alta todavía se puede corregir --
    mismo criterio que ESTATUS_EDITABLES en
@@ -22,6 +23,22 @@ import {
   entidadesAltaCache, municipiosAltaCache,
   especialidadesKpiCache, todasLasEspecialidades,
 } from "./datos.js";
+
+/* Fechas locales (no UTC: a la medianoche toISOString() ya diría "mañana"). */
+const DIAS_CITA_MAXIMO = 365;   // igual que DIAS_CITA_MAXIMO en agenda_proveedores_service.py
+const NOMBRES_DIA = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
+const dos = (n) => String(n).padStart(2, "0");
+
+function fechaLocalISO(d) {
+  return `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`;
+}
+
+/* "2026-10-22" -> { dow: "Jue", num: "22", completa: "Jue 22/10/2026" } */
+function etiquetaDeFecha(iso) {
+  const [a, m, d] = iso.split("-").map(Number);
+  const dia = new Date(a, m - 1, d);
+  return { dow: NOMBRES_DIA[dia.getDay()], num: String(d), completa: `${NOMBRES_DIA[dia.getDay()]} ${dos(d)}/${dos(m)}/${a}` };
+}
 
 const svg = (contenido) =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${contenido}</svg>`;
@@ -122,17 +139,27 @@ export function calcular(s) {
 
   // Agenda: los días y horarios REALMENTE libres los manda el servidor (ver
   // cargarAgenda en datos.js) -- s.agenda llega vacío mientras se consulta.
+  // Además de los 7 días y horarios sugeridos, la cita se puede capturar en
+  // CUALQUIER fecha y hora (el médico suele aceptar por teléfono una hora que
+  // no está en la lista, ej. 12:45): bookingFechaLibre y bookingHoraLibre.
   const bookingDayIndex = s.bookingDay == null ? 0 : s.bookingDay;
+  const fechaLibre = s.bookingFechaLibre || "";
   const days = (s.agenda || []).map((dia, i) => ({
     indice: i,
     dow: dia.dia_semana, num: String(dia.dia_mes), fecha: dia.fecha,
     slots: dia.horarios.length ? dia.horarios.length + " horarios" : "sin cupo",
-    disabled: dia.horarios.length === 0,
-    elegido: i === bookingDayIndex,
+    // Un día sin horarios sugeridos libres se puede elegir igual: se captura la hora a mano.
+    disabled: false,
+    elegido: !fechaLibre && i === bookingDayIndex,
   }));
-  const diaElegido = (s.agenda || [])[bookingDayIndex];
-  const daySlots = (diaElegido ? diaElegido.horarios : []).map(sl => ({ label: sl, elegido: sl === s.bookingSlot }));
-  const selDay = days[bookingDayIndex];
+  const diaElegido = fechaLibre ? s.agendaLibre : (s.agenda || [])[bookingDayIndex];
+  const horaEfectiva = s.bookingHoraLibre || s.bookingSlot || "";
+  const daySlots = (diaElegido ? diaElegido.horarios : []).map(sl => ({
+    label: sl, elegido: !s.bookingHoraLibre && sl === s.bookingSlot,
+  }));
+  const selDay = fechaLibre ? etiquetaDeFecha(fechaLibre) : days[bookingDayIndex];
+  const hoy = new Date();
+  const limite = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() + DIAS_CITA_MAXIMO);
 
   return {
     screen: s.screen,
@@ -160,6 +187,18 @@ export function calcular(s) {
     query: s.query,
     suggestions: calcularSugerencias(s),
     recent: s.recent,
+
+    // Coordinar cita desde un expediente (botón de Seguimiento): lo que se
+    // muestra en el aviso de arriba; null cuando no se viene de un expediente.
+    coord: (() => {
+      const c = coordinacionActual();
+      if (!c) return null;
+      return {
+        expediente: c.expediente, paciente: c.paciente || "NA", especialidad: c.especialidad || "NA",
+        entidad: c.entidad || "NA", municipio: c.municipio || "NA",
+        nota: s.coordNota || "", fuera: !!s.coordFuera,
+      };
+    })(),
 
     // Zona -- estados y municipios con proveedores de verdad. Vacío cuando
     // el padrón todavía no se ha cargado.
@@ -223,10 +262,12 @@ export function calcular(s) {
     bookingDays: days, bookingSlots: daySlots,
     bookingNote: s.bookingGuardando
       ? "Agendando…"
-      : s.bookingSlot
-        ? "Cita: " + (selDay ? selDay.dow + " " + selDay.num : "") + " a las " + s.bookingSlot
+      : horaEfectiva && selDay
+        ? "Cita: " + (selDay.completa || selDay.dow + " " + selDay.num) + " a las " + horaEfectiva
         : "Elige un horario para confirmar.",
-    bookingSummary: (selDay ? selDay.dow + " " + selDay.num : "") + " · " + (s.bookingSlot || ""),
+    bookingSummary: (selDay ? (selDay.completa || selDay.dow + " " + selDay.num) : "") + " · " + horaEfectiva,
+    bookingFechaLibre: fechaLibre, bookingHoraLibre: s.bookingHoraLibre || "",
+    bookingFechaMin: fechaLocalISO(hoy), bookingFechaMax: fechaLocalISO(limite),
     bookingFolio: s.bookingFolio || "",
     bookingGuardando: !!s.bookingGuardando,
 
@@ -354,6 +395,25 @@ export function barra(v) {
       <button class="btn dp-btn-ghost" data-accion="ir-metricas">Métricas</button>
       <button class="btn dp-btn-ghost" data-accion="ir-solicitudes">${e(solicitudes)}</button>
       <button class="btn btn-secondary" data-accion="ir-alta">Alta de médico</button>
+    </div>`;
+}
+
+/* Aviso fijo mientras se coordina una cita desde un expediente: de cuál viene,
+   en qué punto se detuvo la búsqueda y por qué, y cómo volver sin agendar. */
+export function avisoCoordinacion(v) {
+  const c = v.coord;
+  if (!c) return "";
+  return `
+    <div class="dp-aviso-cita">
+      <div class="dp-aviso-cita-texto">
+        <strong>Coordinando cita para el expediente ${e(c.expediente)}</strong>
+        <span>Paciente: ${e(c.paciente)} · Especialidad: ${e(c.especialidad)} · ${e(c.municipio)}, ${e(c.entidad)}</span>
+        ${c.nota ? `<span class="dp-aviso-cita-nota">${e(c.nota)}</span>` : ""}
+      </div>
+      <div class="dp-acciones">
+        ${c.fuera ? `<button class="btn btn-secondary" data-accion="ir-fuera-de-red">Buscar fuera de la red</button>` : ""}
+        <button class="btn btn-secondary" data-accion="cancelar-coordinacion">Cancelar y volver al expediente</button>
+      </div>
     </div>`;
 }
 
@@ -1040,10 +1100,24 @@ export function fichaCuerpo(v) {
               <span class="dp-dia-cupo">${e(day.slots)}</span>
             </button>`).join("")}
         </div>
-        <h3 class="dp-subtitulo dp-subtitulo-espacio">Horarios disponibles</h3>
+        <h3 class="dp-subtitulo dp-subtitulo-espacio">Horarios sugeridos</h3>
         <div class="dp-horarios">
-          ${v.bookingSlots.map(sl => `
-            <button class="dp-horario${sl.elegido ? " dp-sel" : ""}" data-accion="elegir-horario" data-valor="${e(sl.label)}">${e(sl.label)}</button>`).join("")}
+          ${v.bookingSlots.length
+            ? v.bookingSlots.map(sl => `
+            <button class="dp-horario${sl.elegido ? " dp-sel" : ""}" data-accion="elegir-horario" data-valor="${e(sl.label)}">${e(sl.label)}</button>`).join("")
+            : `<span class="dp-nota">No quedan horarios sugeridos libres este día: captura la hora abajo.</span>`}
+        </div>
+        <h3 class="dp-subtitulo dp-subtitulo-espacio">¿Otro día u otra hora?</h3>
+        <p class="dp-nota">Si el médico te confirma por teléfono una fecha u hora distinta (por ejemplo, las 12:45), captúrala aquí.</p>
+        <div class="dp-cita-libre">
+          <div class="field">
+            <label for="dp-fecha-libre">Fecha</label>
+            <input type="date" id="dp-fecha-libre" min="${e(v.bookingFechaMin)}" max="${e(v.bookingFechaMax)}" value="${e(v.bookingFechaLibre)}">
+          </div>
+          <div class="field">
+            <label for="dp-hora-libre">Hora</label>
+            <input type="time" id="dp-hora-libre" value="${e(v.bookingHoraLibre)}">
+          </div>
         </div>
       </div>`;
   }

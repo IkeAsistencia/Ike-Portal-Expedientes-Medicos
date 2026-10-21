@@ -31,15 +31,18 @@ import {
   editarSolicitudAlta,
   cargarAgenda, agendarCita,
   cargarEntidadesAltaReal, cargarMunicipiosAltaReal,
-  buscarFueraDeRed,
+  buscarFueraDeRed, resolverBusquedaDeExpediente,
   cargarEspecialidadesKpi, olvidarEspecialidadesKpi, todasLasEspecialidades,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
 import { toast } from "../core/toast.js";
+import { coordinacionActual, terminarCoordinacion } from "../core/coordinar-cita.js";
+import { abrirSeguimiento, rellenarObservacionesConCita } from "./seguimiento.js";
 
 const PLANTILLA = `
   <div class="dp-directorio" id="dp-raiz">
     <div class="dp-barra" id="dp-barra"></div>
+    <div id="dp-aviso-cita"></div>
     <div id="dp-cuerpo"></div>
     <footer class="dp-pie" id="dp-pie"></footer>
     <div class="dp-barra-comparar hidden" id="dp-barra-comparar"></div>
@@ -72,6 +75,9 @@ function estadoInicial() {
     filters: { maxPrice: 9999, tele: false, seguro: false, orden: "nombre" },
     compare: [],
     detail: null, bookingStep: "idle", bookingDay: null, bookingSlot: null,
+    // La cita también se puede capturar en CUALQUIER fecha y hora: la fecha y
+    // la hora libres (y los horarios sugeridos de esa fecha, si se eligió otra).
+    bookingFechaLibre: "", bookingHoraLibre: "", agendaLibre: null,
     // Agenda real del médico abierto (la manda el servidor, ver cargarAgenda).
     agenda: [], bookingFolio: null, bookingGuardando: false,
     cedulaStatus: "idle", registered: null, requests: [],
@@ -83,6 +89,9 @@ function estadoInicial() {
     // guardan: viven solo en este estado mientras dura la consulta.
     fueraForm: { codEnt: "", codMun: "", especialidad: "" },
     fueraResultados: null, fueraBuscando: false, fueraError: null,
+    // Aviso de "Coordinar cita" (ver core/coordinar-cita.js): dónde se detuvo
+    // la búsqueda y si conviene ofrecer buscar fuera de la red.
+    coordNota: "", coordFuera: false,
   };
 }
 
@@ -153,6 +162,7 @@ function pintar() {
   const v = V.calcular(estado);
 
   $("dp-barra").innerHTML = V.barra(v);
+  $("dp-aviso-cita").innerHTML = V.avisoCoordinacion(v);
   pintarPantalla(v);
   $("dp-pie").innerHTML = V.pie(v);
 
@@ -261,8 +271,57 @@ function pintarDependientesAlta() {
 
 /* ---------- Acciones (mismo efecto que los handlers del original) ---------- */
 function irA(cambios) {
+  // La nota del aviso explica dónde se detuvo la búsqueda al llegar; en cuanto
+  // la persona elige otra especialidad, estado, municipio o pantalla, ya no aplica.
+  if (!("coordNota" in cambios) && ["screen", "specialty", "estado", "municipio"].some(k => k in cambios)) {
+    estado.coordNota = "";
+    estado.coordFuera = false;
+  }
   Object.assign(estado, cambios);
   pintar();
+}
+
+/* ---------- Coordinar cita desde un expediente ----------
+   Se llega aquí desde el botón "Coordinar cita" de Seguimiento (ver
+   core/coordinar-cita.js): la búsqueda arranca con los datos del expediente y,
+   al confirmar la cita, se vuelve a Seguimiento con sus datos ya copiados en
+   Observaciones. */
+function aplicarCoordinacion() {
+  const ctx = coordinacionActual();
+  if (!ctx) return;
+  const r = resolverBusquedaDeExpediente(ctx);
+  irA({
+    // Filtros y comparador en blanco: que lo de una visita anterior no esconda médicos.
+    detail: null, searchTerm: null, view: "list", compare: [],
+    filters: { maxPrice: 9999, tele: false, seguro: false, orden: "nombre" },
+    screen: r.screen,
+    specialty: r.especialidad ? r.especialidad.descripcion : null,
+    specialtyId: r.especialidad ? Number(r.especialidad.cl_especialidad) : null,
+    estado: r.estado, municipio: r.municipio,
+    coordNota: r.nota, coordFuera: r.fuera,
+  });
+}
+
+async function volverAlExpediente(textoCita, folio) {
+  const ctx = terminarCoordinacion();
+  irA({
+    detail: null, bookingStep: "idle", bookingDay: null, bookingSlot: null,
+    agenda: [], bookingFolio: null, bookingGuardando: false, coordNota: "", coordFuera: false,
+  });
+  if (!ctx) return;
+  try {
+    await abrirSeguimiento(ctx.record, ctx.fuente);
+  } catch (err) {
+    toast("No se pudo regresar al expediente: " + err.message, "error");
+    return;
+  }
+  if (textoCita) {
+    rellenarObservacionesConCita(textoCita);
+    toast(
+      `Cita ${folio} agendada. Los datos se copiaron a Observaciones: revísalos, agrega tus notas y presiona «Actualizar Seguimiento».`,
+      "success", 9000
+    );
+  }
 }
 
 function buscar(termino) {
@@ -385,7 +444,12 @@ function abrirFueraDeRed() {
   // Si se venía de una búsqueda por zona, se arrastra la especialidad para
   // no obligar a volver a escribirla.
   const especialidad = estado.specialty || estado.searchTerm || "";
-  const zona = { estado: estado.estado, municipio: estado.municipio };
+  // Viniendo de un expediente, la zona por defecto es la suya.
+  const ctx = coordinacionActual();
+  const zona = {
+    estado: estado.estado || (ctx && ctx.entidad) || null,
+    municipio: estado.municipio || (ctx && ctx.municipio) || null,
+  };
   irA({
     screen: "fuera", detail: null,
     fueraForm: { ...estado.fueraForm, especialidad: estado.fueraForm.especialidad || especialidad },
@@ -471,6 +535,7 @@ async function abrirAgenda(medico) {
   if (!medico) return;
   irA({
     detail: medico, bookingStep: "pick", bookingDay: 0, bookingSlot: null,
+    bookingFechaLibre: "", bookingHoraLibre: "", agendaLibre: null,
     agenda: [], bookingFolio: null, bookingGuardando: false,
   });
   const g = generacion;
@@ -481,21 +546,35 @@ async function abrirAgenda(medico) {
 
 async function confirmarCita() {
   const medico = estado.detail;
-  const dia = (estado.agenda || [])[estado.bookingDay == null ? 0 : estado.bookingDay];
-  if (!medico || !dia || !estado.bookingSlot || estado.bookingGuardando) return;
+  // Fecha y hora: las libres si se capturaron, y si no, el día y horario sugerido elegidos.
+  const fecha = estado.bookingFechaLibre
+    || ((estado.agenda || [])[estado.bookingDay == null ? 0 : estado.bookingDay] || {}).fecha;
+  const hora = estado.bookingHoraLibre || estado.bookingSlot;
+  if (!medico || !fecha || !hora || estado.bookingGuardando) return;
 
   irA({ bookingGuardando: true });
   try {
+    const ctx = coordinacionActual();
     const cita = await agendarCita({
-      claveProveedor: medico.clave, fecha: dia.fecha, hora: estado.bookingSlot,
+      claveProveedor: medico.clave, fecha, hora,
+      clExpediente: ctx ? ctx.expediente : undefined,
     });
+    if (ctx) {
+      // Coordinada desde un expediente: se regresa a Seguimiento con los datos
+      // de la cita ya copiados (el servidor arma el texto).
+      await volverAlExpediente(cita.observaciones_sugeridas, cita.folio);
+      return;
+    }
     irA({ bookingStep: "done", bookingFolio: cita.folio, bookingGuardando: false });
   } catch (err) {
     // El caso típico: otra persona tomó ese horario (409). Se refresca la
     // agenda para que ya no aparezca como libre.
     toast(err.message, "error");
     const agenda = await cargarAgenda(medico.clave);
-    irA({ agenda, bookingSlot: null, bookingGuardando: false });
+    const agendaLibre = estado.bookingFechaLibre
+      ? (await cargarAgenda(medico.clave, estado.bookingFechaLibre))[0] || null
+      : null;
+    irA({ agenda, agendaLibre, bookingSlot: null, bookingHoraLibre: "", bookingGuardando: false });
   }
 }
 
@@ -509,6 +588,9 @@ const ACCIONES = {
   "ir-alta": () => irA({ screen: "register", detail: null, ...sinEdicion() }),
   "volver-zona": () => irA({ screen: estado.searchTerm ? "home" : "zone", searchTerm: null }),
   "volver-resultados": () => irA({ screen: "results" }),
+
+  // Coordinar cita desde un expediente: salir sin agendar
+  "cancelar-coordinacion": () => volverAlExpediente(null),
 
   // Fuera de la red (candidatos del DENUE)
   "ir-fuera-de-red": abrirFueraDeRed,
@@ -528,7 +610,10 @@ const ACCIONES = {
   "limpiar-filtros": () => { ponerFiltros({ maxPrice: 9999, tele: false, seguro: false }); pintar(); },
   "ficha": (el) => {
     const x = medicoVisible(el.dataset.id);
-    if (x) irA({ detail: x, bookingStep: "idle", bookingDay: null, bookingSlot: null, agenda: [], bookingFolio: null });
+    if (x) irA({
+      detail: x, bookingStep: "idle", bookingDay: null, bookingSlot: null, agenda: [], bookingFolio: null,
+      bookingFechaLibre: "", bookingHoraLibre: "", agendaLibre: null,
+    });
   },
 
   // Comparar
@@ -540,12 +625,19 @@ const ACCIONES = {
   },
 
   // Ficha y agenda
-  "cerrar-ficha": () => irA({ detail: null, bookingStep: "idle", agenda: [], bookingFolio: null }),
+  "cerrar-ficha": () => irA({
+    detail: null, bookingStep: "idle", agenda: [], bookingFolio: null,
+    bookingFechaLibre: "", bookingHoraLibre: "", agendaLibre: null,
+  }),
   "agendar": () => abrirAgenda(estado.detail),
   "volver-ficha": () => irA({ bookingStep: "idle" }),
   "confirmar-cita": confirmarCita,
-  "elegir-dia": (el) => irA({ bookingDay: Number(el.dataset.indice), bookingSlot: null }),
-  "elegir-horario": (el) => irA({ bookingSlot: el.dataset.valor }),
+  // Elegir una tarjeta de día o un horario sugerido deja sin efecto lo capturado a mano.
+  "elegir-dia": (el) => irA({
+    bookingDay: Number(el.dataset.indice), bookingSlot: null,
+    bookingFechaLibre: "", bookingHoraLibre: "", agendaLibre: null,
+  }),
+  "elegir-horario": (el) => irA({ bookingSlot: el.dataset.valor, bookingHoraLibre: "" }),
 
   // Solicitudes (aprobar/rechazar/editar: solo Administrador, ver
   // _requerir_administrador en app/routers/solicitudes_alta_medico.py)
@@ -611,6 +703,29 @@ async function cambiarCombo(el) {
   } else {
     ponerFormulario({ [campo]: el.value });
     pintarDependientesAlta();
+  }
+}
+
+/* Fecha y hora libres de la ficha (el modal vive fuera de #dp-raiz, por eso su
+   propio "change"). Solo se guarda cuando el valor ya está completo: el campo de
+   hora se arma por partes y repintar a cada tecla lo desharía. */
+async function alCambiarFicha(e) {
+  const el = e.target;
+  if (el.id === "dp-fecha-libre") {
+    const fecha = el.value;
+    if (!fecha) {
+      irA({ bookingFechaLibre: "", agendaLibre: null, bookingDay: 0, bookingSlot: null });
+      return;
+    }
+    irA({ bookingFechaLibre: fecha, bookingDay: -1, agendaLibre: null, bookingSlot: null });
+    const medico = estado.detail;
+    if (!medico) return;
+    const g = generacion;
+    const dias = await cargarAgenda(medico.clave, fecha);
+    if (g !== generacion || estado.bookingFechaLibre !== fecha) return;  // eligieron otra mientras tanto
+    irA({ agendaLibre: dias[0] || null });
+  } else if (el.id === "dp-hora-libre") {
+    irA({ bookingHoraLibre: el.value, bookingSlot: null });
   }
 }
 
@@ -685,6 +800,7 @@ export function montar(contenedor) {
   });
   modalFicha.elemento.querySelector(".modal-footer").classList.add("dp-ficha-pie");
   modalFicha.elemento.addEventListener("click", alClic);
+  modalFicha.elemento.addEventListener("change", alCambiarFicha);
 
   raiz.addEventListener("click", alClic);
   raiz.addEventListener("change", alCambiar);
@@ -695,6 +811,9 @@ export function montar(contenedor) {
   // navegador), la ficha no debe quedarse encima de otra pantalla.
   window.addEventListener("hashchange", () => {
     if (estado.detail && !location.hash.startsWith("#/directorio-proveedores")) modalFicha.cerrar();
+    // Salir del directorio por otro camino (menú, "atrás") da por terminada la
+    // coordinación: el aviso no debe quedarse esperando a un expediente.
+    if (coordinacionActual() && !location.hash.startsWith("#/directorio-proveedores")) terminarCoordinacion();
   });
 
   estado.recent = leerRecientes();
@@ -706,12 +825,20 @@ export function alEntrar() {
   // El catálogo y las solicitudes pueden haber cambiado desde la última
   // visita (ej. Administrador cargó un catálogo nuevo, o aprobó una
   // solicitud) -- se vuelven a pedir cada vez que se entra a la pantalla.
-  cargarCatalogoReal().then(() => pintar());
+  const catalogo = cargarCatalogoReal();
+  catalogo.then(() => pintar());
   cargarSolicitudes();
   // Especialidades con su KPI (tarjetas + combo). Se vuelven a pedir cada
   // vez: los conteos cambian con cada carga de padrón o alta aprobada.
   olvidarEspecialidadesKpi();
-  cargarEspecialidadesKpi().then(() => pintar());
+  const especialidades = cargarEspecialidadesKpi();
+  especialidades.then(() => pintar());
+  // Viniendo de "Coordinar cita": la búsqueda se acomoda con los datos del
+  // expediente, pero hasta que ya estén cargados el catálogo y las
+  // especialidades (sin ellos no hay con qué emparejar).
+  if (coordinacionActual()) {
+    Promise.all([catalogo, especialidades]).then(() => aplicarCoordinacion());
+  }
   // Catálogo de Entidad para el combo del Alta de médico -- se precarga al
   // entrar a la pantalla para que ya esté listo si el usuario navega a
   // "Alta de médico" (los municipios de la entidad elegida se piden aparte,
@@ -722,6 +849,7 @@ export function alEntrar() {
 export function reiniciar() {
   // Al cerrar sesión se regresa todo al estado inicial (como recién abierto).
   generacion++;
+  terminarCoordinacion();
   estado = estadoInicial();
   estado.recent = leerRecientes();
   pintar();

@@ -19,6 +19,7 @@
    contra el RNP de la SEP: hoy solo se valida el formato del número, y así
    se le dice al usuario (ver altaVerificacion en vistas.js). */
 import { api } from "../core/api.js";
+import { normalizarEntidad } from "../core/formato.js";
 
 /* Catálogo de especialidades (GET /directorio-proveedores/especialidades).
    Sale de la tabla especialidades_catalogo de SQLite, sembrada con el
@@ -414,18 +415,26 @@ export async function buscarFueraDeRed({ codEnt, codMun, especialidad }) {
    La disponibilidad la decide el servidor: es el único que sabe qué horarios
    ya están apartados. Antes se inventaba con un hash, así que dos personas
    veían el mismo hueco libre y la cita no quedaba registrada en ningún lado. */
-export async function cargarAgenda(claveProveedor) {
+export async function cargarAgenda(claveProveedor, desde) {
   try {
-    return await api("/directorio-proveedores/" + encodeURIComponent(claveProveedor) + "/agenda");
+    // Sin `desde`: los próximos 7 días. Con `desde` (YYYY-MM-DD): solo ese día,
+    // para los horarios sugeridos de una fecha libre.
+    const opciones = desde ? { params: { desde, dias: 1 } } : undefined;
+    return await api("/directorio-proveedores/" + encodeURIComponent(claveProveedor) + "/agenda", opciones);
   } catch (err) {
     return [];
   }
 }
 
-export function agendarCita({ claveProveedor, fecha, hora, paciente }) {
+export function agendarCita({ claveProveedor, fecha, hora, paciente, clExpediente }) {
   return api("/directorio-proveedores/citas", {
     method: "POST",
-    body: { clave_proveedor: claveProveedor, fecha, hora, paciente: paciente || null },
+    body: {
+      clave_proveedor: claveProveedor, fecha, hora, paciente: paciente || null,
+      // Si se coordina desde un expediente, el servidor toma el paciente de
+      // ahí, liga la cita al expediente y regresa el texto para Observaciones.
+      cl_expediente: clExpediente || undefined,
+    },
   });
 }
 
@@ -437,4 +446,67 @@ export async function cargarCitas(claveProveedor) {
   } catch (err) {
     return [];
   }
+}
+
+/* ---------- Coordinar cita desde un expediente ----------
+   A dónde llevar al Proveedor en el directorio según lo que SÍ trae el
+   expediente: se baja hasta donde alcancen los datos y ahí se detiene, para
+   que lo que falte lo elija él.
+
+     sin especialidad reconocida  -> inicio (tarjetas de especialidad)
+     especialidad                 -> zona de esa especialidad (elige estado)
+     + estado                     -> zona con ese estado (elige municipio)
+     + municipio                  -> lista de médicos
+
+   Si el expediente trae el dato pero en el padrón no hay nadie ahí, se queda
+   un nivel antes, con la nota que lo explica y el acceso a buscar fuera de la
+   red. La especialidad se compara por nombre completo, sin acentos ni
+   mayúsculas: viene del mismo catálogo del sistema central que usa el
+   directorio, así que cuando existe, coincide. */
+const sinAcentos = (t) => (t || "").toString().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+
+export function buscarEspecialidadPorNombre(nombre) {
+  const buscado = sinAcentos(nombre);
+  if (!buscado) return null;
+  return todasLasEspecialidades().find(x => sinAcentos(x.descripcion) === buscado) || null;
+}
+
+export function resolverBusquedaDeExpediente({ especialidad, entidad, municipio }) {
+  const base = { screen: "home", especialidad: null, estado: null, municipio: null, nota: "", fuera: false };
+
+  const esp = buscarEspecialidadPorNombre(especialidad);
+  if (!esp) {
+    return {
+      ...base,
+      nota: (especialidad || "").trim()
+        ? `La especialidad del expediente («${especialidad}») no está en el catálogo del directorio: elige la especialidad.`
+        : "El expediente no trae especialidad: elige la especialidad.",
+    };
+  }
+  const conEspecialidad = { ...base, screen: "zone", especialidad: esp };
+
+  if (!(entidad || "").trim()) {
+    return { ...conEspecialidad, nota: "El expediente no trae estado: elige el estado." };
+  }
+  const estado = zonasDelPadron(esp.cl_especialidad)
+    .find(z => normalizarEntidad(z.name) === normalizarEntidad(entidad));
+  if (!estado) {
+    return {
+      ...conEspecialidad, fuera: true,
+      nota: `No hay médicos de ${esp.descripcion} en ${entidad}. Elige otra zona, busca fuera de la red o da de alta a un médico.`,
+    };
+  }
+  const conEstado = { ...conEspecialidad, estado: estado.name };
+
+  if (!(municipio || "").trim()) {
+    return { ...conEstado, nota: "El expediente no trae municipio: elige el municipio." };
+  }
+  const mun = estado.municipios.find(m => sinAcentos(m.name) === sinAcentos(municipio));
+  if (!mun) {
+    return {
+      ...conEstado, fuera: true,
+      nota: `No hay médicos de ${esp.descripcion} en ${municipio}. Elige otro municipio o busca fuera de la red.`,
+    };
+  }
+  return { ...conEstado, screen: "results", municipio: mun.name };
 }

@@ -10,6 +10,8 @@ import {
 } from "../core/reglas-expedientes.js";
 import { limitarADigitos } from "../componentes/campo-numerico.js";
 import { ICONOS } from "../componentes/iconos.js";
+import { confirmar } from "../componentes/confirmar.js";
+import { iniciarCoordinacion } from "../core/coordinar-cita.js";
 
 const PLANTILLA = `
   <div class="card tono-verde" id="sg-buscar-card">
@@ -35,6 +37,7 @@ const PLANTILLA = `
         <div class="info-item"><label>Nombre del Paciente</label><div class="value" id="ig-paciente">—</div></div>
         <div class="info-item"><label>Entidad</label><div class="value" id="ig-entidad">—</div></div>
         <div class="info-item"><label>Municipio</label><div class="value" id="ig-municipio">—</div></div>
+        <div class="info-item"><label>Especialidad</label><div class="value" id="ig-especialidad">—</div></div>
         <div class="info-item"><label>Teléfono</label><div class="value" id="ig-telefono">—</div></div>
         <div class="info-item"><label>Correo</label><div class="value" id="ig-correo">—</div></div>
       </div>
@@ -116,6 +119,14 @@ const PLANTILLA = `
         ${ICONOS.exito}
         <span>Comentario enviado correctamente a la bitácora de seguimiento.</span>
       </div>
+      <div class="sg-cita hidden" id="sg-cita-bloque">
+        <div class="sg-cita-estado" id="sg-cita-estado"></div>
+        <div class="sg-cita-acciones">
+          <button class="btn btn-primary" id="sg-cita-coordinar">Coordinar cita</button>
+          <button class="btn btn-secondary hidden" id="sg-cita-copiar">Copiar datos a Observaciones</button>
+          <button class="btn btn-secondary hidden" id="sg-cita-modificar">Modificar cita</button>
+        </div>
+      </div>
       <div class="field">
         <label for="sg-observaciones">Observaciones</label>
         <textarea id="sg-observaciones" rows="7"></textarea>
@@ -179,6 +190,8 @@ function largoDisponible(etiqueta) {
 }
 
 let registroActual = null;
+let fuenteActual = "menu";  // cómo se abrió el expediente ("link" o "menu"), para volver igual desde el directorio
+let citaActual = null;      // cita vigente del expediente abierto (ver cargarCitaDelExpediente)
 let pagoAnticipadoActual = { es_anticipado: false, bloqueado: false }; // del expediente abierto actualmente, ver cargarPagoAnticipado()
 
 const $ = (id) => document.getElementById(id);
@@ -199,6 +212,7 @@ function ocultarPaneles() {
     "sg-comentarios-proveedor-card", "sg-comentarios-coordinador-card", "sg-regresar-card",
   ].forEach(id => $(id).classList.add("hidden"));
   registroActual = null;
+  citaActual = null;
 }
 
 /* source: "link" (clic en el número de expediente de una tabla) o "menu"
@@ -206,6 +220,7 @@ function ocultarPaneles() {
 export async function abrirSeguimiento(record, source) {
   navegar("seguimiento");
   registroActual = record;
+  fuenteActual = source || "menu";
 
   const buscarCard = $("sg-buscar-card");
   if (source === "link") {
@@ -222,6 +237,9 @@ export async function abrirSeguimiento(record, source) {
   $("ig-paciente").textContent = record.nombre_paciente || "—";
   $("ig-entidad").textContent = record.entidad || "—";
   $("ig-municipio").textContent = record.municipio || "—";
+  // Lo que regresó el sistema central; "NA" cuando el expediente no trae
+  // (en Check Up es el perfil y en Plan Visión el paquete, no una especialidad médica).
+  $("ig-especialidad").textContent = record.especialidad || "NA";
   $("ig-telefono").textContent = record.telefono || "—";
   $("ig-correo").textContent = record.email || "—";
 
@@ -259,6 +277,7 @@ export async function abrirSeguimiento(record, source) {
   $("sg-comentarios-coordinador-card").classList.remove("hidden");
   cargarComentarios(record.expediente);
 
+  cargarCitaDelExpediente(record);
   await cargarPagoAnticipado(record);
 }
 
@@ -623,6 +642,9 @@ async function registrarSeguimiento() {
     $("sg-observaciones").disabled = true;
     $("sg-cancelar-btn").disabled = true;
     $("sg-comprobante-input").disabled = true;
+    // Ya se mandó: el expediente pasa a revisión del coordinador y la cita
+    // no se cambia desde aquí.
+    $("sg-cita-bloque").classList.add("hidden");
 
     // El backend ya movió el estatus a "Seguimiento Proveedor" — hay que
     // reflejarlo también en los datos que ya tienen las demás pantallas, si
@@ -647,6 +669,95 @@ async function registrarSeguimiento() {
   }
 }
 
+/* ---------- Coordinar cita (solo Proveedor) ----------
+   El botón lleva al Directorio de Proveedores ya filtrado con la especialidad,
+   el estado y el municipio de este expediente (ver core/coordinar-cita.js).
+   Al agendar, el directorio regresa aquí con los datos del médico y de la cita
+   copiados en Observaciones: el Proveedor los revisa, agrega sus notas y
+   presiona "Actualizar Seguimiento". Un expediente tiene UNA sola cita; para
+   cambiarla primero se cancela con "Modificar cita". */
+function puedeCoordinar(record) {
+  return esPerfilProveedor() && ESTATUS_ACCIONABLES_PROVEEDOR.includes(record.estatus);
+}
+
+async function cargarCitaDelExpediente(record) {
+  citaActual = null;
+  const visible = puedeCoordinar(record);
+  $("sg-cita-bloque").classList.toggle("hidden", !visible);
+  if (!visible) return;
+  $("sg-cita-estado").textContent = "Revisando si el expediente ya tiene cita…";
+  ["sg-cita-coordinar", "sg-cita-copiar", "sg-cita-modificar"].forEach(id => $(id).classList.add("hidden"));
+  try {
+    const r = await api("/directorio-proveedores/citas/expediente/" + record.expediente);
+    if (registroActual !== record) return;  // mientras tanto abrieron otro expediente
+    citaActual = r.cita;
+  } catch (err) {
+    if (registroActual !== record) return;
+    toast("No se pudo revisar si el expediente ya tiene cita: " + err.message, "error");
+  }
+  pintarCita();
+}
+
+function pintarCita() {
+  const c = citaActual;
+  $("sg-cita-estado").innerHTML = c
+    ? `<strong>Cita agendada</strong> con ${escapeHtml(c.proveedor_nombre || "el médico")} · ` +
+      `${escapeHtml(formatDate(c.fecha))} a las ${escapeHtml(c.hora)} · folio ${escapeHtml(c.folio)}`
+    : "Este expediente todavía no tiene cita. Al coordinarla, los datos del médico y de la cita se copian solos a Observaciones.";
+  $("sg-cita-coordinar").classList.toggle("hidden", Boolean(c));
+  $("sg-cita-copiar").classList.toggle("hidden", !c);
+  $("sg-cita-modificar").classList.toggle("hidden", !c);
+}
+
+function coordinarCita() {
+  if (!registroActual) return;
+  iniciarCoordinacion({ record: registroActual, fuente: fuenteActual });
+  navegar("directorio-proveedores");
+}
+
+async function modificarCita() {
+  if (!citaActual) return;
+  const ok = await confirmar({
+    titulo: "Modificar cita",
+    mensaje: `Se va a cancelar la cita ${citaActual.folio} con ${citaActual.proveedor_nombre || "el médico"} ` +
+      `(${formatDate(citaActual.fecha)} a las ${citaActual.hora}) para poder agendar otra. ¿Continuar?`,
+    textoConfirmar: "Cancelar cita",
+    peligro: true,
+  });
+  if (!ok) return;
+  try {
+    await api("/directorio-proveedores/citas/" + encodeURIComponent(citaActual.folio) + "/cancelar", { method: "POST" });
+    citaActual = null;
+    pintarCita();
+    toast("Cita cancelada. Ya puedes coordinar otra. Si habías copiado sus datos a Observaciones, bórralos antes de enviar.", "success", 8000);
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+function copiarDatosDeLaCita() {
+  if (citaActual) rellenarObservacionesConCita(citaActual.observaciones_sugeridas);
+}
+
+/* Pega en Observaciones el texto de la cita (ver app/services/cita_texto_service.py).
+   Si ya había algo escrito, se conserva debajo; con pago anticipado se
+   respeta el prefijo "PA-". */
+export function rellenarObservacionesConCita(texto) {
+  const campo = $("sg-observaciones");
+  if (!texto || campo.disabled) return false;
+  const prefijo = pagoAnticipadoActual.es_anticipado ? PREFIJO_PAGO_ANTICIPADO : "";
+  const actual = (prefijo && campo.value.startsWith(prefijo) ? campo.value.slice(prefijo.length) : campo.value).trim();
+  if (actual.includes(texto)) {
+    toast("Esos datos ya están en Observaciones.");
+    return false;
+  }
+  campo.value = (prefijo + texto + (actual ? "\n\n" + actual : "")).slice(0, maxObservaciones);
+  actualizarContador();
+  campo.focus();
+  campo.scrollIntoView({ behavior: "smooth", block: "center" });
+  return true;
+}
+
 /* ---------- Ciclo de vida de la pantalla ---------- */
 export function montar(contenedor) {
   contenedor.innerHTML = PLANTILLA;
@@ -669,6 +780,9 @@ export function montar(contenedor) {
     actualizarContador();
     toast("Cambios descartados.");
   });
+  $("sg-cita-coordinar").addEventListener("click", coordinarCita);
+  $("sg-cita-copiar").addEventListener("click", copiarDatosDeLaCita);
+  $("sg-cita-modificar").addEventListener("click", modificarCita);
   $("sg-regresar-btn").addEventListener("click", () => navegar("expedientes"));
 }
 
@@ -678,6 +792,8 @@ export function aplicarPermisos() {
   // Proveedor no puede cambiar el estado a mano ("Estado del Caso"): en su
   // caso el estatus solo cambia automático al usar "Actualizar Seguimiento".
   $("sg-estatus-card").classList.toggle("hidden-perfil", esPerfilProveedor());
+  // Coordinar cita es del Proveedor (quien registra el seguimiento).
+  $("sg-cita-bloque").classList.toggle("hidden-perfil", !esPerfilProveedor());
 
   // Lo que cabe en cada cuadro de texto: 1500 menos el encabezado con el
   // nombre de quien inició sesión.
