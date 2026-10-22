@@ -23,6 +23,7 @@ export function limpiarSesion() {
 }
 
 export function nombreUsuario() { return sessionStorage.getItem("nombre"); }
+export function rfcActual() { return sessionStorage.getItem("rfc"); }
 export function ultimoRfc() { return localStorage.getItem("ultimoRfc"); }
 
 export function perfilActual() {

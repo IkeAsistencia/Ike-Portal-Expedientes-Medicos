@@ -8,7 +8,11 @@
    pasa por escapeHtml; los clics se resuelven por delegación con
    data-accion (ver pantallas/directorio-proveedores.js). */
 import { escapeHtml as e, normalizarTexto } from "../core/formato.js";
-import { esPerfilAdministrador } from "../core/sesion.js";
+import { esPerfilAdministrador, rfcActual } from "../core/sesion.js";
+import {
+  URL_VALIDAR_RFC_SAT, URL_CONSULTAR_CEDULA_SEP, DOCUMENTOS_ALTA,
+  revisarRfc, normalizarRfc, etiquetaTipoRfc, cedulaConFormatoValido, revisarFormularioAlta,
+} from "./validacion-alta.js";
 import { coordinacionActual } from "../core/coordinar-cita.js";
 
 /* Estatus en los que una solicitud de alta todavía se puede corregir --
@@ -119,7 +123,10 @@ export function calcular(s) {
   const info = s.screen === "results" || s.screen === "compare" ? raw(s) : { list: [], label: "", sub: "" };
   const listed = s.screen === "results" ? visible(s) : [];
   const d = s.detail;
-  const vs = s.cedulaStatus;
+  const cedulaOk = cedulaConFormatoValido(s.form.cedula);
+  const faltasAlta = revisarFormularioAlta(s.form);
+  const rfcAlta = revisarRfc(s.form.rfc);
+  const rfcMostrarError = !!s.altaIntento || normalizarRfc(s.form.rfc).length >= 12;
   const compareItems = visible(s).filter(x => s.compare.indexOf(x.id) >= 0);
   const esAdministrador = esPerfilAdministrador();
 
@@ -300,8 +307,25 @@ export function calcular(s) {
     requests: s.requests.map((r, i) => ({
       indice: i,
       folio: r.folio, name: r.name, specialty: r.specialty, zone: r.zone,
-      cedulaCheck: r.status === "Cédula no localizada" ? "No localizada" : r.cedula + " ✓",
-      rfcCheck: r.rfc + (r.status === "Cédula no localizada" ? "" : " ✓"),
+      // Cédula y RFC tal como se capturaron. Antes se les ponía una ✓ como si
+      // estuvieran verificados; solo se revisó el formato, así que la
+      // confirmación la hace quien revisa con los botones de la SEP y el SAT.
+      cedula: r.cedula || "—",
+      cedulaNoLocalizada: r.status === "Cédula no localizada",
+      rfc: r.rfc || "Sin RFC",
+      rfcTipo: etiquetaTipoRfc(r.rfcRevision.tipo),
+      // Avisos y botones de verificación: solo para quien revisa (Administrador).
+      rfcAviso: !esAdministrador || !r.rfc ? "" : !r.rfcRevision.formato_valido ? "Formato inválido"
+        : !r.rfcRevision.digito_correcto ? "Dígito verificador no cuadra" : "",
+      mostrarVerificacion: esAdministrador,
+      documentos: DOCUMENTOS_ALTA.map(d => ({
+        tipo: d.tipo, corta: d.corta,
+        subido: !!r.documentos[d.tipo],
+        nombre: r.documentos[d.tipo] ? r.documentos[d.tipo].nombre_archivo : "",
+      })),
+      // El contenido lo ve solo el Administrador o quien capturó (lo exige
+      // también el servidor); los demás solo ven si se subió.
+      puedeVerDocumentos: esAdministrador || (!!r.rfcSolicito && r.rfcSolicito === rfcActual()),
       status: r.status,
       // La clave que le tocó al aprobarse: es con la que ya se le pueden
       // agendar citas, y la conserva aunque después llegue en la carga.
@@ -344,31 +368,62 @@ export function calcular(s) {
     fueraCandidatos: s.fueraResultados ? s.fueraResultados.candidatos : [],
     fueraTipo: s.fueraResultados ? (s.fueraResultados.tipo_descripcion || "") : "",
     fueraPuedeBuscar: !!(s.fueraForm.codEnt && (s.fueraForm.especialidad || "").trim().length >= 3),
-    // Verificación de la cédula. HOY SOLO SE VALIDA EL FORMATO: no hay
-    // conexión con el Registro Nacional de Profesionistas, así que no se
-    // afirma que la cédula "se localizó" ni se inventan institución y año
-    // de registro, como se hacía antes.
-    verifyLabel: vs === "loading" ? "Validando…" : vs === "valid" ? "Formato validado" : "Validar cédula profesional",
-    verifyMessage: {
-      idle: "Sin validar",
-      loading: "Validando…",
-      valid: "El formato es correcto. Falta confirmarla contra el RNP.",
-      invalid: "Formato inválido: debe tener 7 u 8 dígitos",
-    }[vs],
-    verifyClase: vs === "valid" ? "dp-ok" : vs === "invalid" ? "dp-error" : "dp-neutro",
-    verified: vs === "valid",
-    verifyCedula: s.form.cedula || "",
-    verifyHolder: s.form.name || "",
-    verifySpecialty: s.form.specialty || "",
-    submitNote: vs === "valid"
-      ? (s.editandoFolio ? "Formato de cédula validado. Puedes guardar los cambios." : "Formato de cédula validado. Puedes enviar la solicitud.")
-      : (s.editandoFolio ? "Cambiaste la cédula: vuelve a validarla antes de guardar." : "Valida la cédula profesional antes de enviar."),
+    // Cédula profesional: solo se revisa el formato (7 u 8 dígitos), mientras
+    // se escribe y sin botón. Igual que el RFC, el error espera a que se
+    // intente enviar para no marcarlo a la primera tecla.
+    cedulaValor: (s.form.cedula || "").trim(),
+    cedulaMensaje: cedulaOk ? "Formato correcto."
+      : s.altaIntento ? "La cédula debe tener 7 u 8 dígitos." : "Obligatoria: 7 u 8 dígitos.",
+    cedulaClase: cedulaOk ? "dp-ok" : s.altaIntento ? "dp-error" : "dp-neutro",
+    submitNote: faltasAlta.length
+      ? (s.altaIntento ? `Faltan por completar o corregir: ${faltasAlta.map(f => f.etiqueta).join(", ")}.` : "Completa todos los datos para enviar.")
+      : (s.editandoFolio ? "Puedes guardar los cambios." : "Puedes enviar la solicitud."),
+
+    // RFC del alta (obligatorio). El error se muestra hasta que ya tiene el
+    // largo de un RFC o se intentó enviar: no a la primera letra.
+    rfcValor: normalizarRfc(s.form.rfc),
+    rfcTipo: rfcAlta.estado === "valido" ? etiquetaTipoRfc(rfcAlta.tipo) : "",
+    // La advertencia del dígito verificador es para quien revisa
+    // (Administrador): a quien captura solo se le dice si el formato es válido.
+    rfcMensaje: !rfcMostrarError ? "Obligatorio: 13 caracteres (persona física) o 12 (persona moral)."
+      : rfcAlta.estado === "valido" && !esAdministrador ? "Formato correcto." : rfcAlta.mensaje,
+    rfcClase: !rfcMostrarError ? "dp-neutro"
+      : rfcAlta.estado !== "valido" ? "dp-error"
+      : rfcAlta.digitoCorrecto || !esAdministrador ? "dp-ok" : "dp-advertencia",
+    // Botones del SAT y la SEP e indicaciones de revisión: solo Administrador.
+    mostrarVerificacion: esAdministrador,
+
+    // Documentos opcionales: el archivo elegido (se sube al guardar) y, al
+    // editar, el que la solicitud ya tiene.
+    documentosAlta: DOCUMENTOS_ALTA.map(d => {
+      const archivo = s.archivosAlta[d.tipo];
+      const guardado = s.editandoFolio ? s.documentosEditando[d.tipo] : null;
+      return {
+        ...d,
+        archivoNombre: archivo ? archivo.name : "",
+        archivoTamano: archivo ? tamanoLegible(archivo.size) : "",
+        guardadoNombre: guardado ? guardado.nombre_archivo : "",
+      };
+    }),
+    regDocumentos: s.registered && s.registered.documentos ? s.registered.documentos : [],
 
     footerCount: "Fuente: padrón del portal",
   };
 }
 
 /* ---------- Piezas comunes ---------- */
+function tamanoLegible(bytes) {
+  return bytes >= 1024 * 1024 ? (bytes / (1024 * 1024)).toFixed(1) + " MB" : Math.max(1, Math.round(bytes / 1024)) + " KB";
+}
+
+/* "Verificar en el SAT / en la SEP": enlace normal al sitio oficial que,
+   además, copia el dato al hacer clic (ver copiarParaVerificar en la
+   pantalla). Esos sitios tienen captcha: no se les puede mandar ya capturado. */
+function enlaceVerificar(url, valor, que, texto) {
+  return `<a class="dp-verificar-externo" href="${e(url)}" target="_blank" rel="noopener noreferrer"
+    data-copiar="${e(valor || "")}" data-que="${e(que)}"
+    title="Copia el ${e(que)} y abre el sitio oficial en otra pestaña">${e(texto)} ↗</a>`;
+}
 /* Color del distintivo según de dónde salió el proveedor: "Dentro de la red"
    (llegó en la carga) en verde, "Fuera de la red" (alta del portal) en
    ámbar, para que se note de un vistazo cuál ya está contratado. */
@@ -422,7 +477,7 @@ export function avisoCoordinacion(v) {
 
 export function pie(v) {
   return `
-    <span>Padrón, altas, citas y métricas reales. La cédula profesional todavía se valida solo por formato: falta conectar el RNP de la SEP.</span>
+    <span>Padrón, altas, citas y métricas reales.</span>
     <span>${e(v.footerCount)}</span>`;
 }
 
@@ -759,9 +814,13 @@ export function pantallaSolicitudes(v) {
     ${encabezado({
       volver: "← Volver al directorio", accionVolver: "ir-inicio",
       titulo: "Solicitudes de alta",
-      texto: "Validación de cédula profesional (RNP) y cédula fiscal (SAT) por solicitud. "
-        + "Aprobar, rechazar y corregir una solicitud es exclusivo del perfil Administrador; "
-        + "«Editar» solo aparece mientras está sin resolver (en revisión o con la cédula no localizada).",
+      // Las indicaciones de revisión son para el Administrador; los demás
+      // perfiles solo ven el estatus de sus solicitudes.
+      texto: v.mostrarVerificacion
+        ? "Antes de aprobar, confirma la cédula en la SEP y el RFC en el SAT con sus botones "
+          + "(el dato se copia y el sitio oficial se abre en otra pestaña), y revisa los documentos que se hayan subido. "
+          + "«Editar» solo aparece mientras está sin resolver (en revisión o con la cédula no localizada)."
+        : "Estatus de las solicitudes de alta. Un Administrador las revisa y las aprueba o rechaza.",
       extra: `<span class="dp-nota">${e(v.adminSummary)}</span>`,
     })}
     <div class="card tono-verdeazul">
@@ -769,7 +828,7 @@ export function pantallaSolicitudes(v) {
         <table class="mini-table dp-tabla-solicitudes">
           <thead>
             <tr>
-              <th>Folio</th><th>Médico</th><th>Especialidad</th><th>Zona</th><th>Cédula prof.</th><th>RFC</th><th>Clave</th><th>Estatus</th><th>Acciones</th>
+              <th>Folio</th><th>Médico</th><th>Especialidad</th><th>Zona</th><th>Cédula prof.</th><th>RFC</th><th>Documentos</th><th>Clave</th><th>Estatus</th><th>Acciones</th>
             </tr>
           </thead>
           <tbody>
@@ -779,8 +838,30 @@ export function pantallaSolicitudes(v) {
                 <td data-label="Médico" class="dp-fuerte">${e(r.name)}</td>
                 <td data-label="Especialidad">${e(r.specialty)}</td>
                 <td data-label="Zona">${e(r.zone)}</td>
-                <td data-label="Cédula prof.">${e(r.cedulaCheck)}</td>
-                <td data-label="RFC">${e(r.rfcCheck)}</td>
+                <td data-label="Cédula prof.">
+                  <div class="dp-dato-verificar">
+                    <span class="dp-tabular">${e(r.cedula)}</span>
+                    ${r.cedulaNoLocalizada ? `<span class="dp-advertencia">No localizada</span>` : ""}
+                    ${r.mostrarVerificacion ? enlaceVerificar(URL_CONSULTAR_CEDULA_SEP, r.cedula === "—" ? "" : r.cedula, "cédula", "Verificar en la SEP") : ""}
+                  </div>
+                </td>
+                <td data-label="RFC">
+                  <div class="dp-dato-verificar">
+                    <span class="dp-tabular">${e(r.rfc)}</span>
+                    ${r.rfcTipo ? `<span class="dp-tipo-rfc">${e(r.rfcTipo)}</span>` : ""}
+                    ${r.rfcAviso ? `<span class="dp-advertencia">${e(r.rfcAviso)}</span>` : ""}
+                    ${r.mostrarVerificacion ? enlaceVerificar(URL_VALIDAR_RFC_SAT, r.rfc === "Sin RFC" ? "" : r.rfc, "RFC", "Verificar en el SAT") : ""}
+                  </div>
+                </td>
+                <td data-label="Documentos">
+                  <div class="dp-dato-verificar">
+                    ${r.documentos.map(d => d.subido
+                      ? (r.puedeVerDocumentos
+                        ? `<button class="dp-doc-chip subido" data-accion="ver-documento" data-folio="${e(r.folio)}" data-tipo="${d.tipo}" title="Abrir ${e(d.nombre)}">✓ ${e(d.corta)} · Ver</button>`
+                        : `<span class="dp-doc-chip subido">✓ ${e(d.corta)}</span>`)
+                      : `<span class="dp-doc-chip">Sin ${e(d.corta.toLowerCase())}</span>`).join("")}
+                  </div>
+                </td>
                 <td data-label="Clave" class="dp-tabular">${e(r.claveProveedor)}</td>
                 <td data-label="Estatus"><span class="badge ${r.statusClass}">${e(r.status)}</span></td>
                 <td data-label="Acciones">
@@ -804,27 +885,50 @@ export function pantallaSolicitudes(v) {
 // (sin tocar los campos) para no perder el foco ni el cursor.
 export function altaVerificacion(v) {
   return `
-    <button class="btn btn-primary" data-accion="verificar-cedula">${e(v.verifyLabel)}</button>
-    <span class="dp-mensaje ${v.verifyClase}">${e(v.verifyMessage)}</span>`;
+    <span class="dp-subtitulo-chico">Cédula</span>
+    <span class="dp-mensaje ${v.cedulaClase}">${e(v.cedulaMensaje)}</span>
+    ${v.mostrarVerificacion ? enlaceVerificar(URL_CONSULTAR_CEDULA_SEP, v.cedulaValor, "cédula", "Verificar en la SEP") : ""}`;
 }
 
-/* Resumen de lo capturado una vez validado el FORMATO de la cédula. Solo
-   repite lo que el usuario escribió: antes mostraba institución y año de
-   registro inventados por el navegador, como si vinieran del registro
-   oficial. Cuando se conecte el RNP, aquí van sus datos reales. */
-export function altaPanelCedula(v) {
-  if (!v.verified) return "";
-  const dato = (titulo, valor) => `<div><dt>${e(titulo)}</dt><dd>${e(valor || "—")}</dd></div>`;
+/* Revisión del RFC mientras se escribe, con el tipo de persona que le
+   corresponde por su largo (13 física, 12 moral). */
+export function altaRfc(v) {
   return `
-    <div class="dp-panel-cedula">
-      <span class="badge espera">Formato válido</span>
-      <dl class="dp-datos">
-        ${dato("Cédula capturada", v.verifyCedula)}
-        ${dato("Titular", v.verifyHolder)}
-        ${dato("Especialidad", v.verifySpecialty)}
-      </dl>
-      <p class="dp-nota">Pendiente de confirmar contra el Registro Nacional de Profesionistas (SEP).</p>
-    </div>`;
+    <span class="dp-subtitulo-chico">RFC</span>
+    ${v.rfcTipo ? `<span class="dp-tipo-rfc">${e(v.rfcTipo)}</span>` : ""}
+    <span class="dp-mensaje ${v.rfcClase}">${e(v.rfcMensaje)}</span>
+    ${v.mostrarVerificacion ? enlaceVerificar(URL_VALIDAR_RFC_SAT, v.rfcValor, "RFC", "Verificar en el SAT") : ""}`;
+}
+
+/* Documentos opcionales del alta. El <input type="file"> no conserva el
+   archivo si se repinta, así que el archivo elegido vive en el estado de la
+   pantalla y aquí solo se muestra su nombre. */
+export function altaDocumentos(v) {
+  const accept = ".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png";
+  const elegir = (d, texto) => `
+    <label class="dp-doc-elegir" for="dp-doc-${d.tipo}">${e(texto)}</label>
+    <input type="file" id="dp-doc-${d.tipo}" class="dp-doc-input" data-documento="${d.tipo}" accept="${accept}">`;
+  return `
+    <h3 class="dp-subtitulo">Documentos (opcionales)</h3>
+    <p class="dp-texto">PDF, JPG o PNG de hasta 5 MB.</p>
+    <ul class="dp-documentos-carga">
+      ${v.documentosAlta.map(d => `
+        <li>
+          <div class="dp-doc-titulo">${e(d.etiqueta)}</div>
+          <div class="dp-nota">${e(d.ayuda)}</div>
+          <div class="dp-doc-archivo">
+            ${d.archivoNombre ? `
+              <span class="dp-doc-nombre">${e(d.archivoNombre)} · ${e(d.archivoTamano)}${d.guardadoNombre ? " (reemplaza al actual al guardar)" : ""}</span>
+              <button class="btn btn-secondary" data-accion="quitar-archivo-elegido" data-tipo="${d.tipo}">Quitar</button>`
+            : d.guardadoNombre ? `
+              <span class="dp-doc-nombre">✓ ${e(d.guardadoNombre)}</span>
+              <button class="btn btn-secondary" data-accion="ver-documento" data-folio="${e(v.editandoFolio)}" data-tipo="${d.tipo}">Ver</button>
+              <button class="btn btn-secondary" data-accion="quitar-documento" data-tipo="${d.tipo}">Quitar</button>
+              ${elegir(d, "Reemplazar")}`
+            : elegir(d, "Elegir archivo")}
+          </div>
+        </li>`).join("")}
+    </ul>`;
 }
 
 export function altaNota(v) {
@@ -999,7 +1103,8 @@ export function pantallaAlta(v) {
         <div class="card-body">
           <span class="badge seguimiento">Solicitud recibida</span>
           <h2 class="dp-titulo dp-titulo-medio">${e(v.regName)} quedó en revisión</h2>
-          <p class="dp-texto">Folio ${e(v.regFolio)}. Cédula profesional validada. Puedes seguir el estatus en la bandeja de solicitudes.</p>
+          <p class="dp-texto">Folio ${e(v.regFolio)}. Puedes seguir el estatus en la bandeja de solicitudes.</p>
+          <p class="dp-texto">${v.regDocumentos.length ? "Documentos adjuntos: " + e(v.regDocumentos.join(" y ")) + "." : "Sin documentos adjuntos."}</p>
           <div class="dp-acciones">
             <button class="btn btn-primary" data-accion="ir-solicitudes">Ver solicitudes</button>
             <button class="btn btn-secondary" data-accion="registrar-otro">Registrar otro médico</button>
@@ -1008,10 +1113,10 @@ export function pantallaAlta(v) {
       </div>`;
   }
   const f = v.form;
-  const campo = (id, campoForm, etiqueta, placeholder) => `
+  const campo = (id, campoForm, etiqueta, placeholder, extra = "") => `
     <div class="field dp-campo">
       <label for="${id}">${e(etiqueta)}</label>
-      <input type="text" id="${id}" data-campo="${campoForm}" placeholder="${e(placeholder)}" value="${e(f[campoForm])}" autocomplete="off">
+      <input type="text" id="${id}" data-campo="${campoForm}" placeholder="${e(placeholder)}" value="${e(f[campoForm])}" autocomplete="off" ${extra}>
     </div>`;
   const opciones = (lista, elegido) => lista.map(x => `<option value="${e(x)}"${x === elegido ? " selected" : ""}>${e(x)}</option>`).join("");
   return `
@@ -1019,6 +1124,7 @@ export function pantallaAlta(v) {
     <div class="dp-dos-columnas dp-alta">
       <div class="card tono-azul">
         <div class="card-body dp-formulario">
+          <p class="dp-nota">Todos los datos son obligatorios. Solo los documentos son opcionales.</p>
           <div class="dp-grid-campos">
             ${campo("dp-nombre", "name", "Nombre completo", "Dra. Laura Méndez Ruiz")}
             <div class="field dp-campo">
@@ -1030,10 +1136,11 @@ export function pantallaAlta(v) {
             </div>
           </div>
           <div class="dp-grid-campos">
-            ${campo("dp-ced", "cedula", "Cédula profesional", "8 dígitos")}
-            ${campo("dp-rfc", "rfc", "Cédula fiscal (RFC)", "MERL850214H23")}
+            ${campo("dp-ced", "cedula", "Cédula profesional", "7 u 8 dígitos", 'maxlength="8" inputmode="numeric" pattern="[0-9]*"')}
+            ${campo("dp-rfc", "rfc", "Cédula fiscal / RFC", "GODE561231GR8", 'maxlength="13" autocapitalize="characters" spellcheck="false"')}
           </div>
           <div class="dp-verificacion" id="dp-alta-verificacion">${altaVerificacion(v)}</div>
+          <div class="dp-verificacion dp-verificacion-rfc" id="dp-alta-rfc">${altaRfc(v)}</div>
           <div class="dp-grid-campos">
             <div class="field dp-campo">
               <label for="dp-estado-sel">Estado</label>
@@ -1051,11 +1158,11 @@ export function pantallaAlta(v) {
           ${campo("dp-calle", "calleNumExtInt", "Calle, No. Ext. y No. Int.", "Av. Vallarta 1450, Int. 302")}
           <div class="dp-grid-campos">
             ${campo("dp-colonia", "colonia", "Colonia", "Americana")}
-            ${campo("dp-cp", "codigoPostal", "Código Postal", "44100")}
+            ${campo("dp-cp", "codigoPostal", "Código Postal", "44100", 'maxlength="5" inputmode="numeric" pattern="[0-9]*"')}
           </div>
           <div class="dp-grid-campos">
-            ${campo("dp-tel", "phone", "Teléfono", "33 1234 5678")}
-            ${campo("dp-mail", "email", "Correo electrónico", "consultorio@correo.mx")}
+            ${campo("dp-tel", "phone", "Teléfono", "10 dígitos", 'maxlength="10" inputmode="tel" pattern="[0-9]*"')}
+            ${campo("dp-mail", "email", "Correo electrónico", "consultorio@correo.mx", 'maxlength="120" inputmode="email" autocapitalize="none" spellcheck="false"')}
           </div>
           <div class="dp-acciones dp-enviar">
             <button class="btn btn-primary" data-accion="enviar-alta">${v.editando ? "Guardar cambios" : "Enviar solicitud de alta"}</button>
@@ -1066,20 +1173,7 @@ export function pantallaAlta(v) {
       </div>
       <aside class="card tono-morado">
         <div class="card-body dp-lateral">
-          <div>
-            <h3 class="dp-subtitulo">Validación de cédula</h3>
-            <p class="dp-texto">Por ahora solo se valida el <b>formato</b> del número (7 u 8 dígitos). La consulta al servicio de Cédula Profesional (SEP/RNP) todavía no está conectada, así que quien revise la solicitud debe confirmar la cédula por fuera antes de aprobarla.</p>
-          </div>
-          <div id="dp-alta-panel">${altaPanelCedula(v)}</div>
-          <div class="dp-seccion-linea">
-            <h3 class="dp-subtitulo">Documentos requeridos</h3>
-            <ul class="dp-documentos">
-              <li>Cédula profesional (frente)</li>
-              <li>Constancia de situación fiscal</li>
-              <li>Comprobante de domicilio del consultorio</li>
-              <li>Póliza de responsabilidad civil (opcional)</li>
-            </ul>
-          </div>
+          <div id="dp-alta-documentos">${altaDocumentos(v)}</div>
         </div>
       </aside>
     </div>`;

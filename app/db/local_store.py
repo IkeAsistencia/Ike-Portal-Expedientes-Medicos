@@ -25,6 +25,8 @@ se persisten en SQL Server:
   - solicitudes_alta_medico: solicitudes de "Alta de médico" (pantalla
     "Proveedores" del Directorio de Proveedores) -- igual que el padrón,
     vive SOLO en este portal, nunca en SQL Server.
+  - solicitudes_alta_documentos: archivos opcionales de esas solicitudes
+    (constancia de situación fiscal y cédula profesional).
 
 Este archivo vive junto al API (ver LOCAL_DB_PATH en .env) y no requiere
 ningún permiso especial en SQL Server.
@@ -308,6 +310,20 @@ CREATE TABLE IF NOT EXISTS solicitudes_alta_medico (
     clave_proveedor   TEXT,
     rfc_solicito      TEXT NOT NULL,
     fecha             TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+);
+
+-- Documentos OPCIONALES de una solicitud de alta (constancia de situación
+-- fiscal y cédula profesional). Uno por tipo: subirlo otra vez lo reemplaza.
+CREATE TABLE IF NOT EXISTS solicitudes_alta_documentos (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    folio          TEXT NOT NULL,
+    tipo           TEXT NOT NULL,
+    nombre_archivo TEXT NOT NULL,
+    tipo_mime      TEXT NOT NULL,
+    contenido      BLOB NOT NULL,
+    rfc_subio      TEXT NOT NULL,
+    fecha          TEXT NOT NULL,
+    UNIQUE (folio, tipo)
 );
 """
 

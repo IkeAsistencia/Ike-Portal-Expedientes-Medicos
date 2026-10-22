@@ -149,7 +149,7 @@ def test_administrador_puede_editar_una_solicitud_en_revision(client):
     solicitud = client.get("/solicitudes-alta-medico", headers=admin).json()[0]
     assert solicitud["nombre"] == "Dra. Nombre Corregido"
     assert solicitud["calle_num_ext_int"] == "Av. Corregida 500, Int. 9"
-    assert solicitud["telefono"] == "33 1111 2222"
+    assert solicitud["telefono"] == "3311112222", "el teléfono se guarda solo con sus 10 dígitos"
     assert solicitud["estatus"] == "En revisión", "editar no debe resolverla"
     assert solicitud["folio"] == folio, "el folio no cambia"
 

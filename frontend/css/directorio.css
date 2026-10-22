@@ -235,8 +235,12 @@
 .hint.dp-umbral{margin-top:14px;font-size:12px;line-height:1.5;}
 
 /* ---------- Solicitudes ---------- */
-.dp-tabla-solicitudes{min-width:880px;}
-.dp-tabla-solicitudes td{white-space:nowrap;}
+/* Médico, especialidad y zona pueden partirse en dos renglones; folio,
+   cédula, RFC y los botones no. Así la tabla cabe en una laptop aun con las
+   columnas de verificación y documentos. */
+.dp-tabla-solicitudes{min-width:980px;}
+.dp-tabla-solicitudes td{vertical-align:top;white-space:normal;}
+.dp-tabla-solicitudes .dp-tabular{white-space:nowrap;}
 /* En móvil el portal vuelve .mini-table tarjetas (etiqueta | valor): sin el
    ancho mínimo ni el nowrap, para que el valor no se salga de la tarjeta. */
 @media (max-width:640px){
@@ -261,12 +265,61 @@
 .dp-lateral{display:grid;gap:20px;align-content:start;padding:22px;}
 .dp-lateral .dp-seccion-linea{border-top-color:var(--tono-morado-borde);}
 #dp-alta-panel:empty{display:none;}
+/* Sin panel de cédula arriba, la sección de documentos no lleva la línea divisoria. */
+#dp-alta-panel:empty + .dp-seccion-linea{border-top:0;padding-top:0;}
 .dp-panel-cedula{background:var(--white);border:1px solid var(--tono-morado-borde);border-radius:var(--radius);padding:14px 16px;}
 .dp-datos{margin:12px 0 0;display:grid;gap:10px;font-size:13px;}
 .dp-datos div{display:grid;gap:2px;}
 .dp-datos dt{color:var(--text-secondary);font-size:12px;}
 .dp-datos dd{margin:0;font-weight:600;color:var(--navy);}
-.dp-documentos{margin:0;padding-left:18px;font-size:13px;line-height:1.7;color:var(--text-secondary);}
+/* Campo obligatorio que falta o está mal tras intentar enviar. */
+.dp-formulario [aria-invalid="true"]{border-color:var(--red);box-shadow:0 0 0 1px var(--red);}
+/* Segunda franja de verificación (RFC), pegada a la de la cédula. */
+.dp-verificacion + .dp-verificacion-rfc{border-top:0;margin-top:-18px;}
+.dp-subtitulo-chico{font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.04em;}
+.dp-advertencia{color:var(--amber);font-size:12px;font-weight:600;}
+.dp-mensaje.dp-advertencia{font-size:13px;}
+.dp-tipo-rfc{
+  display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700;
+  background:var(--tono-azul-borde);color:var(--navy);white-space:nowrap;
+}
+/* "Verificar en el SAT / en la SEP": enlace con forma de botón chico. */
+.dp-verificar-externo{
+  display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:var(--radius);
+  border:1px solid var(--navy);color:var(--navy);background:var(--white);
+  font-size:12px;font-weight:600;text-decoration:none;white-space:nowrap;
+}
+.dp-verificar-externo:hover{background:var(--tono-azul-borde);}
+.dp-verificar-externo:focus-visible{outline:2px solid var(--navy);outline-offset:2px;}
+
+/* Documentos opcionales del alta */
+.dp-documentos-carga{list-style:none;margin:12px 0 0;padding:0;display:grid;gap:14px;}
+.dp-doc-titulo{font-size:13px;font-weight:700;color:var(--navy);}
+.dp-doc-archivo{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-top:8px;}
+.dp-doc-nombre{font-size:13px;font-weight:600;color:var(--navy);word-break:break-all;}
+/* El input real queda oculto pero accesible; se usa su <label> como botón. */
+.dp-doc-input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;}
+.dp-doc-elegir{
+  display:inline-flex;align-items:center;padding:6px 12px;border-radius:var(--radius);cursor:pointer;
+  border:1px dashed var(--navy);color:var(--navy);background:var(--white);font-size:13px;font-weight:600;
+}
+.dp-doc-elegir:hover{background:var(--tono-azul-borde);}
+.dp-doc-input:focus-visible + .dp-doc-elegir,
+.dp-doc-elegir:focus-within{outline:2px solid var(--navy);outline-offset:2px;}
+
+/* Solicitudes: cédula, RFC y documentos con su verificación */
+.dp-dato-verificar{display:flex;flex-direction:column;align-items:flex-start;gap:5px;}
+.dp-doc-chip{
+  display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;
+  background:var(--gray-bg, #f3f3f3);color:var(--text-secondary);border:1px solid transparent;font-family:inherit;
+  white-space:nowrap;
+}
+.dp-doc-chip.subido{background:var(--green-bg);color:var(--green);}
+button.dp-doc-chip{cursor:pointer;}
+button.dp-doc-chip:hover{border-color:var(--green);}
+@media (max-width:640px){
+  .dp-dato-verificar{align-items:flex-end;}
+}
 .dp-confirmacion{max-width:720px;}
 .dp-confirmacion .card-body{padding:24px 22px;}
 .dp-confirmacion .dp-texto{margin-bottom:18px;}

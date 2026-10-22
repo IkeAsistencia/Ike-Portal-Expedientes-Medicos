@@ -18,7 +18,7 @@
    Lo ÚNICO que falta conectar es la validación de la cédula profesional
    contra el RNP de la SEP: hoy solo se valida el formato del número, y así
    se le dice al usuario (ver altaVerificacion en vistas.js). */
-import { api } from "../core/api.js";
+import { api, apiArchivo } from "../core/api.js";
 import { normalizarEntidad } from "../core/formato.js";
 
 /* Catálogo de especialidades (GET /directorio-proveedores/especialidades).
@@ -258,16 +258,22 @@ export async function cargarCatalogoReal() {
    ahí el MISMO renglón pasa a "Dentro de la red" conservando su clave, así
    que sus citas no se pierden.
 
-   Lo único que falta conectar es la validación de la cédula contra el
-   Registro Nacional de Profesionistas: hoy solo se valida el formato. */
+   De la cédula y el RFC solo se valida el formato (ver
+   validacion-alta.js); para confirmarlos, Solicitudes lleva al sitio del
+   SAT y de la SEP. */
 export async function cargarSolicitudesReales() {
   try {
     const filas = await api("/solicitudes-alta-medico");
     return filas.map(f => ({
       folio: f.folio, name: f.nombre, specialty: f.especialidad,
       zone: [f.municipio, f.estado].filter(Boolean).join(", "),
-      cedula: f.cedula, rfc: f.rfc || "—", status: f.estatus,
+      cedula: f.cedula || "", rfc: f.rfc || "", status: f.estatus,
       claveProveedor: f.clave_proveedor || "",
+      // Cómo se ve el RFC (tipo de persona, dígito verificador) y qué
+      // documentos opcionales se subieron (solo nombre y fecha).
+      rfcRevision: f.rfc_revision || { tipo: null, formato_valido: false, digito_correcto: false },
+      documentos: f.documentos || {},
+      rfcSolicito: f.rfc_solicito || "",
       // Los datos crudos, con los que el botón "Editar" rellena el
       // formulario (el resto de campos de arriba ya vienen formateados
       // para la tabla, con "—" y zonas concatenadas).
@@ -277,7 +283,8 @@ export async function cargarSolicitudesReales() {
         estado: f.estado || "", municipio: f.municipio || "",
         calleNumExtInt: f.calle_num_ext_int || "", colonia: f.colonia || "",
         codigoPostal: f.codigo_postal || "",
-        phone: f.telefono || "", email: f.email || "",
+        // Solo dígitos: las solicitudes viejas pudieron guardar el teléfono con espacios.
+        phone: (f.telefono || "").replace(/\D/g, ""), email: f.email || "",
       },
     }));
   } catch (err) {
@@ -291,7 +298,7 @@ export function editarSolicitudAlta(folio, form) {
   return api("/solicitudes-alta-medico/" + encodeURIComponent(folio), {
     method: "PUT",
     body: {
-      nombre: form.name, especialidad: form.specialty, cedula: form.cedula, rfc: form.rfc || null,
+      nombre: form.name, especialidad: form.specialty, cedula: form.cedula, rfc: form.rfc,
       estado: form.estado || null, municipio: form.municipio || null,
       calle_num_ext_int: form.calleNumExtInt || null,
       colonia: form.colonia || null,
@@ -310,7 +317,7 @@ export function enviarSolicitudAlta(form) {
   return api("/solicitudes-alta-medico", {
     method: "POST",
     body: {
-      nombre: form.name, especialidad: form.specialty, cedula: form.cedula, rfc: form.rfc || null,
+      nombre: form.name, especialidad: form.specialty, cedula: form.cedula, rfc: form.rfc,
       estado: entidad ? entidad.descripcion : (form.estado || null),
       municipio: municipio ? municipio.descripcion : (form.municipio || null),
       calle_num_ext_int: form.calleNumExtInt || null,
@@ -319,6 +326,25 @@ export function enviarSolicitudAlta(form) {
       telefono: form.phone || null, email: form.email || null,
     },
   });
+}
+
+/* Documentos opcionales de una solicitud (constancia fiscal y cédula). Los
+   ve y los cambia solo el Administrador o quien capturó la solicitud. */
+const rutaDocumento = (folio, tipo) =>
+  "/solicitudes-alta-medico/" + encodeURIComponent(folio) + "/documentos/" + encodeURIComponent(tipo);
+
+export function subirDocumentoSolicitud(folio, tipo, archivo) {
+  const formData = new FormData();
+  formData.append("archivo", archivo);
+  return api(rutaDocumento(folio, tipo), { method: "POST", formData });
+}
+
+export function quitarDocumentoSolicitud(folio, tipo) {
+  return api(rutaDocumento(folio, tipo), { method: "DELETE" });
+}
+
+export function descargarDocumentoSolicitud(folio, tipo) {
+  return apiArchivo(rutaDocumento(folio, tipo), "No se pudo abrir el documento.");
 }
 
 export function actualizarEstatusSolicitud(folio, estatus) {

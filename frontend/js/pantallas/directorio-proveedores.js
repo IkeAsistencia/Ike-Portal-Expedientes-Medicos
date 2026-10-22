@@ -29,12 +29,16 @@ import {
   visible, formularioVacio, cargarCatalogoReal,
   cargarSolicitudesReales, enviarSolicitudAlta, actualizarEstatusSolicitud,
   editarSolicitudAlta,
+  subirDocumentoSolicitud, quitarDocumentoSolicitud, descargarDocumentoSolicitud,
   cargarAgenda, agendarCita,
   cargarEntidadesAltaReal, cargarMunicipiosAltaReal,
   buscarFueraDeRed, resolverBusquedaDeExpediente,
   cargarEspecialidadesKpi, olvidarEspecialidadesKpi, todasLasEspecialidades,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
+import {
+  revisarFormularioAlta, RESTRICCIONES_ALTA, DOCUMENTOS_ALTA, DOCUMENTO_TIPOS_PERMITIDOS, DOCUMENTO_TAMANO_MAXIMO,
+} from "../directorio/validacion-alta.js";
 import { toast } from "../core/toast.js";
 import { coordinacionActual, terminarCoordinacion } from "../core/coordinar-cita.js";
 import { abrirSeguimiento, rellenarObservacionesConCita } from "./seguimiento.js";
@@ -80,11 +84,17 @@ function estadoInicial() {
     bookingFechaLibre: "", bookingHoraLibre: "", agendaLibre: null,
     // Agenda real del médico abierto (la manda el servidor, ver cargarAgenda).
     agenda: [], bookingFolio: null, bookingGuardando: false,
-    cedulaStatus: "idle", registered: null, requests: [],
+    registered: null, requests: [],
     // Folio de la solicitud que se está corrigiendo (botón "Editar" de
     // Solicitudes); null = la pantalla de alta captura una nueva.
     editandoFolio: null,
     form: formularioVacio(),
+    // Documentos opcionales del alta: los archivos elegidos (se suben al
+    // guardar) y, al editar, los que la solicitud ya tiene en el servidor.
+    archivosAlta: {}, documentosEditando: {},
+    // Ya se intentó enviar: a partir de ahí el RFC muestra su error aunque
+    // todavía esté corto (antes de eso solo se muestra al tener 12 o más).
+    altaIntento: false, enviandoAlta: false,
     // Búsqueda fuera de la red (candidatos del DENUE, ver datos.js). No se
     // guardan: viven solo en este estado mientras dura la consulta.
     fueraForm: { codEnt: "", codMun: "", especialidad: "" },
@@ -98,7 +108,10 @@ function estadoInicial() {
 /* Salir del modo "Editar": el formulario de alta vuelve a estar en blanco
    para capturar uno nuevo. Se aplica al navegar con la barra, para no
    quedarse editando un folio sin darse cuenta. */
-const sinEdicion = () => ({ editandoFolio: null, cedulaStatus: "idle", form: formularioVacio() });
+const sinEdicion = () => ({
+  editandoFolio: null, form: formularioVacio(),
+  archivosAlta: {}, documentosEditando: {}, altaIntento: false,
+});
 
 /* Búsquedas recientes en localStorage. Si el navegador no deja leer o
    escribir (modo privado, almacenamiento bloqueado), simplemente no hay
@@ -171,8 +184,20 @@ function pintar() {
   barraComparar.innerHTML = v.showCompareBar ? V.barraComparar(v) : "";
 
   pintarFicha(v);
+  marcarInvalidosAlta();
   restaurarFoco(foco);
   enviarMapa();
+}
+
+/* Tras intentar enviar, marca en rojo los campos del alta que faltan o están
+   mal; se quitan solos conforme se corrigen. */
+function marcarInvalidosAlta() {
+  if (estado.screen !== "register" || estado.registered) return;
+  const malos = estado.altaIntento ? new Set(revisarFormularioAlta(estado.form).map(f => f.campo)) : new Set();
+  raiz.querySelectorAll("[data-campo]").forEach(el => {
+    if (malos.has(el.dataset.campo)) el.setAttribute("aria-invalid", "true");
+    else el.removeAttribute("aria-invalid");
+  });
 }
 
 function pintarPantalla(v) {
@@ -264,7 +289,9 @@ function pintarDependientesAlta() {
   const foco = capturarFoco();
   const v = V.calcular(estado);
   $("dp-alta-verificacion").innerHTML = V.altaVerificacion(v);
-  $("dp-alta-panel").innerHTML = V.altaPanelCedula(v);
+  $("dp-alta-rfc").innerHTML = V.altaRfc(v);
+  $("dp-alta-documentos").innerHTML = V.altaDocumentos(v);
+  marcarInvalidosAlta();
   $("dp-alta-nota").innerHTML = V.altaNota(v);
   restaurarFoco(foco);
 }
@@ -329,38 +356,135 @@ function buscar(termino) {
   irA({ screen: "results", searchTerm: termino, query: termino, specialty: null });
 }
 
-/* Valida el FORMATO de la cédula (7 u 8 dígitos). No consulta el Registro
-   Nacional de Profesionistas: esa integración está pendiente, y la pantalla
-   lo dice en vez de dar por verificada la cédula. */
-function verificarCedula() {
-  const c = (estado.form.cedula || "").trim();
-  // Sin espera artificial: la validación es local e inmediata. Antes había
-  // un setTimeout de 1.2 s que simulaba la consulta a un registro externo.
-  irA({ cedulaStatus: /^\d{7,8}$/.test(c) ? "valid" : "invalid" });
-}
-
 /* La solicitud se guarda de verdad en el portal (ver enviarSolicitudAlta en
-   datos.js). De la cédula solo se validó el formato (ver verificarCedula):
-   la confirmación contra el RNP sigue pendiente.
+   datos.js). De la cédula y el RFC solo se valida el formato, al escribir y
+   otra vez al enviar.
 
    El mismo botón guarda los cambios cuando se entró por "Editar"
-   (estado.editandoFolio), en vez de crear una solicitud nueva. */
+   (estado.editandoFolio), en vez de crear una solicitud nueva.
+
+   Los documentos elegidos se suben DESPUÉS de guardar la solicitud (necesitan
+   su folio). Si alguno falla, la solicitud ya quedó guardada: se avisa cuál. */
 async function enviarAlta() {
-  if (estado.cedulaStatus !== "valid") { irA({ cedulaStatus: "invalid" }); return; }
+  if (estado.enviandoAlta) return;
+  estado.altaIntento = true;
+  const faltas = revisarFormularioAlta(estado.form);
+  if (faltas.length) {
+    pintarDependientesAlta();
+    const primero = raiz.querySelector(`[data-campo="${faltas[0].campo}"]`);
+    if (primero) primero.focus({ preventScroll: false });
+    toast(
+      faltas.length === 1 ? faltas[0].mensaje
+        : `Faltan datos por completar o corregir: ${faltas.map(f => f.etiqueta).join(", ")}.`,
+      "error", 7000
+    );
+    return;
+  }
   const fm = estado.form;
+  estado.enviandoAlta = true;
   try {
-    if (estado.editandoFolio) {
-      await editarSolicitudAlta(estado.editandoFolio, fm);
-      toast("Solicitud " + estado.editandoFolio + " actualizada.", "success");
+    const editando = estado.editandoFolio;
+    const folio = editando || (await enviarSolicitudAlta(fm)).folio;
+    if (editando) await editarSolicitudAlta(editando, fm);
+    const { subidos, fallas } = await subirArchivosElegidos(folio);
+    fallas.forEach(f => toast(`La solicitud ${folio} se guardó, pero no se pudo subir «${f.etiqueta}»: ${f.motivo}`, "error", 9000));
+    if (editando) {
+      toast("Solicitud " + editando + " actualizada.", "success");
       irA({ screen: "admin", ...sinEdicion() });
       await cargarSolicitudes();
       return;
     }
-    const { folio } = await enviarSolicitudAlta(fm);
-    irA({ registered: { name: fm.name || "El médico", folio } });
+    irA({ registered: { name: fm.name || "El médico", folio, documentos: subidos }, archivosAlta: {}, altaIntento: false });
     cargarSolicitudes();
   } catch (err) {
     toast(err.message, "error");
+  } finally {
+    estado.enviandoAlta = false;
+  }
+}
+
+async function subirArchivosElegidos(folio) {
+  const subidos = [], fallas = [];
+  for (const doc of DOCUMENTOS_ALTA) {
+    const archivo = estado.archivosAlta[doc.tipo];
+    if (!archivo) continue;
+    try {
+      await subirDocumentoSolicitud(folio, doc.tipo, archivo);
+      subidos.push(doc.etiqueta);
+    } catch (err) {
+      fallas.push({ etiqueta: doc.etiqueta, motivo: err.message });
+    }
+  }
+  return { subidos, fallas };
+}
+
+/* Archivo elegido en el alta: se revisa aquí (formato y tamaño) para avisar
+   antes de enviar; el servidor lo vuelve a revisar al subirlo. */
+function elegirDocumento(input) {
+  const tipo = input.dataset.documento;
+  const archivo = input.files && input.files[0];
+  if (!archivo) return;
+  if (!DOCUMENTO_TIPOS_PERMITIDOS.includes(archivo.type)) {
+    toast("Formato no permitido. Solo se aceptan PDF, JPG o PNG.", "error");
+    input.value = "";
+    return;
+  }
+  if (archivo.size > DOCUMENTO_TAMANO_MAXIMO) {
+    toast("El archivo supera el máximo permitido de 5 MB.", "error");
+    input.value = "";
+    return;
+  }
+  estado.archivosAlta = { ...estado.archivosAlta, [tipo]: archivo };
+  pintarDependientesAlta();
+}
+
+function quitarArchivoElegido(tipo) {
+  const { [tipo]: _, ...resto } = estado.archivosAlta;
+  estado.archivosAlta = resto;
+  pintarDependientesAlta();
+}
+
+/* Quita un documento que la solicitud YA tiene en el servidor (al editar). */
+async function quitarDocumentoGuardado(tipo) {
+  const folio = estado.editandoFolio;
+  if (!folio) return;
+  try {
+    await quitarDocumentoSolicitud(folio, tipo);
+    const { [tipo]: _, ...resto } = estado.documentosEditando;
+    estado.documentosEditando = resto;
+    pintarDependientesAlta();
+    cargarSolicitudes();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+/* Abre el documento en otra pestaña. La pestaña se abre ANTES de pedir el
+   archivo: abrirla después de esperar la descarga la bloquea el navegador. */
+async function verDocumento(folio, tipo) {
+  const ventana = window.open("", "_blank");
+  try {
+    const { blob } = await descargarDocumentoSolicitud(folio, tipo);
+    const url = URL.createObjectURL(blob);
+    if (ventana) ventana.location.href = url;
+    else window.open(url, "_blank");
+  } catch (err) {
+    if (ventana) ventana.close();
+    toast(err.message, "error");
+  }
+}
+
+/* Botones "Verificar en el SAT / en la SEP": son enlaces normales (el sitio
+   se abre solo); aquí además se copia el dato, porque esos sitios tienen
+   captcha y no se les puede mandar ya capturado. */
+async function copiarParaVerificar(el) {
+  const valor = el.dataset.copiar;
+  if (!valor) return;
+  try {
+    await navigator.clipboard.writeText(valor);
+    toast(`Se copió ${valor}. Pégalo en el sitio que se abrió.`, "success");
+  } catch (err) {
+    toast(`Captura en el sitio el ${el.dataset.que}: ${valor}`, "", 9000);
   }
 }
 
@@ -376,8 +500,8 @@ async function editarSolicitud(indice) {
     screen: "register",
     editandoFolio: solicitud.folio,
     form: { ...formularioVacio(), ...solicitud.form },
-    cedulaStatus: "valid",
     registered: null,
+    archivosAlta: {}, documentosEditando: { ...(solicitud.documentos || {}) }, altaIntento: false,
   });
   // El combo de Municipio depende de la entidad: se piden los de la entidad
   // guardada para que el municipio ya grabado aparezca seleccionado y no
@@ -646,14 +770,22 @@ const ACCIONES = {
   "editar-solicitud": (el) => editarSolicitud(Number(el.dataset.indice)),
 
   // Alta de médico
-  "verificar-cedula": verificarCedula,
   "enviar-alta": enviarAlta,
   "cancelar-edicion": cancelarEdicion,
-  "registrar-otro": () => irA({ registered: null, cedulaStatus: "idle", form: formularioVacio() }),
+  "registrar-otro": () => irA({ registered: null, ...sinEdicion() }),
+  "quitar-archivo-elegido": (el) => quitarArchivoElegido(el.dataset.tipo),
+  "quitar-documento": (el) => quitarDocumentoGuardado(el.dataset.tipo),
+  "ver-documento": (el) => verDocumento(el.dataset.folio, el.dataset.tipo),
 };
 
 /* ---------- Eventos (delegación) ---------- */
 function alClic(e) {
+  const enlaceVerificar = e.target.closest("[data-copiar]");
+  if (enlaceVerificar) {
+    // Sin preventDefault: el enlace abre el sitio oficial por sí solo.
+    copiarParaVerificar(enlaceVerificar);
+    return;
+  }
   const el = e.target.closest("[data-accion]");
   // Casillas y combos se atienden en "change".
   if (!el || el.tagName === "INPUT" || el.tagName === "SELECT" || el.disabled) return;
@@ -676,6 +808,8 @@ function alCambiar(e) {
   } else if (el.id === "dp-orden") {
     ponerFiltros({ orden: el.value });
     pintar();
+  } else if (el.type === "file" && el.dataset.documento) {
+    elegirDocumento(el);
   } else if (el.dataset.accionCambio === "elegir-especialidad-combo") {
     elegirEspecialidadDelCombo(el);
   } else if (el.tagName === "SELECT" && el.dataset.campoFuera) {
@@ -745,15 +879,18 @@ function alEscribir(e) {
   }
   if (el.tagName !== "INPUT" || !el.dataset.campo) return;
   const campo = el.dataset.campo;
-  if (campo === "rfc") {
-    // El RFC se guarda en mayúsculas (igual que el original), sin mover el cursor.
-    const inicio = el.selectionStart, fin = el.selectionEnd;
-    el.value = el.value.toUpperCase();
-    try { el.setSelectionRange(inicio, fin); } catch (err) { /* no aplica */ }
+  if (RESTRICCIONES_ALTA[campo]) {
+    // Solo los caracteres que la regla permite (también al pegar) y hasta su
+    // máximo: RFC (13), cédula (8), teléfono (10), código postal (5), correo.
+    const { limpiar, maximo } = RESTRICCIONES_ALTA[campo];
+    const cursor = limpiar(el.value.slice(0, el.selectionStart || 0)).length;
+    const limpio = limpiar(el.value).slice(0, maximo);
+    if (limpio !== el.value) {
+      el.value = limpio;
+      try { el.setSelectionRange(Math.min(cursor, limpio.length), Math.min(cursor, limpio.length)); } catch (err) { /* no aplica */ }
+    }
   }
   ponerFormulario({ [campo]: el.value });
-  // Cambiar la cédula invalida la verificación anterior.
-  if (campo === "cedula") estado.cedulaStatus = "idle";
   pintarDependientesAlta();
 }
 
