@@ -1,11 +1,15 @@
 import socket
+from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.config import get_settings
 from app.core.rate_limit import verificar_limite
 from app.core.red import ip_cliente
-from app.core.security import crear_token
+from app.core.security import crear_token, renovar_token
+
+_bearer_renovar = HTTPBearer(auto_error=False)
 from app.repositories import accesos_repo, auth_repo
 from app.schemas.acceso import (
     AccesoLoginResponse,
@@ -107,6 +111,23 @@ def rfc_login(data: RfcLoginInput, request: Request):
     return AccesoLoginResponse(
         access_token=token, rfc=acceso["rfc"], nombre=acceso["nombre"], perfil=acceso["perfil"]
     )
+
+
+@router.post("/renovar")
+def renovar(credenciales: Optional[HTTPAuthorizationCredentials] = Depends(_bearer_renovar)):
+    """
+    El portal lo llama mientras la persona trabaja (como mucho una vez por
+    minuto): regresa un token con la ventana de inactividad otra vez completa.
+    Sin actividad nadie lo llama y la sesión vence sola (ver
+    app/core/security.py). No extiende la duración máxima de la sesión.
+    """
+    if credenciales is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Debes iniciar sesión.")
+    settings = get_settings()
+    return {
+        "access_token": renovar_token(credenciales.credentials),
+        "inactividad_minutos": settings.sesion_inactividad_minutos,
+    }
 
 
 def _obtener_host_servidor() -> str:

@@ -285,6 +285,10 @@ CREATE TABLE IF NOT EXISTS citas_proveedor (
     rfc_agendo      TEXT NOT NULL,
     estatus         TEXT NOT NULL DEFAULT 'Agendada',
     fecha_registro  TEXT NOT NULL,
+    -- Al cancelar: por qué, quién y cuándo (también queda en la bitácora del expediente).
+    motivo_cancelacion TEXT,
+    rfc_cancelo        TEXT,
+    fecha_cancelacion  TEXT,
     UNIQUE (clave_proveedor, fecha, hora)
 );
 
@@ -371,6 +375,9 @@ def _migrar_columnas_faltantes(conn: sqlite3.Connection) -> None:
     columnas_citas = {row["name"] for row in conn.execute("PRAGMA table_info(citas_proveedor)")}
     if "cl_expediente" not in columnas_citas:
         conn.execute("ALTER TABLE citas_proveedor ADD COLUMN cl_expediente INTEGER")
+    for columna in ("motivo_cancelacion", "rfc_cancelo", "fecha_cancelacion"):
+        if columna not in columnas_citas:
+            conn.execute(f"ALTER TABLE citas_proveedor ADD COLUMN {columna} TEXT")
     # Un expediente tiene UNA sola cita activa (las canceladas no cuentan). Lo
     # garantiza la base, no solo una consulta previa: dos clics casi al mismo
     # tiempo no pueden dejar dos citas vivas para el mismo expediente.

@@ -4,13 +4,17 @@ import { api, apiArchivo } from "../core/api.js";
 import { escapeHtml, formatDate, formatDateTime, sanitizarHtmlSeguimiento } from "../core/formato.js";
 import { toast } from "../core/toast.js";
 import { navegar } from "../core/router.js";
-import { esPerfilAdministrador, esPerfilCabina, esPerfilProveedor, nombreUsuario } from "../core/sesion.js";
+import { esPerfilCabina, esPerfilProveedor, nombreUsuario } from "../core/sesion.js";
 import {
   ESTATUS_ACCIONABLES_PROVEEDOR, ESTATUS_DE_REGRESO, notificarCambioEstatus, proveedorPuedeVer,
 } from "../core/reglas-expedientes.js";
 import { limitarADigitos } from "../componentes/campo-numerico.js";
 import { ICONOS } from "../componentes/iconos.js";
-import { confirmar } from "../componentes/confirmar.js";
+import { pedirMotivo } from "../componentes/pedir-motivo.js";
+
+// Mismos límites que coordinar_cita_service.MOTIVO_CANCELACION_* en el servidor.
+const MOTIVO_CANCELACION_MINIMO = 10;
+const MOTIVO_CANCELACION_MAXIMO = 500;
 import { iniciarCoordinacion } from "../core/coordinar-cita.js";
 
 const PLANTILLA = `
@@ -676,8 +680,10 @@ async function registrarSeguimiento() {
    copiados en Observaciones: el Proveedor los revisa, agrega sus notas y
    presiona "Actualizar Seguimiento". Un expediente tiene UNA sola cita; para
    cambiarla primero se cancela con "Modificar cita". */
+/* Solo Proveedor: el Administrador no tiene esta pantalla (agenda desde el
+   Directorio, eligiendo el expediente). */
 function puedeCoordinar(record) {
-  return (esPerfilProveedor() || esPerfilAdministrador()) && ESTATUS_ACCIONABLES_PROVEEDOR.includes(record.estatus);
+  return esPerfilProveedor() && ESTATUS_ACCIONABLES_PROVEEDOR.includes(record.estatus);
 }
 
 async function cargarCitaDelExpediente(record) {
@@ -715,21 +721,36 @@ function coordinarCita() {
   navegar("directorio-proveedores");
 }
 
+/* Cancelar pide el motivo, y la cancelación queda registrada en la bitácora
+   del expediente (sin cambiarle el estatus: se cancela para agendar otra). */
 async function modificarCita() {
   if (!citaActual) return;
-  const ok = await confirmar({
-    titulo: "Modificar cita",
-    mensaje: `Se va a cancelar la cita ${citaActual.folio} con ${citaActual.proveedor_nombre || "el médico"} ` +
-      `(${formatDate(citaActual.fecha)} a las ${citaActual.hora}) para poder agendar otra. ¿Continuar?`,
+  const cita = citaActual;
+  const record = registroActual;
+  const motivo = await pedirMotivo({
+    titulo: "Cancelar cita",
+    mensaje: `Se va a cancelar la cita ${cita.folio} con ${cita.proveedor_nombre || "el médico"} ` +
+      `(${formatDate(cita.fecha)} a las ${cita.hora}). La cancelación y su motivo quedan registrados en la bitácora del expediente.`,
+    etiqueta: "Motivo de la cancelación",
+    placeholder: "Ej. El médico no podrá atender ese día; se reprograma con otro especialista.",
+    minimo: MOTIVO_CANCELACION_MINIMO,
+    maximo: MOTIVO_CANCELACION_MAXIMO,
     textoConfirmar: "Cancelar cita",
+    textoCancelar: "No cancelar",
     peligro: true,
   });
-  if (!ok) return;
+  if (motivo === null) return;
   try {
-    await api("/directorio-proveedores/citas/" + encodeURIComponent(citaActual.folio) + "/cancelar", { method: "POST" });
+    await api("/directorio-proveedores/citas/" + encodeURIComponent(cita.folio) + "/cancelar", {
+      method: "POST", body: { motivo },
+    });
+    if (registroActual !== record) return;  // mientras tanto abrieron otro expediente
     citaActual = null;
     pintarCita();
-    toast("Cita cancelada. Ya puedes coordinar otra. Si habías copiado sus datos a Observaciones, bórralos antes de enviar.", "success", 8000);
+    // La cancelación ya está en la bitácora: se refresca para que se vea.
+    cargarHistorialSise(record.expediente);
+    cargarComentarios(record.expediente);
+    toast("Cita cancelada y registrada en la bitácora. Ya puedes coordinar otra. Si habías copiado sus datos a Observaciones, bórralos antes de enviar.", "success", 9000);
   } catch (err) {
     toast(err.message, "error");
   }
@@ -792,8 +813,8 @@ export function aplicarPermisos() {
   // Proveedor no puede cambiar el estado a mano ("Estado del Caso"): en su
   // caso el estatus solo cambia automático al usar "Actualizar Seguimiento".
   $("sg-estatus-card").classList.toggle("hidden-perfil", esPerfilProveedor());
-  // Coordinar cita: Proveedor y Administrador (los dos registran seguimiento).
-  $("sg-cita-bloque").classList.toggle("hidden-perfil", !(esPerfilProveedor() || esPerfilAdministrador()));
+  // Coordinar cita es del Proveedor (quien registra el seguimiento).
+  $("sg-cita-bloque").classList.toggle("hidden-perfil", !esPerfilProveedor());
 
   // Lo que cabe en cada cuadro de texto: 1500 menos el encabezado con el
   // nombre de quien inició sesión.

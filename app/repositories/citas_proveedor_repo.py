@@ -126,11 +126,14 @@ def obtener_por_folio(folio: str) -> dict | None:
     return dict(fila) if fila else None
 
 
-def cancelar(folio: str) -> bool:
+def cancelar(folio: str, motivo: str, rfc_cancelo: str) -> bool:
+    """Cancela una cita agendada guardando por qué, quién y cuándo. False si
+    no existe o ya no estaba agendada."""
     with get_local_connection() as conn:
         cur = conn.execute(
-            "UPDATE citas_proveedor SET estatus = ? WHERE folio = ? AND estatus = ?",
-            (ESTATUS_CANCELADA, folio, ESTATUS_AGENDADA),
+            "UPDATE citas_proveedor SET estatus = ?, motivo_cancelacion = ?, rfc_cancelo = ?, fecha_cancelacion = ? "
+            "WHERE folio = ? AND estatus = ?",
+            (ESTATUS_CANCELADA, motivo, rfc_cancelo, ahora_local(), folio, ESTATUS_AGENDADA),
         )
         conn.commit()
         return cur.rowcount > 0

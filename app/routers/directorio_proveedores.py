@@ -36,6 +36,14 @@ router = APIRouter(
 )
 
 
+def _requerir_proveedor(usuario: dict = Depends(usuario_actual)) -> dict:
+    """Buscar fuera de la red, consultar la agenda y agendar: solo Proveedor.
+    El Administrador usa del directorio solo Solicitudes, Alta de médico,
+    Carga del catálogo y Métricas (que leen el padrón y las especialidades)."""
+    coordinar_cita_service.exigir_perfil_que_coordina(usuario)
+    return usuario
+
+
 class CitaInput(BaseModel):
     clave_proveedor: str = Field(min_length=1, max_length=20)
     fecha: str = Field(min_length=10, max_length=10, description="YYYY-MM-DD")
@@ -93,7 +101,7 @@ def listar_especialidades():
     }
 
 
-@router.get("/fuera-de-red")
+@router.get("/fuera-de-red", dependencies=[Depends(_requerir_proveedor)])
 def buscar_fuera_de_red(
     cod_ent: str = Query(min_length=1, max_length=5, description="CodEnt de la entidad (ej. JC)"),
     especialidad: str = Query(min_length=3, max_length=60),
@@ -138,7 +146,7 @@ def listar_citas(clave_proveedor: str | None = Query(default=None, max_length=20
     return citas_proveedor_repo.listar_citas(clave_proveedor)
 
 
-@router.post("/citas")
+@router.post("/citas", dependencies=[Depends(_requerir_proveedor)])
 def agendar_cita(data: CitaInput, usuario: dict = Depends(usuario_actual)):
     proveedor = proveedores_repo.obtener_por_clave(data.clave_proveedor)
     if proveedor is None:
@@ -182,7 +190,7 @@ def agendar_cita(data: CitaInput, usuario: dict = Depends(usuario_actual)):
     }
 
 
-@router.get("/expedientes-para-cita")
+@router.get("/expedientes-para-cita", dependencies=[Depends(_requerir_proveedor)])
 def expedientes_para_cita(usuario: dict = Depends(usuario_actual)):
     """Los expedientes a los que se les puede agendar cita ahora (estatus
     accionable y sin cita activa): la lista del paso "¿Para qué expediente?"
@@ -215,25 +223,18 @@ def cita_del_expediente(cl_expediente: int, usuario: dict = Depends(usuario_actu
         proveedor, cita, cita.get("paciente"))}}
 
 
+class CancelarCitaInput(BaseModel):
+    motivo: str = Field(min_length=1, max_length=coordinar_cita_service.MOTIVO_CANCELACION_MAXIMO + 100)
+
+
 @router.post("/citas/{folio}/cancelar")
-def cancelar_cita(folio: str, usuario: dict = Depends(usuario_actual)):
-    cita = citas_proveedor_repo.obtener_por_folio(folio)
-    if cita is None:
-        raise HTTPException(404, "No se encontró esa cita agendada.")
-    # Una cita ligada a un expediente solo se cambia mientras todavía se puede
-    # actuar sobre él; después queda en manos del coordinador. Las citas viejas
-    # sin expediente (de antes de que fuera obligatorio) solo las cancela el
-    # Administrador: antes las podía cancelar cualquiera con el folio.
-    if usuario.get("perfil") != PERFIL_ADMINISTRADOR:
-        if not cita["cl_expediente"]:
-            raise HTTPException(403, "Esta cita no está ligada a un expediente: solo un Administrador puede cancelarla.")
-        coordinar_cita_service.expediente_para_coordinar(cita["cl_expediente"], usuario)
-    if not citas_proveedor_repo.cancelar(folio):
-        raise HTTPException(404, "No se encontró esa cita agendada.")
-    return {"ok": True}
+def cancelar_cita(folio: str, data: CancelarCitaInput, usuario: dict = Depends(usuario_actual)):
+    """Cancelar exige el motivo, y la cancelación queda en la bitácora del
+    expediente (ver coordinar_cita_service.cancelar_cita)."""
+    return coordinar_cita_service.cancelar_cita(folio, data.motivo, usuario)
 
 
-@router.get("/{clave}/agenda")
+@router.get("/{clave}/agenda", dependencies=[Depends(_requerir_proveedor)])
 def agenda(
     clave: str,
     dias: int = Query(

@@ -357,7 +357,8 @@ def test_cuando_el_medico_del_portal_llega_en_la_carga_conserva_su_clave_y_pasa_
     lunes = date.today() + timedelta(days=1)
     while lunes.weekday() != 0:
         lunes += timedelta(days=1)
-    cita = client.post("/directorio-proveedores/citas", headers=admin, json={
+    # Solo el Proveedor agenda citas (el Administrador no tiene Seguimiento).
+    cita = client.post("/directorio-proveedores/citas", headers=_auth_headers_proveedor(client), json={
         "clave_proveedor": clave, "fecha": lunes.isoformat(), "hora": "10:00", "cl_expediente": 9001,
     })
     assert cita.status_code == 200, cita.text

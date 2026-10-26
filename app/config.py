@@ -82,7 +82,10 @@ class Settings(BaseSettings):
     # Genera uno propio por ambiente, ej: python -c "import secrets; print(secrets.token_hex(32))"
     jwt_secret_key: str = JWT_SECRET_KEY_DEFAULT
     jwt_algorithm: str = "HS256"
+    # Duración MÁXIMA de una sesión desde que se inicia, aunque haya actividad.
     jwt_expire_minutes: int = 480  # 8 horas
+    # Sin actividad durante este tiempo, la sesión se cierra (ver app/core/security.py).
+    sesion_inactividad_minutos: int = 30
 
     # --- Proxy delante de la app (ver app/core/red.py) ---
     # Cuántos proxies de confianza agregan su IP a X-Forwarded-For antes de

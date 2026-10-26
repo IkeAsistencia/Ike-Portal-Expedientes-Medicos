@@ -223,7 +223,7 @@ def test_la_respuesta_del_denue_se_mapea_al_formato_del_padron(client, monkeypat
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "cod_mun": "00039", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 200, r.text
     cuerpo = r.json()
@@ -252,7 +252,7 @@ def test_no_inventa_cedula_ni_costo_ni_convenio(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     c = r.json()["candidatos"][0]
     for campo in ("cedula", "costo_consulta", "convenio", "horario", "rating"):
@@ -266,7 +266,7 @@ def test_la_respuesta_dice_que_tipo_de_consultorio_se_consulto(client, monkeypat
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "cod_mun": "00039", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     cuerpo = r.json()
     assert cuerpo["tipo_consultado"] == "medicina_especializada"
@@ -280,7 +280,7 @@ def test_sin_resultados_no_es_error(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 200
     assert r.json()["total"] == 0
@@ -296,7 +296,7 @@ def test_el_texto_sin_resultados_con_http_200_tampoco_es_error(client, monkeypat
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "cod_mun": "00061", "especialidad": "nutricion"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 200, r.text
     assert r.json()["total"] == 0
@@ -312,7 +312,7 @@ def test_la_consulta_acota_por_entidad_municipio_y_clase(client, monkeypatch):
     client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "cod_mun": "00039", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     # Una consulta por cada clase del tipo (privado y público).
     clases = denue_service.CLASES_POR_TIPO["medicina_especializada"]
@@ -334,7 +334,7 @@ def test_odontologia_consulta_las_clases_de_consultorios_dentales(client, monkey
     client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "especialidad": "Odontología"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert [_parametros(u)["subrama"] for u in urls] == list(
         denue_service.CLASES_POR_TIPO["dental"]
@@ -350,7 +350,7 @@ def test_el_token_viaja_pero_no_se_registra_en_el_log(client, monkeypatch, caplo
         r = client.get(
             "/directorio-proveedores/fuera-de-red",
             params={"cod_ent": "JC", "especialidad": "cardiologia"},
-            headers=_admin(client),
+            headers=_proveedor(client),
         )
     assert r.status_code == 502
     assert "token-de-prueba" in urls[0], "el token sí debe ir en la petición"
@@ -370,7 +370,7 @@ def test_sin_token_configurado_responde_503(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 503
     assert "token" in r.json()["detail"].lower()
@@ -381,7 +381,7 @@ def test_token_invalido_responde_502_con_mensaje_claro(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 502
     assert "token" in r.json()["detail"].lower()
@@ -395,7 +395,7 @@ def test_timeout_del_inegi_responde_502(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 502
     assert "tardó" in r.json()["detail"]
@@ -406,7 +406,7 @@ def test_respuesta_que_no_es_json_responde_502(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 502
 
@@ -416,7 +416,7 @@ def test_entidad_fuera_del_catalogo_responde_400(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "ZZ", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 400
 
@@ -425,22 +425,20 @@ def test_especialidad_demasiado_corta_se_rechaza(client):
     r = client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "especialidad": "ca"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 422
 
 
 # ---------- Permisos ----------
 
-def test_proveedor_y_administrador_pueden_buscar_fuera_de_la_red(client, monkeypatch):
+def test_solo_el_proveedor_busca_fuera_de_la_red(client, monkeypatch):
+    """Decisión del usuario (2026-10-26): del directorio, el Administrador solo
+    usa Solicitudes, Alta de médico, Carga del catálogo y Métricas."""
     _responder(monkeypatch, RespuestaFalsa(200, [FILA_DENUE]))
-    for headers in (_admin(client), _proveedor(client)):
-        r = client.get(
-            "/directorio-proveedores/fuera-de-red",
-            params={"cod_ent": "JC", "especialidad": "cardiologia"},
-            headers=headers,
-        )
-        assert r.status_code == 200
+    parametros = {"cod_ent": "JC", "especialidad": "cardiologia"}
+    assert client.get("/directorio-proveedores/fuera-de-red", params=parametros, headers=_proveedor(client)).status_code == 200
+    assert client.get("/directorio-proveedores/fuera-de-red", params=parametros, headers=_admin(client)).status_code == 403
 
 
 def test_cabina_no_puede_buscar_fuera_de_la_red(client, monkeypatch):
@@ -466,7 +464,7 @@ def test_sin_sesion_no_se_puede_buscar(client):
 def test_la_busqueda_no_toca_el_padron_ni_las_citas(client, monkeypatch):
     """Decisión del usuario (2026-10-20): consulta en vivo, sin persistir."""
     _responder(monkeypatch, RespuestaFalsa(200, [FILA_DENUE]))
-    headers = _admin(client)
+    headers = _proveedor(client)
     client.get(
         "/directorio-proveedores/fuera-de-red",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},

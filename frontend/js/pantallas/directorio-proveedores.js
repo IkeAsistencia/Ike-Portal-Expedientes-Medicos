@@ -42,6 +42,7 @@ import {
   revisarFormularioAlta, RESTRICCIONES_ALTA, DOCUMENTOS_ALTA, bloqueHorarioVacio, DOCUMENTO_TIPOS_PERMITIDOS, DOCUMENTO_TAMANO_MAXIMO,
 } from "../directorio/validacion-alta.js";
 import { toast } from "../core/toast.js";
+import { esPerfilAdministrador } from "../core/sesion.js";
 import { coordinacionActual, iniciarCoordinacion, terminarCoordinacion } from "../core/coordinar-cita.js";
 import { abrirSeguimiento, rellenarObservacionesConCita } from "./seguimiento.js";
 
@@ -174,8 +175,23 @@ function restaurarFoco(foco) {
 }
 
 /* ---------- Pintado ---------- */
+/* El Administrador usa del directorio solo Solicitudes, Alta de médico y
+   Métricas (la Carga del catálogo es otra pantalla). Buscar, ver fichas,
+   comparar y agendar son del Proveedor: si por cualquier camino se intenta
+   llegar a esas pantallas, se queda en Solicitudes. El servidor lo exige
+   igual (ver _requerir_proveedor en app/routers/directorio_proveedores.py). */
+const PANTALLAS_SOLO_PROVEEDOR = ["home", "zone", "results", "compare", "fuera"];
+
+function restringirAdministrador() {
+  if (!esPerfilAdministrador()) return;
+  if (PANTALLAS_SOLO_PROVEEDOR.includes(estado.screen)) estado.screen = "admin";
+  estado.detail = null;
+  estado.compare = [];
+}
+
 function pintar() {
   if (!raiz) return;
+  restringirAdministrador();
   const foco = capturarFoco();
   const v = V.calcular(estado);
 

@@ -11,6 +11,7 @@ import { getToken, limpiarSesion, nombrePerfilActual, nombreUsuario, esPerfilAdm
 import { limpiarCatalogos } from "./core/catalogos.js";
 import { toast } from "./core/toast.js";
 import { confirmar } from "./componentes/confirmar.js";
+import { iniciarControlDeInactividad, detenerControlDeInactividad } from "./core/inactividad.js";
 import { iniciarRouter, limpiarRuta, navegar, pantallaEnHash } from "./core/router.js";
 import * as login from "./pantallas/login.js";
 import * as expedientes from "./pantallas/expedientes.js";
@@ -118,11 +119,19 @@ function mostrarApp() {
   $("nav-user").textContent = "Sesión: " + nombreUsuario() + (perfil ? " (" + perfil + ")" : "");
   aplicarPermisos();
   expedientes.iniciarPolling();
+  // 30 minutos sin actividad cierran la sesión (avisa un minuto antes).
+  iniciarControlDeInactividad({
+    alExpirar: ({ porUsuario } = {}) => {
+      cerrarSesion(true);
+      toast(porUsuario ? "Sesión cerrada" : "Tu sesión se cerró por inactividad (30 minutos). Inicia sesión de nuevo.", porUsuario ? "" : "error", 8000);
+    },
+  });
   // Si se recargó la página estando en una pantalla, se queda en esa.
   navegar(pantallaEnHash() || pantallaInicial());
 }
 
 function cerrarSesion(silencioso) {
+  detenerControlDeInactividad();
   limpiarSesion();
   limpiarCatalogos();
   corte.reiniciar();

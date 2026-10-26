@@ -6,6 +6,8 @@ export const PERFIL_PROVEEDOR = 3;
 export const NOMBRES_PERFIL = { "1": "Administrador", "2": "Cabina", "3": "Proveedor" };
 
 export function getToken() { return sessionStorage.getItem("token"); }
+/* Token renovado de la misma sesión (ver core/inactividad.js). */
+export function actualizarToken(token) { if (token) sessionStorage.setItem("token", token); }
 
 export function guardarSesion(data, rfc) {
   sessionStorage.setItem("token", data.access_token);

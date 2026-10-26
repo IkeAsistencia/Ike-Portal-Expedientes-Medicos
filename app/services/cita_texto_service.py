@@ -58,6 +58,18 @@ def _fecha_hora(fecha: str, hora: str) -> str:
     return f"{DIAS_SEMANA[dia.weekday()]} {dia.strftime('%d/%m/%Y')}, {hora} hrs"
 
 
+def texto_cancelacion(proveedor: dict, cita: dict, motivo: str) -> str:
+    """Lo que queda en la bitácora del expediente al cancelar su cita: cuál
+    era (folio, médico, fecha y hora) y por qué se canceló."""
+    lineas = [f"CITA CANCELADA - Folio {cita['folio']}"]
+    medico = _limpio(proveedor.get("nombre"))
+    if medico:
+        lineas.append(f"Médico: {medico}")
+    lineas.append(f"Fecha y hora de la cita: {_fecha_hora(cita['fecha'], cita['hora'])}")
+    lineas.append(f"Motivo de la cancelación: {_limpio(motivo)}")
+    return "\n".join(lineas)
+
+
 def observaciones_de_cita(proveedor: dict, cita: dict, paciente: str | None) -> str:
     lineas = [f"CITA COORDINADA - Folio {cita['folio']}"]
 

@@ -76,6 +76,29 @@ def _expediente_en_espera(monkeypatch):
     _falso_expediente(monkeypatch)
 
 
+@pytest.fixture(autouse=True)
+def bitacora(monkeypatch):
+    """La bitácora del expediente (dbo.Seguimiento, en el sistema central): aquí
+    se guarda en una lista lo que se le mandaría."""
+    import app.repositories.seguimiento_repo as seguimiento_repo
+
+    registros = []
+
+    def registrar(data, cl_usr_app, nombre=None):
+        registros.append({"cl_expediente": data.cl_expediente, "observaciones": data.comentario, "nombre": nombre})
+        return {"clSeguimiento": len(registros)}
+
+    monkeypatch.setattr(seguimiento_repo, "registrar_seguimiento", registrar)
+    return registros
+
+
+MOTIVO = "El médico no podrá atender ese día; se reprograma."
+
+
+def _cancelar(client, headers, folio, motivo=MOTIVO):
+    return client.post(f"/directorio-proveedores/citas/{folio}/cancelar", headers=headers, json={"motivo": motivo})
+
+
 @pytest.fixture()
 def client(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_AUTH_MODE", "sql")
@@ -143,22 +166,24 @@ def _cargar_proveedores(client, headers, filas):
 
 
 @pytest.fixture()
-def proveedor(client):
-    """Un proveedor ya cargado, con su clave del portal lista para agendar.
-    SIN horario de atención: así se ofrecen los horarios genéricos y las
-    pruebas no dependen del día de la semana en que se corran (el horario
-    tiene sus propias pruebas más abajo)."""
-    headers = _auth_headers_admin(client)
-    padron = _cargar_proveedores(client, headers, [{
-        "nombre": "Dra. Laura Méndez Ruiz", "especialidad": "Cardiología", "cedula": "8453219",
-        "estado": "Jalisco", "municipio": "Guadalajara",
-    }])
-    return {"headers": headers, "clave": padron[0]["clave"]}
+def prov_headers(client):
+    return _auth_headers_proveedor(client)
 
 
 @pytest.fixture()
-def prov_headers(client):
-    return _auth_headers_proveedor(client)
+def proveedor(client, prov_headers):
+    """Un proveedor ya cargado, con su clave del portal lista para agendar.
+    El catálogo lo carga el Administrador ("admin"); las citas las agenda el
+    Proveedor ("headers"), que es el único perfil que agenda.
+    SIN horario de atención: así se ofrecen los horarios genéricos y las
+    pruebas no dependen del día de la semana en que se corran (el horario
+    tiene sus propias pruebas más abajo)."""
+    admin = _auth_headers_admin(client)
+    padron = _cargar_proveedores(client, admin, [{
+        "nombre": "Dra. Laura Méndez Ruiz", "especialidad": "Cardiología", "cedula": "8453219",
+        "estado": "Jalisco", "municipio": "Guadalajara",
+    }])
+    return {"headers": prov_headers, "admin": admin, "clave": padron[0]["clave"]}
 
 
 HOY = date.today().isoformat()
@@ -192,7 +217,7 @@ def test_agendar_cita_queda_registrada_con_folio_y_el_paciente_del_expediente(cl
     assert citas[0]["paciente"] == "Juan de Dios Peralta"
     assert citas[0]["cl_expediente"] == 5001
     assert citas[0]["estatus"] == "Agendada"
-    assert citas[0]["rfc_agendo"] == "RFCADMTEST"
+    assert citas[0]["rfc_agendo"] == "RFCPROTEST"
 
 
 def test_toda_cita_es_para_un_expediente(client, proveedor):
@@ -286,7 +311,7 @@ def test_la_agenda_de_un_proveedor_no_afecta_la_de_otro(client, proveedor):
     """Cada renglón del padrón tiene su propia agenda -- incluido el mismo
     médico con otra especialidad."""
     headers = proveedor["headers"]
-    padron = _cargar_proveedores(client, headers, [{"nombre": "Dr. Segundo", "especialidad": "Pediatría", "cedula": "1112223"}])
+    padron = _cargar_proveedores(client, proveedor["admin"], [{"nombre": "Dr. Segundo", "especialidad": "Pediatría", "cedula": "1112223"}])
     otra_clave = next(p["clave"] for p in padron if p["clave"] != proveedor["clave"])
 
     _agendar(client, headers, proveedor, hora="09:00")
@@ -339,7 +364,7 @@ def _proximo(dia_semana: int) -> str:
 
 @pytest.fixture()
 def con_horario(client, proveedor):
-    padron = _cargar_proveedores(client, proveedor["headers"], [{
+    padron = _cargar_proveedores(client, proveedor["admin"], [{
         "nombre": "Dr. Tardes", "especialidad": "Pediatría", "cedula": "7777777",
         "horario": "Lun-Vie 15:00-18:00; Sáb 09:00-11:00",
     }])
@@ -373,7 +398,7 @@ def test_no_se_agenda_fuera_del_horario_del_medico(client, con_horario):
 
 
 def test_un_horario_que_no_se_puede_leer_no_bloquea_nada(client, proveedor):
-    padron = _cargar_proveedores(client, proveedor["headers"], [{
+    padron = _cargar_proveedores(client, proveedor["admin"], [{
         "nombre": "Dr. Texto Libre", "especialidad": "Pediatría", "cedula": "8888888",
         "horario": "de lunes a viernes por la tarde",
     }])
@@ -400,14 +425,82 @@ def test_lectura_del_horario(horario, esperado):
 
 def test_cancelar_libera_el_horario(client, proveedor):
     folio = _agendar(client, proveedor["headers"], proveedor, hora="16:00").json()["folio"]
-    assert client.post(f"/directorio-proveedores/citas/{folio}/cancelar", headers=proveedor["headers"]).status_code == 200
+    assert _cancelar(client, proveedor["headers"], folio).status_code == 200
     agenda = client.get(f"/directorio-proveedores/{proveedor['clave']}/agenda", headers=proveedor["headers"]).json()
     assert "16:00" in agenda[0]["horarios"]
 
 
 def test_cancelar_una_cita_inexistente_regresa_404(client, proveedor):
-    r = client.post("/directorio-proveedores/citas/CITA-99999/cancelar", headers=proveedor["headers"])
-    assert r.status_code == 404
+    assert _cancelar(client, proveedor["headers"], "CITA-99999").status_code == 404
+
+
+def test_cancelar_exige_el_motivo(client, proveedor, bitacora):
+    folio = _agendar(client, proveedor["headers"], proveedor).json()["folio"]
+    sin_cuerpo = client.post(f"/directorio-proveedores/citas/{folio}/cancelar", headers=proveedor["headers"])
+    assert sin_cuerpo.status_code == 422
+    corto = _cancelar(client, proveedor["headers"], folio, motivo="   no   ")
+    assert corto.status_code == 400 and "motivo" in corto.json()["detail"]
+    largo = _cancelar(client, proveedor["headers"], folio, motivo="x" * 501)
+    assert largo.status_code == 400
+    # Nada se canceló ni se escribió en la bitácora.
+    assert _citas(client, proveedor["headers"])[0]["estatus"] == "Agendada"
+    assert bitacora == []
+
+
+def test_la_cancelacion_queda_en_la_bitacora_con_su_motivo_sin_cambiar_el_estatus(client, proveedor, prov_headers, bitacora):
+    from app.repositories import estatus_repo, seguimiento_repo
+    from app.schemas.expediente import EstatusExpediente
+
+    estatus_repo.actualizar_estatus(5001, EstatusExpediente.EN_ESPERA_RESPUESTA, "RFCCAB")
+    cita = _agendar(client, prov_headers, proveedor, hora="10:30", expediente=5001).json()
+    assert _cancelar(client, prov_headers, cita["folio"]).status_code == 200
+
+    assert len(bitacora) == 1 and bitacora[0]["cl_expediente"] == 5001
+    texto = bitacora[0]["observaciones"]
+    assert texto.startswith("Proveedores --> Proveedor de Prueba\n")   # mismo encabezado que Actualizar Seguimiento
+    assert f"CITA CANCELADA - Folio {cita['folio']}" in texto
+    assert "Médico: Dra. Laura Méndez Ruiz" in texto and "10:30 hrs" in texto
+    assert f"Motivo de la cancelación: {MOTIVO}" in texto
+    # También en los comentarios que muestra el portal.
+    comentarios = seguimiento_repo.listar_comentarios_local(5001)
+    assert any("CITA CANCELADA" in c["comentario"] and MOTIVO in c["comentario"] for c in comentarios)
+    # El expediente sigue en espera: se canceló para agendar otra.
+    assert estatus_repo.obtener_detalle(5001)["estatus"] == "En Espera de Respuesta"
+    # Y la cita guarda por qué, quién y cuándo.
+    guardada = _citas(client, prov_headers)[0]
+    assert guardada["estatus"] == "Cancelada"
+
+
+def test_en_pago_anticipado_la_cancelacion_empieza_con_pa(client, proveedor, prov_headers, bitacora):
+    from app.repositories import pago_anticipado_repo
+
+    pago_anticipado_repo.marcar(5001, True, "RFCPROTEST")
+    cita = _agendar(client, prov_headers, proveedor, expediente=5001).json()
+    _cancelar(client, prov_headers, cita["folio"])
+    assert bitacora[0]["observaciones"].split("\n", 1)[1].startswith("PA-CITA CANCELADA")
+
+
+def test_si_la_bitacora_falla_la_cita_no_se_cancela(client, proveedor, prov_headers, monkeypatch):
+    import app.repositories.seguimiento_repo as seguimiento_repo
+
+    def falla(*a, **k):
+        raise seguimiento_repo.ErrorRegistroSeguimiento("Sin conexión con el sistema central.")
+
+    monkeypatch.setattr(seguimiento_repo, "registrar_seguimiento", falla)
+    cita = _agendar(client, prov_headers, proveedor).json()
+    r = _cancelar(client, prov_headers, cita["folio"])
+    assert r.status_code == 503 and "No se canceló la cita" in r.json()["detail"]
+    assert _citas(client, prov_headers)[0]["estatus"] == "Agendada"
+
+
+def test_se_guarda_quien_y_cuando_cancelo(client, proveedor, prov_headers):
+    from app.repositories import citas_proveedor_repo
+
+    cita = _agendar(client, prov_headers, proveedor).json()
+    _cancelar(client, prov_headers, cita["folio"], motivo="  El paciente   pidió otra fecha.  ")
+    fila = citas_proveedor_repo.obtener_por_folio(cita["folio"])
+    assert fila["motivo_cancelacion"] == "El paciente pidió otra fecha."
+    assert fila["rfc_cancelo"] == "RFCPROTEST" and fila["fecha_cancelacion"]
 
 
 def test_una_cita_vieja_sin_expediente_solo_la_cancela_el_administrador(client, proveedor, prov_headers):
@@ -416,19 +509,32 @@ def test_una_cita_vieja_sin_expediente_solo_la_cancela_el_administrador(client, 
     from app.repositories import citas_proveedor_repo
 
     vieja = citas_proveedor_repo.agendar(proveedor["clave"], HOY, "11:00", "Ana", "RFCADMTEST", None)
-    r = client.post(f"/directorio-proveedores/citas/{vieja['folio']}/cancelar", headers=prov_headers)
-    assert r.status_code == 403
-    assert client.post(
-        f"/directorio-proveedores/citas/{vieja['folio']}/cancelar", headers=proveedor["headers"]
-    ).status_code == 200
+    assert _cancelar(client, prov_headers, vieja["folio"]).status_code == 403
+    r = _cancelar(client, proveedor["admin"], vieja["folio"])
+    assert r.status_code == 200
+    assert r.json()["registrada_en_bitacora"] is False   # sin expediente no hay bitácora a dónde escribir
 
 
 # ---------- Permisos ----------
 
-def test_proveedor_y_administrador_agendan_cabina_no(client, proveedor, prov_headers):
-    assert _agendar(client, prov_headers, proveedor, hora="09:00").status_code == 200
-    assert _agendar(client, proveedor["headers"], proveedor, hora="10:30").status_code == 200
+def test_solo_el_proveedor_agenda(client, proveedor):
+    """El Administrador no agenda (2026-10-26): una cita termina en el
+    Seguimiento del expediente, pantalla que él no tiene."""
+    assert _agendar(client, proveedor["headers"], proveedor, hora="09:00").status_code == 200
+    admin = _agendar(client, proveedor["admin"], proveedor, hora="10:30")
+    assert admin.status_code == 403 and "Proveedor" in admin.json()["detail"]
     assert _agendar(client, _auth_headers_cabina(client), proveedor, hora="12:00").status_code == 403
+
+
+def test_el_administrador_no_consulta_agenda_ni_busca_fuera_de_la_red(client, proveedor):
+    url = f"/directorio-proveedores/{proveedor['clave']}/agenda"
+    assert client.get(url, headers=proveedor["admin"]).status_code == 403
+    assert client.get(url, headers=proveedor["headers"]).status_code == 200
+    assert client.get("/directorio-proveedores/fuera-de-red", params={"cod_ent": "JC", "especialidad": "Cardio"},
+                      headers=proveedor["admin"]).status_code == 403
+    # Lo que sí usa (Métricas lee el padrón y las especialidades).
+    assert client.get("/directorio-proveedores", headers=proveedor["admin"]).status_code == 200
+    assert client.get("/directorio-proveedores/especialidades", headers=proveedor["admin"]).status_code == 200
 
 
 # ---------- La cita y su expediente ----------
@@ -475,7 +581,7 @@ def test_un_expediente_solo_puede_tener_una_cita_activa(client, proveedor, prov_
 
 def test_para_cambiar_la_cita_primero_se_cancela_y_luego_se_agenda_otra(client, proveedor, prov_headers):
     primera = _agendar(client, prov_headers, proveedor, hora="09:00", expediente=5001).json()
-    assert client.post(f"/directorio-proveedores/citas/{primera['folio']}/cancelar", headers=prov_headers).status_code == 200
+    assert _cancelar(client, prov_headers, primera["folio"]).status_code == 200
     assert client.get("/directorio-proveedores/citas/expediente/5001", headers=prov_headers).json()["cita"] is None
 
     nueva = _agendar(client, prov_headers, proveedor, hora="12:00", expediente=5001)
@@ -505,7 +611,7 @@ def test_no_se_cancela_una_cita_de_expediente_que_ya_salio_de_sus_manos(client, 
     cita = _agendar(client, prov_headers, proveedor).json()
     # El Proveedor ya mandó su seguimiento: el expediente pasó a revisión del coordinador.
     _falso_expediente(monkeypatch, estatus="Seguimiento Proveedor")
-    r = client.post(f"/directorio-proveedores/citas/{cita['folio']}/cancelar", headers=prov_headers)
+    r = _cancelar(client, prov_headers, cita["folio"])
     assert r.status_code == 400
     assert _citas(client, prov_headers)[0]["estatus"] == "Agendada"
 
@@ -580,6 +686,6 @@ def test_expedientes_para_cita_solo_trae_los_accionables_y_sin_cita(client, prov
     assert r.json()[0]["nombre_paciente"] == "Juan de Dios Peralta"
     assert consultas == [None, 5004], "una consulta del rango y solo el viejo uno por uno"
 
-    assert client.get("/directorio-proveedores/expedientes-para-cita", headers=proveedor["headers"]).status_code == 200
+    assert client.get("/directorio-proveedores/expedientes-para-cita", headers=proveedor["admin"]).status_code == 403
     assert client.get("/directorio-proveedores/expedientes-para-cita",
                       headers=_auth_headers_cabina(client)).status_code == 403

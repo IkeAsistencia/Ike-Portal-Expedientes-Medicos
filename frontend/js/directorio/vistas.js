@@ -293,8 +293,7 @@ export function calcular(s) {
     detailPrice: d ? d.price : "", detailPhone: d ? d.phone : "", detailSource: d ? d.source : "", detailConvenio: d ? d.convenio : "",
     detailClave: d ? d.clave : "", detailOrigen: d ? d.origen : "",
     bookingIdle: s.bookingStep === "idle", bookingPick: s.bookingStep === "pick", bookingDone: s.bookingStep === "done",
-    bookingExpediente: s.bookingStep === "expediente",
-    // Paso "¿Para qué expediente?": los que coinciden con la especialidad del
+    bookingExpediente: s.bookingStep === "expediente",    // Paso "¿Para qué expediente?": los que coinciden con la especialidad del
     // médico van primero.
     expedientesCita: s.expedientesCita === null ? null : s.expedientesCita
       .filter(x => !busquedaExp || String(x.expediente).includes(busquedaExp) || textoComparable(x.nombre_paciente).includes(busquedaExp))
@@ -438,6 +437,8 @@ export function calcular(s) {
       : rfcAlta.digitoCorrecto || !esAdministrador ? "dp-ok" : "dp-advertencia",
     // Botones del SAT y la SEP e indicaciones de revisión: solo Administrador.
     mostrarVerificacion: esAdministrador,
+    // Del directorio, el Administrador solo usa Solicitudes, Alta y Métricas.
+    soloAdministracion: esAdministrador,
 
     // Documentos opcionales: el archivo elegido (se sube al guardar) y, al
     // editar, el que la solicitud ya tiene.
@@ -475,11 +476,17 @@ function enlaceVerificar(url, valor, que, texto) {
    portal) en ámbar, para que se note de un vistazo cuál tiene convenio. */
 const clasePorOrigen = (origen) => (origen === "portal" ? "pendiente" : "seguimiento");
 
+/* "Volver": al directorio para el Proveedor; a Solicitudes para el
+   Administrador, que no tiene la búsqueda del directorio. */
+const volverSegunPerfil = (v) => v.soloAdministracion
+  ? { volver: "← Volver a solicitudes", accionVolver: "ir-solicitudes" }
+  : { volver: "← Volver al directorio", accionVolver: "ir-inicio" };
+
 function encabezado({ volver, accionVolver, titulo, texto, extra = "", idTexto = "" }) {
   return `
     <div class="dp-encabezado${extra ? " dp-encabezado-acciones" : ""}">
       <div class="dp-encabezado-texto">
-        <button class="btn dp-btn-ghost dp-volver" data-accion="${accionVolver}">${e(volver)}</button>
+        ${volver ? `<button class="btn dp-btn-ghost dp-volver" data-accion="${accionVolver}">${e(volver)}</button>` : ""}
         <h1 class="dp-titulo">${e(titulo)}</h1>
         <p class="dp-texto"${idTexto ? ` id="${idTexto}"` : ""}>${e(texto)}</p>
       </div>
@@ -808,7 +815,7 @@ export function pantallaComparar(v) {
 export function pantallaMetricas(v) {
   return `
     ${encabezado({
-      volver: "← Volver al directorio", accionVolver: "ir-inicio",
+      ...volverSegunPerfil(v),
       titulo: "Métricas del directorio", texto: "Cifras del padrón cargado en este portal: cobertura por estado y especialidades con oferta insuficiente.",
     })}
     <div class="kpi-row">
@@ -858,7 +865,8 @@ export function pantallaMetricas(v) {
 export function pantallaSolicitudes(v) {
   return `
     ${encabezado({
-      volver: "← Volver al directorio", accionVolver: "ir-inicio",
+      // Para el Administrador es su pantalla de entrada: no hay a dónde volver.
+      volver: v.soloAdministracion ? "" : "← Volver al directorio", accionVolver: "ir-inicio",
       titulo: "Solicitudes de alta",
       // Las indicaciones de revisión son para el Administrador; los demás
       // perfiles solo ven el estatus de sus solicitudes.
@@ -1169,7 +1177,7 @@ export function pantallaAlta(v) {
         texto: "Corrige los datos antes de aprobarla o rechazarla. Al guardar, la solicitud sigue en revisión.",
       })
     : encabezado({
-        volver: "← Volver al directorio", accionVolver: "ir-inicio",
+        ...volverSegunPerfil(v),
         titulo: "Alta de médico",
         texto: "Registra tu consultorio en el directorio. La solicitud queda en revisión y un Administrador la aprueba o la rechaza.",
       });
@@ -1362,8 +1370,7 @@ export function fichaCuerpo(v) {
       <div class="dp-ficha-seccion">
         <span class="badge seguimiento">Cita confirmada</span>
         <p class="dp-cita-resumen">${e(v.bookingSummary)}</p>
-        <p class="dp-texto">Folio ${e(v.bookingFolio)} · ${e(v.detailClinic)}</p>
-        <p class="dp-texto">${e(v.detailDomicilioCalle)}, ${e(v.detailDomicilioResto)}.</p>
+        <p class="dp-texto">Folio ${e(v.bookingFolio)} · ${e(v.detailClinic)}</p>        <p class="dp-texto">${e(v.detailDomicilioCalle)}, ${e(v.detailDomicilioResto)}.</p>
       </div>`;
   }
   const dato = (titulo, valor) => `<div><dt>${e(titulo)}</dt><dd>${e(valor)}</dd></div>`;
