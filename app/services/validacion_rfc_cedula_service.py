@@ -156,6 +156,36 @@ def revisar_correo(texto: str | None) -> str:
     return correo
 
 
+DIAS_SEMANA = ("Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom")
+_DIA = "(?:" + "|".join(DIAS_SEMANA) + ")"
+_HORA = r"(?:[01]\d|2[0-3]):[0-5]\d"
+# "Lun-Vie 09:00-14:00" | "Lun, Mié, Vie 09:00-14:00" | "Sáb 09:00-13:00": los
+# bloques se separan con "; ". Es el mismo texto que arma el selector de la
+# pantalla y que ya usa el Excel del padrón.
+_BLOQUE_HORARIO = re.compile(rf"^({_DIA}(?:-{_DIA}|(?:, {_DIA})*)) ({_HORA})-({_HORA})$")
+
+
+def revisar_horario(texto: str | None) -> str:
+    """El horario de atención como lo arma el selector: bloques de días con
+    su hora de inicio y fin. Cada bloque debe tener inicio menor que fin y los
+    rangos de días ("Lun-Vie") deben ir en orden."""
+    horario = re.sub(r"\s+", " ", texto or "").strip()
+    if not horario:
+        raise DatoInvalido("El horario de atención es obligatorio.")
+    for bloque in horario.split("; "):
+        m = _BLOQUE_HORARIO.match(bloque)
+        if not m:
+            raise DatoInvalido("El horario de atención no tiene un formato válido: elige los días y la hora de inicio y fin.")
+        dias, desde, hasta = m.groups()
+        if desde >= hasta:
+            raise DatoInvalido("En el horario de atención la hora de inicio debe ser anterior a la hora de fin.")
+        if "-" in dias:
+            primero, ultimo = dias.split("-")
+            if DIAS_SEMANA.index(primero) >= DIAS_SEMANA.index(ultimo):
+                raise DatoInvalido("En el horario de atención los días deben ir en orden (por ejemplo Lun-Vie).")
+    return horario
+
+
 def exigir_texto(texto: str | None, nombre: str) -> str:
     limpio = re.sub(r"\s+", " ", texto or "").strip()
     if not limpio:

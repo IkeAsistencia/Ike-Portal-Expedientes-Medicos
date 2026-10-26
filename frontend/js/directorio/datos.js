@@ -20,6 +20,7 @@
    se le dice al usuario (ver altaVerificacion en vistas.js). */
 import { api, apiArchivo } from "../core/api.js";
 import { normalizarEntidad } from "../core/formato.js";
+import { bloqueHorarioVacio, parsearHorario, serializarHorario } from "./validacion-alta.js";
 
 /* Catálogo de especialidades (GET /directorio-proveedores/especialidades).
    Sale de la tabla especialidades_catalogo de SQLite, sembrada con el
@@ -79,6 +80,9 @@ export function formularioVacio() {
     name: "", specialty: "", cedula: "", rfc: "",
     estado: "", municipio: "",
     calleNumExtInt: "", colonia: "", codigoPostal: "",
+    consultorio: "",
+    // Horario de atención: bloques { dias, desde, hasta } (ver validacion-alta.js).
+    horarioBloques: [bloqueHorarioVacio()],
     phone: "", email: "",
   };
 }
@@ -268,6 +272,7 @@ export async function cargarSolicitudesReales() {
       folio: f.folio, name: f.nombre, specialty: f.especialidad,
       zone: [f.municipio, f.estado].filter(Boolean).join(", "),
       cedula: f.cedula || "", rfc: f.rfc || "", status: f.estatus,
+      consultorio: f.consultorio || "", horario: f.horario || "",
       claveProveedor: f.clave_proveedor || "",
       // Cómo se ve el RFC (tipo de persona, dígito verificador) y qué
       // documentos opcionales se subieron (solo nombre y fecha).
@@ -283,6 +288,9 @@ export async function cargarSolicitudesReales() {
         estado: f.estado || "", municipio: f.municipio || "",
         calleNumExtInt: f.calle_num_ext_int || "", colonia: f.colonia || "",
         codigoPostal: f.codigo_postal || "",
+        consultorio: f.consultorio || "",
+        // Una solicitud vieja (sin horario o con otro formato) vuelve a capturarlo.
+        horarioBloques: parsearHorario(f.horario).length ? parsearHorario(f.horario) : [bloqueHorarioVacio()],
         // Solo dígitos: las solicitudes viejas pudieron guardar el teléfono con espacios.
         phone: (f.telefono || "").replace(/\D/g, ""), email: f.email || "",
       },
@@ -295,34 +303,61 @@ export async function cargarSolicitudesReales() {
 /* Corrige una solicitud que sigue "En revisión" (solo Administrador, ver
    app/routers/solicitudes_alta_medico.py). */
 export function editarSolicitudAlta(folio, form) {
+  const ubicacion = nombresDeUbicacion(form);
   return api("/solicitudes-alta-medico/" + encodeURIComponent(folio), {
     method: "PUT",
     body: {
       nombre: form.name, especialidad: form.specialty, cedula: form.cedula, rfc: form.rfc,
-      estado: form.estado || null, municipio: form.municipio || null,
+      estado: ubicacion.estado, municipio: ubicacion.municipio,
       calle_num_ext_int: form.calleNumExtInt || null,
       colonia: form.colonia || null,
       codigo_postal: form.codigoPostal || null,
+      consultorio: form.consultorio || null,
+      horario: serializarHorario(form.horarioBloques) || null,
       telefono: form.phone || null, email: form.email || null,
     },
   });
 }
 
+/* form.estado/form.municipio guardan el CodEnt/CodMD (para encadenar los
+   combos) -- lo que se manda a guardar es el NOMBRE, igual que el resto del
+   padrón (carga de Excel, búsqueda libre por texto). */
+function nombresDeUbicacion(form) {
+  const entidad = entidadesAltaCache().find(e => String(e.clave) === String(form.estado));
+  const municipio = municipiosAltaCache(form.estado).find(m => String(m.clave) === String(form.municipio));
+  return {
+    estado: entidad ? entidad.descripcion : (form.estado || null),
+    municipio: municipio ? municipio.descripcion : (form.municipio || null),
+  };
+}
+
+/* Lo contrario: de los NOMBRES guardados en una solicitud a las claves que
+   usan los combos (para editarla). Carga los catálogos que haga falta. Lo que
+   no se encuentre regresa vacío, para que se vuelva a elegir. */
+const comoTexto = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toUpperCase();
+
+export async function clavesDeUbicacion(nombreEstado, nombreMunicipio) {
+  const entidades = await cargarEntidadesAltaReal();
+  const entidad = entidades.find(e => comoTexto(e.descripcion) === comoTexto(nombreEstado));
+  if (!entidad) return { estado: "", municipio: "" };
+  const municipios = await cargarMunicipiosAltaReal(entidad.clave);
+  const municipio = municipios.find(m => comoTexto(m.descripcion) === comoTexto(nombreMunicipio));
+  return { estado: String(entidad.clave), municipio: municipio ? String(municipio.clave) : "" };
+}
+
 export function enviarSolicitudAlta(form) {
-  // form.estado/form.municipio guardan el CodEnt/CodMD (para encadenar el
-  // combo) -- lo que se manda a guardar es el NOMBRE, igual que el resto
-  // del padrón (carga de Excel, búsqueda libre por texto).
-  const entidad = entidadesAltaCache().find(e => e.clave === form.estado);
-  const municipio = municipiosAltaCache(form.estado).find(m => m.clave === form.municipio);
+  const ubicacion = nombresDeUbicacion(form);
   return api("/solicitudes-alta-medico", {
     method: "POST",
     body: {
       nombre: form.name, especialidad: form.specialty, cedula: form.cedula, rfc: form.rfc,
-      estado: entidad ? entidad.descripcion : (form.estado || null),
-      municipio: municipio ? municipio.descripcion : (form.municipio || null),
+      estado: ubicacion.estado,
+      municipio: ubicacion.municipio,
       calle_num_ext_int: form.calleNumExtInt || null,
       colonia: form.colonia || null,
       codigo_postal: form.codigoPostal || null,
+      consultorio: form.consultorio || null,
+      horario: serializarHorario(form.horarioBloques) || null,
       telefono: form.phone || null, email: form.email || null,
     },
   });

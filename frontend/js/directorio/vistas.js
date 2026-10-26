@@ -12,6 +12,7 @@ import { esPerfilAdministrador, rfcActual } from "../core/sesion.js";
 import {
   URL_VALIDAR_RFC_SAT, URL_CONSULTAR_CEDULA_SEP, DOCUMENTOS_ALTA,
   revisarRfc, normalizarRfc, etiquetaTipoRfc, cedulaConFormatoValido, revisarFormularioAlta,
+  DIAS_SEMANA, serializarHorario,
 } from "./validacion-alta.js";
 import { coordinacionActual } from "../core/coordinar-cita.js";
 
@@ -307,6 +308,7 @@ export function calcular(s) {
     requests: s.requests.map((r, i) => ({
       indice: i,
       folio: r.folio, name: r.name, specialty: r.specialty, zone: r.zone,
+      consultorio: r.consultorio, horario: r.horario,
       // Cédula y RFC tal como se capturaron. Antes se les ponía una ✓ como si
       // estuvieran verificados; solo se revisó el formato, así que la
       // confirmación la hace quien revisa con los botones de la SEP y el SAT.
@@ -383,6 +385,8 @@ export function calcular(s) {
     // largo de un RFC o se intentó enviar: no a la primera letra.
     rfcValor: normalizarRfc(s.form.rfc),
     rfcTipo: rfcAlta.estado === "valido" ? etiquetaTipoRfc(rfcAlta.tipo) : "",
+    horarioResumen: serializarHorario(s.form.horarioBloques) || "Elige los días y las horas de atención.",
+
     // La advertencia del dígito verificador es para quien revisa
     // (Administrador): a quien captura solo se le dice si el formato es válido.
     rfcMensaje: !rfcMostrarError ? "Obligatorio: 13 caracteres (persona física) o 12 (persona moral)."
@@ -835,7 +839,11 @@ export function pantallaSolicitudes(v) {
             ${v.requests.map(r => `
               <tr>
                 <td data-label="Folio" class="dp-tabular">${e(r.folio)}</td>
-                <td data-label="Médico" class="dp-fuerte">${e(r.name)}</td>
+                <td data-label="Médico">
+                  <div class="dp-fuerte">${e(r.name)}</div>
+                  ${r.consultorio ? `<div class="dp-nota">${e(r.consultorio)}</div>` : ""}
+                  ${r.horario ? `<div class="dp-nota">${e(r.horario)}</div>` : ""}
+                </td>
                 <td data-label="Especialidad">${e(r.specialty)}</td>
                 <td data-label="Zona">${e(r.zone)}</td>
                 <td data-label="Cédula prof.">
@@ -898,6 +906,33 @@ export function altaRfc(v) {
     ${v.rfcTipo ? `<span class="dp-tipo-rfc">${e(v.rfcTipo)}</span>` : ""}
     <span class="dp-mensaje ${v.rfcClase}">${e(v.rfcMensaje)}</span>
     ${v.mostrarVerificacion ? enlaceVerificar(URL_VALIDAR_RFC_SAT, v.rfcValor, "RFC", "Verificar en el SAT") : ""}`;
+}
+
+/* Selector del horario de atención. Cada bloque son unos días de la semana
+   (botones que se prenden y apagan) y una hora de inicio y otra de fin, como
+   al programar una alarma: en el celular cada hora abre la rueda del
+   teléfono. Se pueden agregar más bloques (por ejemplo, Sáb con otro horario). */
+export function altaHorario(v) {
+  const bloques = v.form.horarioBloques;
+  return `
+    <label class="dp-horario-titulo">Horario de atención</label>
+    ${bloques.map((b, i) => `
+      <div class="dp-horario-bloque">
+        <div class="dp-dias-chips" role="group" aria-label="Días del horario ${i + 1}">
+          ${DIAS_SEMANA.map((dia, j) => `
+            <button type="button" class="dp-dia-chip${b.dias.includes(j) ? " dp-sel" : ""}"
+              data-accion="hor-dia" data-bloque="${i}" data-dia="${j}" aria-pressed="${b.dias.includes(j)}">${e(dia)}</button>`).join("")}
+        </div>
+        <div class="dp-horas">
+          <label class="dp-hora">De <input type="time" data-hor="desde" data-bloque="${i}" value="${e(b.desde)}"></label>
+          <label class="dp-hora">A <input type="time" data-hor="hasta" data-bloque="${i}" value="${e(b.hasta)}"></label>
+          ${bloques.length > 1 ? `<button type="button" class="btn btn-secondary" data-accion="hor-quitar" data-bloque="${i}">Quitar</button>` : ""}
+        </div>
+      </div>`).join("")}
+    <div class="dp-horario-pie">
+      <button type="button" class="btn btn-secondary" data-accion="hor-agregar">+ Agregar otro horario</button>
+      <span class="dp-nota" id="dp-horario-resumen">${e(v.horarioResumen)}</span>
+    </div>`;
 }
 
 /* Documentos opcionales del alta. El <input type="file"> no conserva el
@@ -1141,6 +1176,8 @@ export function pantallaAlta(v) {
           </div>
           <div class="dp-verificacion" id="dp-alta-verificacion">${altaVerificacion(v)}</div>
           <div class="dp-verificacion dp-verificacion-rfc" id="dp-alta-rfc">${altaRfc(v)}</div>
+          <h3 class="dp-subtitulo dp-subtitulo-espacio">Consultorio donde da la consulta</h3>
+          ${campo("dp-consultorio", "consultorio", "Nombre del consultorio o clínica", "Consultorio 302", 'maxlength="120"')}
           <div class="dp-grid-campos">
             <div class="field dp-campo">
               <label for="dp-estado-sel">Estado</label>
@@ -1154,7 +1191,6 @@ export function pantallaAlta(v) {
               <select id="dp-mun-sel" data-campo="municipio">${opcionesMunicipio(v)}</select>
             </div>
           </div>
-          <h3 class="dp-subtitulo dp-subtitulo-espacio">Domicilio donde da la consulta</h3>
           ${campo("dp-calle", "calleNumExtInt", "Calle, No. Ext. y No. Int.", "Av. Vallarta 1450, Int. 302")}
           <div class="dp-grid-campos">
             ${campo("dp-colonia", "colonia", "Colonia", "Americana")}
@@ -1164,6 +1200,7 @@ export function pantallaAlta(v) {
             ${campo("dp-tel", "phone", "Teléfono", "10 dígitos", 'maxlength="10" inputmode="tel" pattern="[0-9]*"')}
             ${campo("dp-mail", "email", "Correo electrónico", "consultorio@correo.mx", 'maxlength="120" inputmode="email" autocapitalize="none" spellcheck="false"')}
           </div>
+          <div class="field dp-campo dp-horario" id="dp-alta-horario" data-campo="horario">${altaHorario(v)}</div>
           <div class="dp-acciones dp-enviar">
             <button class="btn btn-primary" data-accion="enviar-alta">${v.editando ? "Guardar cambios" : "Enviar solicitud de alta"}</button>
             ${v.editando ? `<button class="btn btn-secondary" data-accion="cancelar-edicion">Cancelar</button>` : ""}

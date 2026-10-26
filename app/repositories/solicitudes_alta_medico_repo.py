@@ -35,7 +35,7 @@ ESTATUS_EDITABLES = (ESTATUS_EN_REVISION, ESTATUS_CEDULA_NO_LOCALIZADA)
 
 _CAMPOS_SOLICITUD = (
     "nombre", "especialidad", "cedula", "rfc", "estado", "municipio",
-    "calle_num_ext_int", "colonia", "codigo_postal", "telefono", "email",
+    "calle_num_ext_int", "colonia", "codigo_postal", "consultorio", "horario", "telefono", "email",
 )
 
 

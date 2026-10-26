@@ -71,6 +71,7 @@ SOLICITUD_VALIDA = {
     "rfc": "NUME900101AB1", "estado": "Jalisco", "municipio": "Guadalajara",
     "calle_num_ext_int": "Av. Siempre Viva 123, Int. 4", "colonia": "Centro",
     "codigo_postal": "44100", "telefono": "33 0000 0000", "email": "nuevo@correo.mx",
+    "consultorio": "Consultorio Nuevo", "horario": "Lun-Vie 09:00-14:00",
 }
 
 

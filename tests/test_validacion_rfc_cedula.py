@@ -120,6 +120,7 @@ SOLICITUD = {
     "nombre": "Dr. Emilio Gómez", "especialidad": "Cardiología", "cedula": "12345678",
     "rfc": "gode561231gr8", "estado": "Jalisco", "municipio": "Guadalajara",
     "calle_num_ext_int": "Av. Vallarta 1450", "colonia": "Americana", "codigo_postal": "44100",
+    "consultorio": "Consultorio 302", "horario": "Lun-Vie 09:00-14:00; Sáb 09:00-13:00",
     "telefono": "3312345678", "email": "emilio@correo.mx",
 }
 
@@ -146,7 +147,7 @@ def test_crear_rechaza_rfc_o_cedula_mal_formados(client, cambios, fragmento):
 
 @pytest.mark.parametrize("campo", [
     "nombre", "especialidad", "cedula", "rfc", "estado", "municipio",
-    "calle_num_ext_int", "colonia", "codigo_postal", "telefono", "email",
+    "calle_num_ext_int", "colonia", "codigo_postal", "consultorio", "horario", "telefono", "email",
 ])
 def test_todos_los_campos_son_obligatorios(client, campo):
     admin = _admin(client)
@@ -169,6 +170,49 @@ def test_telefono_codigo_postal_y_correo_con_formato(client, cambios, fragmento)
     r = client.post("/solicitudes-alta-medico", headers=_admin(client), json={**SOLICITUD, **cambios})
     assert r.status_code == 400
     assert fragmento in r.json()["detail"]
+
+
+@pytest.mark.parametrize("horario", [
+    "Lun 09:00-14:00",
+    "Lun-Vie 09:00-14:00",
+    "Lun, Mié, Vie 16:00-19:30",
+    "Lun-Vie 09:00-14:00; Sáb 09:00-13:00; Dom 10:00-12:00",
+])
+def test_horarios_validos(horario):
+    assert validacion.revisar_horario(horario) == horario
+
+
+@pytest.mark.parametrize("horario, fragmento", [
+    ("Lun-Vie 14:00-09:00", "anterior"),
+    ("Lun-Vie 09:00-09:00", "anterior"),
+    ("Vie-Lun 09:00-14:00", "en orden"),
+    ("Lun-Vie 9:00-14:00", "formato"),
+    ("Lun-Vie 09:00-25:00", "formato"),
+    ("Lunes 09:00-14:00", "formato"),
+    ("Lun-Vie", "formato"),
+    ("de lunes a viernes por la mañana", "formato"),
+    ("Lun-Vie 09:00-14:00;Sáb 09:00-13:00", "formato"),
+    ("", "obligatorio"),
+])
+def test_horarios_invalidos(horario, fragmento):
+    with pytest.raises(validacion.DatoInvalido) as e:
+        validacion.revisar_horario(horario)
+    assert fragmento in str(e.value)
+
+
+def test_horario_invalido_se_rechaza_en_la_api(client):
+    r = _crear(client, _admin(client), horario="Lun-Vie 14:00-09:00")
+    assert r.status_code == 400
+    assert "horario" in r.json()["detail"].lower()
+
+
+def test_consultorio_y_horario_pasan_al_padron_al_aprobar(client):
+    admin = _admin(client)
+    folio = _crear(client, admin).json()["folio"]
+    assert client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"}).status_code == 200
+    medico = client.get("/directorio-proveedores", headers=admin).json()[0]
+    assert medico["consultorio"] == "Consultorio 302"
+    assert medico["horario"] == "Lun-Vie 09:00-14:00; Sáb 09:00-13:00"
 
 
 def test_telefono_con_separadores_se_guarda_solo_con_digitos(client):

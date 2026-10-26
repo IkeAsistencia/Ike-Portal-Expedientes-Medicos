@@ -274,6 +274,24 @@
 .dp-datos dd{margin:0;font-weight:600;color:var(--navy);}
 /* Campo obligatorio que falta o está mal tras intentar enviar. */
 .dp-formulario [aria-invalid="true"]{border-color:var(--red);box-shadow:0 0 0 1px var(--red);}
+/* Selector del horario de atención */
+.dp-horario{display:grid;gap:12px;padding:12px;border:1px solid var(--tono-azul-borde);border-radius:var(--radius);background:var(--white);}
+.dp-horario[aria-invalid="true"]{border-color:var(--red);}
+.dp-horario-titulo{font-size:13px;font-weight:600;color:var(--navy);}
+.dp-horario-bloque{display:grid;gap:10px;padding-bottom:12px;border-bottom:1px dashed var(--tono-azul-borde);}
+.dp-horario-bloque:last-of-type{border-bottom:0;padding-bottom:0;}
+.dp-dias-chips{display:flex;flex-wrap:wrap;gap:6px;}
+.dp-dia-chip{
+  min-width:46px;padding:8px 10px;border-radius:999px;border:1px solid var(--tono-azul-borde);
+  background:var(--white);color:var(--text-secondary);font:inherit;font-size:13px;font-weight:600;cursor:pointer;
+}
+.dp-dia-chip:hover{border-color:var(--navy);}
+.dp-dia-chip.dp-sel{background:var(--navy);border-color:var(--navy);color:var(--white);}
+.dp-dia-chip:focus-visible{outline:2px solid var(--navy);outline-offset:2px;}
+.dp-horas{display:flex;flex-wrap:wrap;align-items:center;gap:14px;}
+.dp-hora{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--navy);}
+.dp-hora input{font:inherit;font-size:15px;padding:8px 10px;border:1px solid var(--gray-border);border-radius:var(--radius);}
+.dp-horario-pie{display:flex;flex-wrap:wrap;align-items:center;gap:12px;}
 /* Segunda franja de verificación (RFC), pegada a la de la cédula. */
 .dp-verificacion + .dp-verificacion-rfc{border-top:0;margin-top:-18px;}
 .dp-subtitulo-chico{font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.04em;}

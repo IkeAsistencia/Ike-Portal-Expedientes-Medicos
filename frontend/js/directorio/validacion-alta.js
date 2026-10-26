@@ -82,6 +82,61 @@ export const RESTRICCIONES_ALTA = {
 
 const CORREO = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$/;
 
+/* ---------- Horario de atención ----------
+   El selector maneja bloques { dias: [0..6], desde: "HH:MM", hasta: "HH:MM" }
+   (0 = Lun). Se guarda como texto, igual que el Excel del padrón:
+   "Lun-Vie 09:00-14:00; Sáb 09:00-13:00". El servidor revisa ese mismo formato. */
+export const DIAS_SEMANA = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+export const bloqueHorarioVacio = () => ({ dias: [], desde: "", hasta: "" });
+
+function textoDeDias(dias) {
+  const orden = [...new Set(dias)].sort((a, b) => a - b);
+  const seguidos = orden.every((d, i) => i === 0 || d === orden[i - 1] + 1);
+  if (orden.length > 1 && seguidos) return `${DIAS_SEMANA[orden[0]]}-${DIAS_SEMANA[orden[orden.length - 1]]}`;
+  return orden.map(d => DIAS_SEMANA[d]).join(", ");
+}
+
+/* Bloques → texto. Los bloques incompletos no se incluyen (revisarHorario los reporta). */
+export function serializarHorario(bloques) {
+  return (bloques || [])
+    .filter(b => b.dias.length && b.desde && b.hasta)
+    .map(b => `${textoDeDias(b.dias)} ${b.desde}-${b.hasta}`)
+    .join("; ");
+}
+
+/* Texto → bloques, para editar una solicitud ya guardada. Si el texto no tiene
+   el formato del selector (una solicitud vieja), regresa [] y se vuelve a capturar. */
+export function parsearHorario(texto) {
+  const bloques = [];
+  for (const parte of (texto || "").split("; ")) {
+    const m = parte.trim().match(/^(.+) (\d\d:\d\d)-(\d\d:\d\d)$/);
+    if (!m) return [];
+    const [, diasTxt, desde, hasta] = m;
+    let dias;
+    if (diasTxt.includes("-")) {
+      const [a, b] = diasTxt.split("-").map(d => DIAS_SEMANA.indexOf(d));
+      if (a < 0 || b < a) return [];
+      dias = Array.from({ length: b - a + 1 }, (_, i) => a + i);
+    } else {
+      dias = diasTxt.split(", ").map(d => DIAS_SEMANA.indexOf(d));
+      if (dias.some(d => d < 0)) return [];
+    }
+    bloques.push({ dias, desde, hasta });
+  }
+  return bloques;
+}
+
+/* null si el horario está bien; si no, el mensaje de lo que falta. */
+export function revisarHorario(bloques) {
+  if (!bloques || !bloques.length) return "Agrega al menos un horario de atención.";
+  for (const b of bloques) {
+    if (!b.dias.length) return "Elige los días de cada horario.";
+    if (!b.desde || !b.hasta) return "Elige la hora de inicio y la de fin de cada horario.";
+    if (b.desde >= b.hasta) return "La hora de inicio debe ser anterior a la de fin.";
+  }
+  return null;
+}
+
 /* Todos los campos del alta son obligatorios (solo los documentos son
    opcionales). Regresa [{ campo, etiqueta, mensaje }] con lo que falta o está
    mal; [] si todo está bien. `campo` es la llave del formulario. */
@@ -92,6 +147,9 @@ export function revisarFormularioAlta(f) {
 
   if (vacio(f.name)) falta("name", "Nombre completo");
   if (vacio(f.specialty)) falta("specialty", "Especialidad");
+  if (vacio(f.consultorio)) falta("consultorio", "Nombre del consultorio");
+  const fallaHorario = revisarHorario(f.horarioBloques);
+  if (fallaHorario) falta("horario", "Horario de atención", "Horario de atención: " + fallaHorario);
   if (!cedulaConFormatoValido(f.cedula)) falta("cedula", "Cédula profesional", "Cédula profesional: debe tener 7 u 8 dígitos.");
   const rfc = revisarRfc(f.rfc);
   if (rfc.estado !== "valido") falta("rfc", "RFC", "RFC: " + rfc.mensaje);

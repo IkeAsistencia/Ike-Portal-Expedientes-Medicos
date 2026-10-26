@@ -63,6 +63,8 @@ class SolicitudAltaInput(BaseModel):
     calle_num_ext_int: str = Field(min_length=1, max_length=180)
     colonia: str = Field(min_length=1, max_length=120)
     codigo_postal: str = Field(min_length=1, max_length=10)
+    consultorio: str = Field(min_length=1, max_length=120)
+    horario: str = Field(min_length=1, max_length=200)
     telefono: str = Field(min_length=1, max_length=30)
     email: str = Field(min_length=1, max_length=120)
 
@@ -87,6 +89,8 @@ def _validar_datos(data: SolicitudAltaInput) -> dict:
             "calle_num_ext_int": validacion.exigir_texto(data.calle_num_ext_int, "La calle y nÃºmero"),
             "colonia": validacion.exigir_texto(data.colonia, "La colonia"),
             "codigo_postal": validacion.revisar_codigo_postal(data.codigo_postal),
+            "consultorio": validacion.exigir_texto(data.consultorio, "El nombre del consultorio"),
+            "horario": validacion.revisar_horario(data.horario),
             "telefono": validacion.revisar_telefono(data.telefono),
             "email": validacion.revisar_correo(data.email),
         }

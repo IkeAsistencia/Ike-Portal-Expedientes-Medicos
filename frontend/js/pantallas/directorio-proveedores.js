@@ -30,6 +30,7 @@ import {
   cargarSolicitudesReales, enviarSolicitudAlta, actualizarEstatusSolicitud,
   editarSolicitudAlta,
   subirDocumentoSolicitud, quitarDocumentoSolicitud, descargarDocumentoSolicitud,
+  clavesDeUbicacion,
   cargarAgenda, agendarCita,
   cargarEntidadesAltaReal, cargarMunicipiosAltaReal,
   buscarFueraDeRed, resolverBusquedaDeExpediente,
@@ -37,7 +38,7 @@ import {
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
 import {
-  revisarFormularioAlta, RESTRICCIONES_ALTA, DOCUMENTOS_ALTA, DOCUMENTO_TIPOS_PERMITIDOS, DOCUMENTO_TAMANO_MAXIMO,
+  revisarFormularioAlta, RESTRICCIONES_ALTA, DOCUMENTOS_ALTA, bloqueHorarioVacio, DOCUMENTO_TIPOS_PERMITIDOS, DOCUMENTO_TAMANO_MAXIMO,
 } from "../directorio/validacion-alta.js";
 import { toast } from "../core/toast.js";
 import { coordinacionActual, terminarCoordinacion } from "../core/coordinar-cita.js";
@@ -145,7 +146,7 @@ const ponerFormulario = (cambios) => { estado.form = Object.assign({}, estado.fo
 function claveFoco(el) {
   if (el.id) return "#" + el.id;
   const d = el.dataset || {};
-  return [d.accion, d.valor, d.id, d.indice, d.filtro, d.campo].join("|");
+  return [d.accion, d.valor, d.id, d.indice, d.filtro, d.campo, d.bloque, d.dia, d.hor].join("|");
 }
 
 function capturarFoco() {
@@ -372,7 +373,10 @@ async function enviarAlta() {
   if (faltas.length) {
     pintarDependientesAlta();
     const primero = raiz.querySelector(`[data-campo="${faltas[0].campo}"]`);
-    if (primero) primero.focus({ preventScroll: false });
+    if (primero) {
+      if (primero.matches("input, select, textarea")) primero.focus({ preventScroll: false });
+      else primero.scrollIntoView({ block: "center" });
+    }
     toast(
       faltas.length === 1 ? faltas[0].mensaje
         : `Faltan datos por completar o corregir: ${faltas.map(f => f.etiqueta).join(", ")}.`,
@@ -444,6 +448,45 @@ function quitarArchivoElegido(tipo) {
   pintarDependientesAlta();
 }
 
+/* ---------- Horario de atención (selector de días y horas) ---------- */
+function pintarHorario() {
+  const zona = $("dp-alta-horario");
+  if (!zona) return;
+  const foco = capturarFoco();
+  const v = V.calcular(estado);
+  zona.innerHTML = V.altaHorario(v);
+  $("dp-alta-nota").innerHTML = V.altaNota(v);
+  marcarInvalidosAlta();
+  restaurarFoco(foco);
+}
+
+function cambiarBloquesHorario(cambio) {
+  const bloques = estado.form.horarioBloques.map(b => ({ ...b, dias: [...b.dias] }));
+  cambio(bloques);
+  ponerFormulario({ horarioBloques: bloques });
+  pintarHorario();
+}
+
+const alternarDia = (el) => cambiarBloquesHorario(bloques => {
+  const b = bloques[Number(el.dataset.bloque)], dia = Number(el.dataset.dia);
+  b.dias = b.dias.includes(dia) ? b.dias.filter(d => d !== dia) : [...b.dias, dia].sort((x, y) => x - y);
+});
+const agregarHorario = () => cambiarBloquesHorario(bloques => bloques.push(bloqueHorarioVacio()));
+const quitarHorario = (el) => cambiarBloquesHorario(bloques => bloques.splice(Number(el.dataset.bloque), 1));
+
+/* La hora se guarda al terminar de elegirla (evento "change"): repintar a cada
+   cambio del selector de hora lo cerraría. Solo se refresca el resumen. */
+function cambiarHoraHorario(el) {
+  const b = estado.form.horarioBloques[Number(el.dataset.bloque)];
+  if (!b) return;
+  b[el.dataset.hor] = el.value;
+  const v = V.calcular(estado);
+  const resumen = $("dp-horario-resumen");
+  if (resumen) resumen.textContent = v.horarioResumen;
+  $("dp-alta-nota").innerHTML = V.altaNota(v);
+  marcarInvalidosAlta();
+}
+
 /* Quita un documento que la solicitud YA tiene en el servidor (al editar). */
 async function quitarDocumentoGuardado(tipo) {
   const folio = estado.editandoFolio;
@@ -499,18 +542,21 @@ async function editarSolicitud(indice) {
   irA({
     screen: "register",
     editandoFolio: solicitud.folio,
-    form: { ...formularioVacio(), ...solicitud.form },
+    // Estado y municipio se guardan por NOMBRE, pero los combos trabajan con
+    // la clave del catálogo: se dejan vacíos y se llenan en cuanto se resuelven.
+    form: { ...formularioVacio(), ...solicitud.form, estado: "", municipio: "" },
     registered: null,
     archivosAlta: {}, documentosEditando: { ...(solicitud.documentos || {}) }, altaIntento: false,
   });
-  // El combo de Municipio depende de la entidad: se piden los de la entidad
-  // guardada para que el municipio ya grabado aparezca seleccionado y no
-  // vacío (mismo catálogo que usa cambiarCombo).
   if (solicitud.form.estado) {
     const g = generacion;
-    await cargarMunicipiosAltaReal(solicitud.form.estado);
+    const claves = await clavesDeUbicacion(solicitud.form.estado, solicitud.form.municipio);
     if (g !== generacion || estado.editandoFolio !== solicitud.folio) return;
+    ponerFormulario({ estado: claves.estado, municipio: claves.municipio });
     pintar();
+    if (!claves.estado || (solicitud.form.municipio && !claves.municipio)) {
+      toast("No se pudo ubicar el estado o el municipio guardados: vuelve a elegirlos.", "error", 7000);
+    }
   }
 }
 
@@ -773,6 +819,9 @@ const ACCIONES = {
   "enviar-alta": enviarAlta,
   "cancelar-edicion": cancelarEdicion,
   "registrar-otro": () => irA({ registered: null, ...sinEdicion() }),
+  "hor-dia": alternarDia,
+  "hor-agregar": agregarHorario,
+  "hor-quitar": quitarHorario,
   "quitar-archivo-elegido": (el) => quitarArchivoElegido(el.dataset.tipo),
   "quitar-documento": (el) => quitarDocumentoGuardado(el.dataset.tipo),
   "ver-documento": (el) => verDocumento(el.dataset.folio, el.dataset.tipo),
@@ -808,6 +857,8 @@ function alCambiar(e) {
   } else if (el.id === "dp-orden") {
     ponerFiltros({ orden: el.value });
     pintar();
+  } else if (el.type === "time" && el.dataset.hor) {
+    cambiarHoraHorario(el);
   } else if (el.type === "file" && el.dataset.documento) {
     elegirDocumento(el);
   } else if (el.dataset.accionCambio === "elegir-especialidad-combo") {

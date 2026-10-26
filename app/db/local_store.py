@@ -304,6 +304,8 @@ CREATE TABLE IF NOT EXISTS solicitudes_alta_medico (
     calle_num_ext_int TEXT,
     colonia           TEXT,
     codigo_postal     TEXT,
+    consultorio       TEXT,
+    horario           TEXT,
     telefono          TEXT,
     email             TEXT,
     estatus           TEXT NOT NULL DEFAULT 'En revisión',
@@ -350,7 +352,7 @@ def _migrar_columnas_faltantes(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE comentarios_seguimiento ADD COLUMN origen TEXT NOT NULL DEFAULT 'proveedor'")
 
     columnas_solicitudes = {row["name"] for row in conn.execute("PRAGMA table_info(solicitudes_alta_medico)")}
-    for columna in ("calle_num_ext_int", "colonia", "codigo_postal", "clave_proveedor"):
+    for columna in ("calle_num_ext_int", "colonia", "codigo_postal", "clave_proveedor", "consultorio", "horario"):
         if columna not in columnas_solicitudes:
             conn.execute(f"ALTER TABLE solicitudes_alta_medico ADD COLUMN {columna} TEXT")
 
