@@ -40,7 +40,8 @@ Usuario → CloudFront + WAF → ALB → EC2 Linux (uvicorn :8000)
                                         ├── SQL Server de SISE  (lectura por Stored Procedures)
                                         ├── SQLite local         (data/app_local.db)
                                         ├── SMTP corporativo     (alertas a proveedores)
-                                        └── API del DENUE/INEGI  (búsqueda fuera de la red)
+                                        ├── API del DENUE/INEGI  (búsqueda fuera de la red)
+                                        └── Google Maps (Places) (búsqueda fuera de la red, alternativa)
 ```
 
 **Dos bases de datos, con responsabilidades distintas:**
@@ -68,7 +69,7 @@ volumen persistente y respaldado.
 | **ALB** delante | Health check en `GET /health`; tamaño de carga de al menos **6 MB** | Bloquea |
 | **CloudFront + WAF** | Según el esquema de la empresa | Bloquea |
 | **Volumen persistente** para `data/` | Con respaldo programado | Bloquea |
-| **NAT gateway** con salida HTTPS | Solo para la consulta al DENUE (sección 3.4) | Degrada: se apaga la búsqueda fuera de la red |
+| **NAT gateway** con salida HTTPS | Para la consulta al DENUE y, si se activa, a Google Maps (secciones 3.4 y 3.5) | Degrada: se apaga la búsqueda fuera de la red (la fuente que dependa del NAT) |
 
 **Puertos:**
 
@@ -78,6 +79,7 @@ volumen persistente y respaldado.
 | Salida | TCP 1533 | SQL Server de SISE (**no es el 1433 estándar**; es el que usa SISE hoy) |
 | Salida | TCP 587 | SMTP corporativo |
 | Salida | TCP 443 | API del DENUE (`www.inegi.org.mx`) |
+| Salida | TCP 443 | Places API de Google Maps (`maps.googleapis.com`), solo si se activa la alternativa de la sección 3.5 |
 
 **Configuración del ALB y CloudFront:**
 
@@ -127,7 +129,24 @@ buzón correcto las alertas no llegan a quien deben.
 Sirve para proponer proveedores fuera de la red cuando el padrón no tiene
 ninguno en la zona buscada. No es indispensable para operar.
 
-### 3.5 Software en el servidor
+### 3.5 Places API de Google Maps (alternativa al DENUE)
+
+| Requerimiento | Detalle | Si falta |
+|---|---|---|
+| `GOOGLE_MAPS_API_KEY` | Llave de un proyecto de Google Cloud con la "Places API" habilitada | Degrada: el botón "Google Maps" de la búsqueda fuera de la red responde "no configurada"; el DENUE y el resto del portal siguen igual |
+| **Facturación activa** en ese proyecto de Google Cloud | Google exige una cuenta de facturación (tarjeta) para emitir la llave, aunque haya crédito mensual gratuito | Sin ella, Google rechaza la llave aunque esté bien copiada |
+| **Presupuesto/alertas** en Google Cloud | Cada búsqueda tiene costo por consulta (no por resultado); sin un tope, un uso intenso del botón puede generar cargos inesperados | No bloquea, pero expone a la empresa a un gasto no previsto |
+| Salida HTTPS con NAT | La consulta sale **del servidor**, no del navegador del usuario (mismo NAT de la sección 3.4) | Degrada igual, pero con error de conexión |
+
+Es una segunda fuente para la misma búsqueda fuera de la red del DENUE: el
+usuario elige en pantalla cuál usar. A diferencia del DENUE, Google
+regresa el giro real del negocio (mejor señal por especialidad) y puede
+incluir el nombre del médico y reseñas de pacientes -- revisar con
+cumplimiento/legal antes de activarla si eso es relevante para la empresa.
+Tampoco es indispensable para operar: mientras no se configure, el DENUE
+sigue cubriendo la misma necesidad sin costo.
+
+### 3.6 Software en el servidor
 
 | | |
 |---|---|
@@ -140,14 +159,14 @@ La zona horaria no es un detalle cosmético: las fechas de estatus,
 comentarios, cortes y alertas se guardan con la hora del servidor. Con el
 servidor en UTC, los cortes de día quedarían desfasados seis horas.
 
-### 3.6 Dominio y certificado
+### 3.7 Dominio y certificado
 
 | | |
 |---|---|
 | Dominio | `promedico.ikeasistencia.com` (propuesta, por confirmar) |
 | Certificado TLS | En CloudFront / ALB. uvicorn solo habla HTTP |
 
-### 3.7 Datos y cuentas
+### 3.8 Datos y cuentas
 
 | Requerimiento | Detalle |
 |---|---|
@@ -319,14 +338,17 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 | `CUENTAS_PERMITIDAS` | La lista confirmada (pendiente, sección 4) | Se ven de más o de menos |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE`, `SMTP_USAR_TLS` | Del SMTP corporativo | Sin ellos, los correos solo se registran en el log |
 | `SMTP_DESTINATARIO_PRUEBA` | **Vacío en producción** | Si queda con valor, los correos se desvían a ese buzón |
-| `DENUE_TOKEN` | Token del INEGI | Sin él se apaga la búsqueda fuera de la red |
+| `DENUE_TOKEN` | Token del INEGI | Sin él se apaga la búsqueda fuera de la red (fuente DENUE) |
+| `GOOGLE_MAPS_API_KEY` | Llave de Google Cloud con la Places API habilitada y facturación activa (opcional, sección 3.5) | Sin ella se apaga la alternativa de Google Maps; el DENUE sigue funcionando igual |
 | `PROXIES_CONFIABLES` | `2` con CloudFront + ALB; `1` si solo hay ALB | Un número mal puesto rompe el conteo de intentos de login |
 | `CORS_ALLOWED_ORIGINS` | **Vacío** | Con valor, otros sitios podrían llamar a la API desde el navegador |
 | `GRAPHQL_IDE_HABILITADO` | **`false`** | Con `true` queda expuesto el explorador de GraphQL |
 | `LOGIN_LEGADO_HABILITADO` | **`false`** | Con `true` queda abierta la ruta de login anterior |
 
-`DENUE_TIMEOUT_SEGUNDOS` y `DENUE_MAXIMO_RESULTADOS` tienen un valor por
-omisión razonable; solo hay que tocarlos si el INEGI responde lento.
+`DENUE_TIMEOUT_SEGUNDOS`, `DENUE_MAXIMO_RESULTADOS`,
+`GOOGLE_MAPS_TIMEOUT_SEGUNDOS` y `GOOGLE_MAPS_MAXIMO_RESULTADOS` tienen un
+valor por omisión razonable; solo hay que tocarlos si el servicio
+correspondiente responde lento.
 
 Cuidado con `SMTP_DESTINATARIO_PRUEBA`: es una válvula pensada para
 desarrollo, que manda **todos** los correos a un solo buzón. En producción
@@ -345,7 +367,7 @@ al arrancar a que corra con una configuración que nadie quiso.
 | 2 | Entrar con un RFC de cada perfil | Administrador, Cabina y Proveedor ven su pantalla |
 | 3 | Abrir un expediente del listado | Trae datos reales de SISE (confirma los Stored Procedures y los permisos) |
 | 4 | Cabina manda un correo a un proveedor de prueba | **Llega de verdad**, no solo al log |
-| 5 | Buscar en el Directorio **fuera de la red** | Devuelve resultados. Si dice "no configurada", falta el `DENUE_TOKEN`; si da error de conexión, falta el NAT |
+| 5 | Buscar en el Directorio **fuera de la red**, con las dos fuentes (DENUE y, si se activó, Google Maps) | Devuelve resultados. Si dice "no configurada", falta el `DENUE_TOKEN` o el `GOOGLE_MAPS_API_KEY` según la fuente; si da error de conexión, falta el NAT |
 | 6 | Subir un comprobante de ~4 MB | Se guarda (confirma el límite de carga del ALB) |
 | 7 | `journalctl -u portal-expedientes -n 100` | Sin errores |
 | 8 | Esperar al siguiente cambio de hora y revisar `job.log` | El job corrió y dejó su registro |

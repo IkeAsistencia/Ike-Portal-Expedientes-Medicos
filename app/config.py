@@ -63,6 +63,21 @@ class Settings(BaseSettings):
     # registros y no tiene caso traer cientos a una pantalla de prospección.
     denue_maximo_resultados: int = 50
 
+    # --- Búsqueda fuera de la red (alternativa): Google Maps (Places API) ---
+    # Llave de un proyecto de Google Cloud con la "Places API" habilitada Y
+    # con facturación activa (Google no la deja usar sin eso, aunque haya
+    # crédito mensual gratuito) -- ver
+    # https://developers.google.com/maps/documentation/places/web-service/get-api-key
+    # Mientras no se configure, esta alternativa queda apagada (el DENUE
+    # sigue funcionando igual) y el endpoint responde 503 con un mensaje
+    # claro -- ver app/services/google_maps_service.py.
+    google_maps_api_key: Optional[str] = None
+    google_maps_timeout_segundos: float = 8.0
+    # Tope de candidatos a mostrar -- a diferencia del DENUE, Google cobra
+    # por CONSULTA (no por resultado), así que esto solo recorta lo que
+    # llega en una sola página de respuesta (máximo 20), no ahorra costo.
+    google_maps_maximo_resultados: int = 20
+
     # --- Correo a proveedores (ver app/services/email_service.py) ---
     # Mientras no se configure un SMTP real, el envío queda "simulado"
     # (se registra en el log pero no se manda un correo de verdad).
@@ -128,6 +143,10 @@ class Settings(BaseSettings):
     @property
     def denue_configurado(self) -> bool:
         return bool(self.denue_token and self.denue_token.strip())
+
+    @property
+    def google_maps_configurado(self) -> bool:
+        return bool(self.google_maps_api_key and self.google_maps_api_key.strip())
 
 @lru_cache
 def get_settings() -> "Settings":

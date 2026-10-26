@@ -115,6 +115,34 @@ def clave_inegi_de_entidad(cod_ent: str) -> str | None:
     return None
 
 
+def nombre_de_entidad(cod_ent: str) -> str | None:
+    """
+    CodEnt del sistema central ("JC") -> nombre legible ("JALISCO"). Lo
+    necesita Google Maps en la búsqueda fuera de la red (ver
+    app/services/google_maps_service.py), que busca por texto libre en vez
+    de por clave del INEGI como el DENUE. None si ese CodEnt no está en el
+    catálogo.
+    """
+    for entidad in listar_entidades():
+        if entidad.clave.upper() == (cod_ent or "").strip().upper():
+            return entidad.descripcion
+    return None
+
+
+def nombre_de_municipio(cod_ent: str, cod_mun: str | None) -> str | None:
+    """
+    CodMD ("00039") -> nombre legible ("Guadalajara"), para la misma
+    búsqueda de Google Maps. None si no se dio municipio (significa "toda
+    la entidad") o si no está en el catálogo de esa entidad.
+    """
+    if not (cod_mun or "").strip():
+        return None
+    for municipio in listar_municipios(cod_ent):
+        if municipio.clave == cod_mun.strip():
+            return municipio.descripcion
+    return None
+
+
 def listar_municipios(cod_ent: str) -> list[CatalogoItemTexto]:
     """
     Municipios de una entidad, vía el SP legado dbo.sp_GetMun -- @clExpediente

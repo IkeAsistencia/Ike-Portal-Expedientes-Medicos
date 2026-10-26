@@ -16,6 +16,7 @@ from app.services import (
     cita_texto_service,
     coordinar_cita_service,
     denue_service,
+    google_maps_service,
 )
 
 
@@ -136,6 +137,48 @@ def buscar_fuera_de_red(
         "area": denue_service.construir_area(clave_inegi, cod_mun),
         "tipo_consultado": tipo,
         "tipo_descripcion": denue_service.ETIQUETA_TIPO.get(tipo, tipo),
+        "total": len(candidatos),
+        "candidatos": candidatos,
+    }
+
+
+@router.get("/fuera-de-red-google-maps")
+def buscar_fuera_de_red_google_maps(
+    cod_ent: str = Query(min_length=1, max_length=5, description="CodEnt de la entidad (ej. JC)"),
+    especialidad: str = Query(min_length=3, max_length=60),
+    cod_mun: str | None = Query(default=None, max_length=10, description="CodMD del municipio (ej. 00039)"),
+):
+    """
+    Misma idea que /fuera-de-red (candidatos a contratar, NO proveedores del
+    portal), pero contra Google Maps (Places API) en vez del DENUE -- ver
+    el porqué de las dos fuentes en app/services/google_maps_service.py.
+
+    Usa los mismos parámetros que /fuera-de-red (cod_ent/cod_mun del
+    catálogo del sistema central) para que la pantalla reutilice el mismo
+    formulario; aquí se traducen a nombres legibles porque Google busca por
+    texto libre, no por clave del INEGI.
+
+    503 si falta GOOGLE_MAPS_API_KEY en el .env (la búsqueda con Google
+    queda apagada, pero el DENUE y el resto del portal siguen igual).
+    """
+    nombre_entidad = catalogos_repo.nombre_de_entidad(cod_ent)
+    if nombre_entidad is None:
+        raise HTTPException(400, f'La entidad "{cod_ent}" no está en el catálogo.')
+    nombre_municipio = catalogos_repo.nombre_de_municipio(cod_ent, cod_mun)
+
+    try:
+        candidatos, consulta = google_maps_service.buscar_candidatos(
+            especialidad, nombre_entidad, nombre_municipio
+        )
+    except google_maps_service.GoogleMapsNoConfigurado as e:
+        raise HTTPException(503, str(e))
+    except google_maps_service.ErrorGoogleMaps as e:
+        raise HTTPException(502, str(e))
+
+    return {
+        "fuente": "Google Maps",
+        "area": f"{nombre_municipio}, {nombre_entidad}" if nombre_municipio else nombre_entidad,
+        "consulta": consulta,
         "total": len(candidatos),
         "candidatos": candidatos,
     }

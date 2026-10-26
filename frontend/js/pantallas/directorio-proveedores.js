@@ -34,7 +34,7 @@ import {
   clavesDeUbicacion,
   cargarAgenda, agendarCita, cargarExpedientesParaCita,
   cargarEntidadesAltaReal, cargarMunicipiosAltaReal,
-  buscarFueraDeRed, resolverBusquedaDeExpediente,
+  buscarFueraDeRed, buscarFueraDeRedGoogle, resolverBusquedaDeExpediente,
   cargarEspecialidadesKpi, olvidarEspecialidadesKpi, todasLasEspecialidades,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
@@ -101,9 +101,12 @@ function estadoInicial() {
     // Ya se intentó enviar: a partir de ahí el RFC muestra su error aunque
     // todavía esté corto (antes de eso solo se muestra al tener 12 o más).
     altaIntento: false, enviandoAlta: false,
-    // Búsqueda fuera de la red (candidatos del DENUE, ver datos.js). No se
-    // guardan: viven solo en este estado mientras dura la consulta.
+    // Búsqueda fuera de la red (candidatos del DENUE o de Google Maps, a
+    // elegir -- ver datos.js). No se guardan: viven solo en este estado
+    // mientras dura la consulta. fueraOrigen decide cuál de las dos fuentes
+    // se usa; "denue" por default porque es gratis y no requiere llave.
     fueraForm: { codEnt: "", codMun: "", especialidad: "" },
+    fueraOrigen: "denue",
     fueraResultados: null, fueraBuscando: false, fueraError: null,
     // Aviso de "Coordinar cita" (ver core/coordinar-cita.js): dónde se detuvo
     // la búsqueda y si conviene ofrecer buscar fuera de la red.
@@ -685,6 +688,14 @@ function comparable(texto) {
   return (texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
 }
 
+/* Cambiar de fuente (DENUE <-> Google Maps) limpia el resultado anterior:
+   son dos búsquedas distintas y mostrar el aviso/tabla de la fuente vieja
+   con la fuente nueva seleccionada confundiría al usuario. */
+function elegirFueraOrigen(origen) {
+  if (estado.fueraBuscando || estado.fueraOrigen === origen) return;
+  irA({ fueraOrigen: origen, fueraResultados: null, fueraError: null });
+}
+
 async function buscarFuera() {
   const { codEnt, codMun, especialidad } = estado.fueraForm;
   if (!codEnt || (especialidad || "").trim().length < 3 || estado.fueraBuscando) return;
@@ -692,7 +703,8 @@ async function buscarFuera() {
   irA({ fueraBuscando: true, fueraError: null, fueraResultados: null });
   const g = generacion;
   try {
-    const datos = await buscarFueraDeRed({ codEnt, codMun, especialidad: especialidad.trim() });
+    const buscar = estado.fueraOrigen === "google" ? buscarFueraDeRedGoogle : buscarFueraDeRed;
+    const datos = await buscar({ codEnt, codMun, especialidad: especialidad.trim() });
     if (g !== generacion) return;
     irA({ fueraResultados: datos, fueraBuscando: false });
   } catch (err) {
@@ -836,9 +848,11 @@ const ACCIONES = {
   "elegir-expediente": elegirExpediente,
   "cambiar-expediente": cambiarExpediente,
 
-  // Fuera de la red (candidatos del DENUE)
+  // Fuera de la red (candidatos del DENUE o de Google Maps)
   "ir-fuera-de-red": abrirFueraDeRed,
   "buscar-fuera-de-red": buscarFuera,
+  "fuera-origen-denue": () => elegirFueraOrigen("denue"),
+  "fuera-origen-google": () => elegirFueraOrigen("google"),
 
   // Inicio y zona
   "buscar": () => buscar(estado.query),

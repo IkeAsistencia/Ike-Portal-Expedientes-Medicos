@@ -493,6 +493,18 @@ export async function buscarFueraDeRed({ codEnt, codMun, especialidad }) {
   });
 }
 
+/* ---------- Búsqueda fuera de la red (Google Maps) ----------
+   Misma idea que buscarFueraDeRed, pero contra Google Maps (Places API):
+   el usuario elige la fuente en la misma pantalla (ver
+   app/services/google_maps_service.py para el porqué de tener las dos).
+   Responde 503 mientras no haya GOOGLE_MAPS_API_KEY en el .env del
+   servidor -- el DENUE sigue funcionando igual en ese caso. */
+export async function buscarFueraDeRedGoogle({ codEnt, codMun, especialidad }) {
+  return api("/directorio-proveedores/fuera-de-red-google-maps", {
+    params: { cod_ent: codEnt, cod_mun: codMun || undefined, especialidad },
+  });
+}
+
 /* ---------- Citas ----------
    La disponibilidad la decide el servidor: es el único que sabe qué horarios
    ya están apartados. Antes se inventaba con un hash, así que dos personas
