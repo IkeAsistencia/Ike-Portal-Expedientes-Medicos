@@ -71,7 +71,7 @@ SOLICITUD_VALIDA = {
     "rfc": "NUME900101AB1", "estado": "Jalisco", "municipio": "Guadalajara",
     "calle_num_ext_int": "Av. Siempre Viva 123, Int. 4", "colonia": "Centro",
     "codigo_postal": "44100", "telefono": "33 0000 0000", "email": "nuevo@correo.mx",
-    "consultorio": "Consultorio Nuevo", "horario": "Lun-Vie 09:00-14:00",
+    "consultorio": "Consultorio Nuevo", "horario": "Lun-Vie 09:00-14:00", "costo_consulta": "600-900",
 }
 
 
@@ -89,7 +89,9 @@ def test_listar_solicitudes_rechaza_cabina(client):
 
 def test_proveedor_y_administrador_pueden_crear_solicitud(client):
     assert client.post("/solicitudes-alta-medico", headers=_auth_headers_proveedor(client), json=SOLICITUD_VALIDA).status_code == 200
-    assert client.post("/solicitudes-alta-medico", headers=_auth_headers_admin(client), json=SOLICITUD_VALIDA).status_code == 200
+    # Otra especialidad: la misma solicitud dos veces ya es un duplicado (ver test_validacion_rfc_cedula).
+    otra = {**SOLICITUD_VALIDA, "especialidad": "Pediatría"}
+    assert client.post("/solicitudes-alta-medico", headers=_auth_headers_admin(client), json=otra).status_code == 200
 
 
 # ---------- Revisión: aprobar / rechazar / editar son solo de Administrador ----------
@@ -155,36 +157,18 @@ def test_administrador_puede_editar_una_solicitud_en_revision(client):
     assert solicitud["folio"] == folio, "el folio no cambia"
 
 
-def test_administrador_puede_editar_una_con_cedula_no_localizada(client):
-    """El caso que de verdad hay que poder corregir: la cédula profesional no
-    se localizó en el registro, así que hay que arreglar el dato y volver a
-    intentar (decisión del usuario, 2026-10-19)."""
+def test_el_estatus_cedula_no_localizada_ya_no_existe(client):
+    """Se quitó (decisión del usuario, 2026-10-26): no había botón para ponerlo
+    y quedaba como un estatus muerto. Las que lo tuvieran vuelven a "En
+    revisión" al arrancar (ver local_store._migrar_columnas_faltantes)."""
     admin = _auth_headers_admin(client)
     folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
-    marcar = client.post(
+    r = client.post(
         f"/solicitudes-alta-medico/{folio}/estatus", headers=admin,
         json={"estatus": "Cédula no localizada"},
     )
-    assert marcar.status_code == 200, marcar.text
-
-    r = client.put(f"/solicitudes-alta-medico/{folio}", headers=admin, json={
-        **SOLICITUD_VALIDA, "cedula": "87654321",
-    })
-    assert r.status_code == 200, r.text
-
-    solicitud = client.get("/solicitudes-alta-medico", headers=admin).json()[0]
-    assert solicitud["cedula"] == "87654321"
-    assert solicitud["estatus"] == "Cédula no localizada", "editar no cambia el estatus"
-
-
-def test_marcar_cedula_no_localizada_no_da_de_alta_en_el_padron(client):
-    """Solo "Aprobada" crea el proveedor; los demás estatus no tocan el padrón."""
-    admin = _auth_headers_admin(client)
-    folio = client.post("/solicitudes-alta-medico", headers=admin, json=SOLICITUD_VALIDA).json()["folio"]
-    client.post(
-        f"/solicitudes-alta-medico/{folio}/estatus", headers=admin,
-        json={"estatus": "Cédula no localizada"},
-    )
+    assert r.status_code == 400
+    assert client.get("/solicitudes-alta-medico", headers=admin).json()[0]["estatus"] == "En revisión"
     assert client.get("/directorio-proveedores", headers=admin).json() == []
 
 
@@ -342,7 +326,7 @@ def test_una_carga_de_excel_no_borra_a_los_medicos_dados_de_alta_en_el_portal(cl
     assert len(directorio) == 2
 
 
-def test_cuando_el_medico_del_portal_llega_en_la_carga_conserva_su_clave_y_pasa_a_la_red(client):
+def test_cuando_el_medico_del_portal_llega_en_la_carga_conserva_su_clave_y_pasa_a_la_red(client, monkeypatch):
     """Lo pidió el usuario (2026-10-19): el alta del portal "se quita" cuando
     el médico ya llega en la carga -- pero conservando su identificador, que
     es lo que amarra las citas ya generadas. En vez de borrarlo y crear otro,
@@ -355,13 +339,26 @@ def test_cuando_el_medico_del_portal_llega_en_la_carga_conserva_su_clave_y_pasa_
     )
     clave = aprobar.json()["clave_proveedor"]
 
-    # Una cita agendada ANTES de que llegue en la carga.
+    # Una cita agendada ANTES de que llegue en la carga. Toda cita es para un
+    # expediente (viene del sistema central; aquí se simula) y dentro del
+    # horario del médico (Lun-Vie 09:00-14:00): el próximo lunes a las 10:00,
+    # para no depender del día ni de la hora en que se corra la prueba.
     from datetime import date, timedelta
-    # Mañana, no hoy: una hora de hoy que ya pasó se rechaza, y esta prueba no debe
-    # depender de a qué hora del día se corra.
-    manana = (date.today() + timedelta(days=1)).isoformat()
+
+    import app.repositories.expedientes_repo as expedientes_repo
+    from app.schemas.expediente import EstatusExpediente, Expediente
+
+    monkeypatch.setattr(expedientes_repo, "listar_expedientes", lambda filtro: [Expediente(
+        expediente=filtro.cl_expediente, cuenta="Cuenta Demo", tipo_servicio="Asistencia Médica",
+        tipo_subservicio="Consulta Médica en Consultorio", nombre_paciente="Paciente Demo",
+        fecha_apertura_servicio=date.today(), fecha_apertura_completa=date.today().isoformat() + "T08:00:00",
+        estatus=EstatusExpediente.EN_ESPERA_RESPUESTA,
+    )])
+    lunes = date.today() + timedelta(days=1)
+    while lunes.weekday() != 0:
+        lunes += timedelta(days=1)
     cita = client.post("/directorio-proveedores/citas", headers=admin, json={
-        "clave_proveedor": clave, "fecha": manana, "hora": "09:00",
+        "clave_proveedor": clave, "fecha": lunes.isoformat(), "hora": "10:00", "cl_expediente": 9001,
     })
     assert cita.status_code == 200, cita.text
 

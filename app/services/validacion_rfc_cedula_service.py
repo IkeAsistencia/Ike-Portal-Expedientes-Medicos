@@ -186,6 +186,27 @@ def revisar_horario(texto: str | None) -> str:
     return horario
 
 
+# Costo aproximado de consulta: se elige un rango (el costo real varía). Los
+# cortes son los mismos del filtro de precio del Directorio ("Hasta $600",
+# "Hasta $900", "Hasta $1,200", "Sin límite"), para que el filtro funcione
+# exacto con estos médicos.
+RANGOS_COSTO = {
+    "0-600": "Hasta $600",
+    "600-900": "$600 a $900",
+    "900-1200": "$900 a $1,200",
+    "1200+": "Más de $1,200",
+}
+
+
+def revisar_costo(texto: str | None) -> str:
+    costo = (texto or "").strip()
+    if not costo:
+        raise DatoInvalido("El costo aproximado de consulta es obligatorio.")
+    if costo not in RANGOS_COSTO:
+        raise DatoInvalido("Elige uno de los rangos de costo aproximado de consulta.")
+    return costo
+
+
 def exigir_texto(texto: str | None, nombre: str) -> str:
     limpio = re.sub(r"\s+", " ", texto or "").strip()
     if not limpio:

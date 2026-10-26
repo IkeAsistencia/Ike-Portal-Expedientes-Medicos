@@ -10,33 +10,80 @@ que si después llega en la carga de Excel no se duplica ni pierde su agenda:
 el mismo renglón solo cambia de origen a 'catalogo' ("Dentro de la red").
 """
 import random
+import re
 import string
+import unicodedata
 
 from app.db.local_store import ahora_local, get_local_connection
 from app.repositories import proveedores_repo
 
 ESTATUS_EN_REVISION = "En revisión"
-ESTATUS_CEDULA_NO_LOCALIZADA = "Cédula no localizada"
 ESTATUS_APROBADA = "Aprobada"
 ESTATUS_RECHAZADA = "Rechazada"
-ESTATUS_VALIDOS = (
-    ESTATUS_EN_REVISION, ESTATUS_CEDULA_NO_LOCALIZADA, ESTATUS_APROBADA, ESTATUS_RECHAZADA,
-)
+# "Cédula no localizada" se quitó (2026-10-26): no había forma de ponerlo
+# desde la pantalla. Las que lo tuvieran vuelven a "En revisión" (ver
+# _migrar_columnas_faltantes en local_store.py).
+ESTATUS_VALIDOS = (ESTATUS_EN_REVISION, ESTATUS_APROBADA, ESTATUS_RECHAZADA)
 
-# Estatus en los que la solicitud TODAVÍA se puede corregir (botón "Editar",
-# exclusivo de Administrador). Son los dos estados "sin resolver": o nadie la
-# ha revisado, o se revisó y la cédula profesional no se localizó en el
-# registro, que es justo el caso que hay que poder corregir.
+# Estatus en el que la solicitud TODAVÍA se puede corregir (botón "Editar",
+# exclusivo de Administrador).
 #
 # Aprobada y Rechazada quedan fuera: aprobada ya creó al proveedor en el
 # padrón con su clave (y puede tener citas), así que editarla aquí dejaría
 # los dos lados en desacuerdo.
-ESTATUS_EDITABLES = (ESTATUS_EN_REVISION, ESTATUS_CEDULA_NO_LOCALIZADA)
+ESTATUS_EDITABLES = (ESTATUS_EN_REVISION,)
+
+# Las que cuentan para no repetir un alta: una rechazada no impide volver a
+# intentarlo.
+ESTATUS_VIGENTES = (ESTATUS_EN_REVISION, ESTATUS_APROBADA)
 
 _CAMPOS_SOLICITUD = (
     "nombre", "especialidad", "cedula", "rfc", "estado", "municipio",
-    "calle_num_ext_int", "colonia", "codigo_postal", "consultorio", "horario", "telefono", "email",
+    "calle_num_ext_int", "colonia", "codigo_postal", "consultorio", "horario", "costo_consulta",
+    "telefono", "email",
 )
+
+
+def _comparable(texto) -> str:
+    """Para comparar lo que escribe una persona: sin acentos, sin mayúsculas
+    y sin signos ni espacios ("Av. Vallarta #1450" == "av vallarta 1450")."""
+    sin_acentos = unicodedata.normalize("NFD", str(texto or "")).encode("ascii", "ignore").decode()
+    return re.sub(r"[^a-z0-9]", "", sin_acentos.lower())
+
+
+def _misma_alta(fila: dict, datos: dict) -> bool:
+    return all(
+        _comparable(fila.get(c)) == _comparable(datos.get(c))
+        for c in ("especialidad", "codigo_postal", "calle_num_ext_int")
+    )
+
+
+def existe_alta_igual(datos: dict, excluir_folio: str | None = None) -> bool:
+    """
+    Regla de duplicados: un mismo RFC puede tener varias altas (una empresa
+    con varios servicios o varias sucursales), pero no dos con la MISMA
+    especialidad en el MISMO domicilio (código postal + calle).
+
+    Cuenta lo que ya está en revisión o aprobado y el padrón oficial; una
+    solicitud rechazada no impide volver a intentarlo.
+    """
+    rfc = (datos.get("rfc") or "").strip().upper()
+    if not rfc:
+        return False
+    marcadores = ", ".join("?" for _ in ESTATUS_VIGENTES)
+    with get_local_connection() as conn:
+        solicitudes = conn.execute(
+            f"SELECT folio, especialidad, codigo_postal, calle_num_ext_int FROM solicitudes_alta_medico "
+            f"WHERE UPPER(rfc) = ? AND estatus IN ({marcadores})",
+            (rfc, *ESTATUS_VIGENTES),
+        ).fetchall()
+        padron = conn.execute(
+            "SELECT especialidad, codigo_postal, calle_num_ext_int FROM proveedores WHERE UPPER(rfc) = ?",
+            (rfc,),
+        ).fetchall()
+    if any(_misma_alta(dict(f), datos) for f in solicitudes if f["folio"] != excluir_folio):
+        return True
+    return any(_misma_alta(dict(f), datos) for f in padron)
 
 
 class SolicitudYaResuelta(Exception):
@@ -80,10 +127,9 @@ def obtener_solicitud(folio: str) -> dict | None:
 
 def actualizar_solicitud(folio: str, datos: dict) -> dict | None:
     """
-    Corrige los datos de una solicitud sin resolver -- "En revisión" o
-    "Cédula no localizada", ver ESTATUS_EDITABLES (botón "Editar",
-    exclusivo de Administrador). Devuelve la solicitud ya actualizada, o
-    None si el folio no existe.
+    Corrige los datos de una solicitud sin resolver ("En revisión", ver
+    ESTATUS_EDITABLES; botón "Editar", exclusivo de Administrador). Devuelve
+    la solicitud ya actualizada, o None si el folio no existe.
 
     Si ya fue aprobada o rechazada lanza SolicitudYaResuelta: aprobada
     significa que el proveedor ya está en el padrón con su clave y puede

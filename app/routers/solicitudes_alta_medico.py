@@ -13,20 +13,20 @@ from app.services import validacion_rfc_cedula_service as validacion
 
 def _requerir_proveedor_o_administrador(usuario: dict = Depends(usuario_actual)) -> dict:
     """Mismo criterio que app/routers/directorio_proveedores.py: "Alta de
-    mÃ©dico" vive dentro de la pantalla "Proveedores" (Proveedor y
+    médico" vive dentro de la pantalla "Proveedores" (Proveedor y
     Administrador) -- Cabina no la usa."""
     if usuario.get("perfil") == PERFIL_CABINA:
-        raise HTTPException(403, "Esta funciÃ³n no aplica para el perfil Cabina.")
+        raise HTTPException(403, "Esta función no aplica para el perfil Cabina.")
     return usuario
 
 
 def _requerir_administrador(usuario: dict = Depends(usuario_actual)) -> dict:
     """
     Resolver una solicitud (aprobar/rechazar) y corregirla antes de
-    resolverla son actos de REVISIÃ“N: solo Administrador (decisiÃ³n del
+    resolverla son actos de REVISIÓN: solo Administrador (decisión del
     usuario, 2026-10-19). Cualquier perfil puede capturar su alta, pero
-    nadie se aprueba a sÃ­ mismo -- aprobar inserta un proveedor real en el
-    padrÃ³n, igual que la carga de Excel, que tambiÃ©n es exclusiva de
+    nadie se aprueba a sí mismo -- aprobar inserta un proveedor real en el
+    padrón, igual que la carga de Excel, que también es exclusiva de
     Administrador (ver app/routers/proveedores_catalogo.py).
     """
     try:
@@ -40,21 +40,21 @@ def _requerir_administrador(usuario: dict = Depends(usuario_actual)) -> dict:
 
 router = APIRouter(
     prefix="/solicitudes-alta-medico",
-    tags=["Directorio de Proveedores -- Alta de mÃ©dico"],
+    tags=["Directorio de Proveedores -- Alta de médico"],
     dependencies=[Depends(_requerir_proveedor_o_administrador)],
 )
 
 
 class SolicitudAltaInput(BaseModel):
     """
-    Alta real de un mÃ©dico en el portal. El domicilio va desglosado y es el
+    Alta real de un médico en el portal. El domicilio va desglosado y es el
     del lugar DONDE DA LA CONSULTA (mismo criterio que la carga de Excel,
     ver app/services/proveedores_excel_service.py).
     """
 
     nombre: str = Field(min_length=1, max_length=150)
     especialidad: str = Field(min_length=1, max_length=100)
-    # Todos los campos son obligatorios (lo Ãºnico opcional son los documentos);
+    # Todos los campos son obligatorios (lo único opcional son los documentos);
     # su formato se revisa en _validar_datos.
     cedula: str = Field(min_length=1, max_length=20)
     rfc: str = Field(min_length=1, max_length=20)
@@ -65,6 +65,7 @@ class SolicitudAltaInput(BaseModel):
     codigo_postal: str = Field(min_length=1, max_length=10)
     consultorio: str = Field(min_length=1, max_length=120)
     horario: str = Field(min_length=1, max_length=200)
+    costo_consulta: str = Field(min_length=1, max_length=20)
     telefono: str = Field(min_length=1, max_length=30)
     email: str = Field(min_length=1, max_length=120)
 
@@ -76,7 +77,7 @@ class EstatusInput(BaseModel):
 def _validar_datos(data: SolicitudAltaInput) -> dict:
     """Todos los campos con valor y bien formados (ver
     validacion_rfc_cedula_service). Se guardan ya normalizados: sin espacios
-    de mÃ¡s, el RFC en mayÃºsculas y el telÃ©fono solo con sus 10 dÃ­gitos."""
+    de más, el RFC en mayúsculas y el teléfono solo con sus 10 dígitos."""
     try:
         return {
             **data.model_dump(),
@@ -86,11 +87,12 @@ def _validar_datos(data: SolicitudAltaInput) -> dict:
             "rfc": validacion.revisar_rfc(data.rfc).rfc,
             "estado": validacion.exigir_texto(data.estado, "El estado"),
             "municipio": validacion.exigir_texto(data.municipio, "El municipio"),
-            "calle_num_ext_int": validacion.exigir_texto(data.calle_num_ext_int, "La calle y nÃºmero"),
+            "calle_num_ext_int": validacion.exigir_texto(data.calle_num_ext_int, "La calle y número"),
             "colonia": validacion.exigir_texto(data.colonia, "La colonia"),
             "codigo_postal": validacion.revisar_codigo_postal(data.codigo_postal),
             "consultorio": validacion.exigir_texto(data.consultorio, "El nombre del consultorio"),
             "horario": validacion.revisar_horario(data.horario),
+            "costo_consulta": validacion.revisar_costo(data.costo_consulta),
             "telefono": validacion.revisar_telefono(data.telefono),
             "email": validacion.revisar_correo(data.email),
         }
@@ -102,11 +104,23 @@ def _identificador(usuario: dict) -> str:
     return usuario.get("rfc") or usuario.get("usuario") or "desconocido"
 
 
+def _exigir_que_no_se_repita(datos: dict, excluir_folio: str | None = None) -> None:
+    """Un RFC puede tener varias altas, pero no la misma especialidad en el
+    mismo domicilio (ver existe_alta_igual). El mensaje no dice de quién es la
+    otra alta."""
+    if solicitudes_alta_medico_repo.existe_alta_igual(datos, excluir_folio):
+        raise HTTPException(
+            409,
+            "Ya existe un alta con este RFC y esta especialidad en ese mismo domicilio. "
+            "Un RFC puede tener varias altas, pero con otra especialidad o en otro domicilio.",
+        )
+
+
 @router.get("")
 def listar(usuario: dict = Depends(usuario_actual)):
-    """Cada solicitud trae quÃ© documentos se subieron (sin su contenido) y,
-    solo para el Administrador, la revisiÃ³n de su RFC (tipo de persona y si
-    el dÃ­gito verificador cuadra): cÃ³mo se valida no se le muestra a quien
+    """Cada solicitud trae qué documentos se subieron (sin su contenido) y,
+    solo para el Administrador, la revisión de su RFC (tipo de persona y si
+    el dígito verificador cuadra): cómo se valida no se le muestra a quien
     captura."""
     documentos = solicitudes_alta_documentos_repo.resumen_por_folio()
     es_admin = _es_administrador(usuario)
@@ -122,45 +136,58 @@ def listar(usuario: dict = Depends(usuario_actual)):
 @router.post("")
 def crear(data: SolicitudAltaInput, usuario: dict = Depends(usuario_actual)):
     datos = _validar_datos(data)
+    _exigir_que_no_se_repita(datos)
     return solicitudes_alta_medico_repo.crear_solicitud(datos, _identificador(usuario))
 
 
 @router.put("/{folio}", dependencies=[Depends(_requerir_administrador)])
 def editar(folio: str, data: SolicitudAltaInput):
     """
-    Corrige los datos de una solicitud ANTES de resolverla (botÃ³n "Editar").
-    Solo mientras siga "En revisiÃ³n": una vez aprobada ya existe el
-    proveedor en el padrÃ³n con su clave y sus citas, y una vez rechazada el
-    expediente quedÃ³ cerrado -- en ninguno de los dos casos se edita desde
-    aquÃ­.
+    Corrige los datos de una solicitud ANTES de resolverla (botón "Editar").
+    Solo mientras siga "En revisión": una vez aprobada ya existe el
+    proveedor en el padrón con su clave y sus citas, y una vez rechazada el
+    expediente quedó cerrado -- en ninguno de los dos casos se edita desde
+    aquí.
     """
     datos = _validar_datos(data)
+    # Primero si existe y si todavía se puede editar: una ya aprobada choca
+    # contra su propio renglón del padrón en la regla de duplicados, y el
+    # mensaje correcto es que ya no se edita.
+    actual = solicitudes_alta_medico_repo.obtener_solicitud(folio)
+    if actual is None:
+        raise HTTPException(404, "No se encontró esa solicitud.")
+    if actual["estatus"] not in solicitudes_alta_medico_repo.ESTATUS_EDITABLES:
+        raise HTTPException(
+            409, f"La solicitud {folio} ya está {actual['estatus'].lower()}; sus datos ya no se pueden editar."
+        )
+    _exigir_que_no_se_repita(datos, excluir_folio=folio)
     try:
         solicitud = solicitudes_alta_medico_repo.actualizar_solicitud(folio, datos)
     except solicitudes_alta_medico_repo.SolicitudYaResuelta as e:
         raise HTTPException(409, str(e))
     if solicitud is None:
-        raise HTTPException(404, "No se encontrÃ³ esa solicitud.")
+        raise HTTPException(404, "No se encontró esa solicitud.")
     return {"ok": True, "folio": folio}
 
 
 @router.post("/{folio}/estatus", dependencies=[Depends(_requerir_administrador)])
 def actualizar_estatus(folio: str, data: EstatusInput):
     """
-    Aprobar da de alta al mÃ©dico en el padrÃ³n con origen='portal' ("Fuera de
-    la red") y le asigna su clave -- por eso se regresa `clave_proveedor`:
-    es con la que ya se le pueden agendar citas.
+    Aprobar da de alta al médico en el padrón con origen='portal' ("Alta
+    rápida": sin el proceso formal de convenio con IKE) y le asigna su clave
+    -- por eso se regresa `clave_proveedor`: es con la que ya se le pueden
+    agendar citas.
     """
     if data.estatus not in solicitudes_alta_medico_repo.ESTATUS_VALIDOS:
-        raise HTTPException(400, "Estatus invÃ¡lido.")
+        raise HTTPException(400, "Estatus inválido.")
     solicitud = solicitudes_alta_medico_repo.cambiar_estatus(folio, data.estatus)
     if solicitud is None:
-        raise HTTPException(404, "No se encontrÃ³ esa solicitud.")
+        raise HTTPException(404, "No se encontró esa solicitud.")
     return {"ok": True, "clave_proveedor": solicitud.get("clave_proveedor")}
 
 
-# ---------- Documentos opcionales (constancia de situaciÃ³n fiscal y cÃ©dula) ----------
-# Los ve y los cambia solo el Administrador o quien capturÃ³ la solicitud: la
+# ---------- Documentos opcionales (constancia de situación fiscal y cédula) ----------
+# Los ve y los cambia solo el Administrador o quien capturó la solicitud: la
 # constancia fiscal trae CURP y domicilio. Se cambian solo mientras la
 # solicitud siga sin resolver; ya aprobada o rechazada quedan como evidencia.
 
@@ -178,10 +205,10 @@ def _solicitud_con_documentos(folio: str, tipo: str, usuario: dict) -> dict:
         raise HTTPException(404, "Ese tipo de documento no existe.")
     solicitud = solicitudes_alta_medico_repo.obtener_solicitud(folio)
     if solicitud is None:
-        raise HTTPException(404, "No se encontrÃ³ esa solicitud.")
+        raise HTTPException(404, "No se encontró esa solicitud.")
     if not _es_administrador(usuario) and solicitud["rfc_solicito"] != _identificador(usuario):
         raise HTTPException(
-            403, "Solo el Administrador o quien capturÃ³ la solicitud pueden ver o cambiar sus documentos."
+            403, "Solo el Administrador o quien capturó la solicitud pueden ver o cambiar sus documentos."
         )
     return solicitud
 
@@ -189,7 +216,7 @@ def _solicitud_con_documentos(folio: str, tipo: str, usuario: dict) -> dict:
 def _exigir_editable(solicitud: dict) -> None:
     if solicitud["estatus"] not in solicitudes_alta_medico_repo.ESTATUS_EDITABLES:
         raise HTTPException(
-            409, f"La solicitud ya estÃ¡ {solicitud['estatus'].lower()}; sus documentos ya no se pueden cambiar."
+            409, f"La solicitud ya está {solicitud['estatus'].lower()}; sus documentos ya no se pueden cambiar."
         )
 
 
@@ -208,7 +235,7 @@ async def subir_documento(folio: str, tipo: str, archivo: UploadFile = File(...)
         raise HTTPException(400, "Formato no permitido. Solo se aceptan PDF, JPG o PNG.")
     contenido = await archivo.read(comprobantes_repo.TAMANO_MAXIMO_BYTES + 1)
     if len(contenido) > comprobantes_repo.TAMANO_MAXIMO_BYTES:
-        raise HTTPException(400, "El archivo supera el mÃ¡ximo permitido de 5 MB.")
+        raise HTTPException(400, "El archivo supera el máximo permitido de 5 MB.")
     if not comprobantes_repo.contenido_coincide_con_tipo(contenido, archivo.content_type):
         raise HTTPException(400, "El contenido del archivo no corresponde al formato declarado (PDF, JPG o PNG).")
     documento = solicitudes_alta_documentos_repo.guardar(

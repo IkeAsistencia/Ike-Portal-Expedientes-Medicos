@@ -31,6 +31,20 @@ def actualizar_estatus(cl_expediente: int, estatus: EstatusExpediente, identific
         conn.commit()
 
 
+def expedientes_en_estatus(estatus: tuple[EstatusExpediente, ...]) -> set[int]:
+    """Los expedientes cuyo estatus actual es alguno de los indicados (el
+    estatus vive solo aquí, no en el sistema central)."""
+    if not estatus:
+        return set()
+    marcadores = ", ".join("?" for _ in estatus)
+    with get_local_connection() as conn:
+        filas = conn.execute(
+            f"SELECT cl_expediente FROM estatus_expediente WHERE estatus IN ({marcadores})",
+            tuple(e.value for e in estatus),
+        ).fetchall()
+    return {fila["cl_expediente"] for fila in filas}
+
+
 def obtener_detalle(cl_expediente: int) -> dict | None:
     """Usado por el corte: quién y cuándo fue el último cambio de estatus."""
     with get_local_connection() as conn:

@@ -216,7 +216,7 @@ def test_el_kpi_separa_dentro_y_fuera_de_la_red(client):
         "nombre": "Dr. Del portal", "especialidad": "CARDIOLOGIA", "cedula": "98765432",
         "rfc": "GODE561231GR8", "estado": "Jalisco", "municipio": "Guadalajara",
         "calle_num_ext_int": "Av. Vallarta 1450", "colonia": "Americana", "codigo_postal": "44100",
-        "consultorio": "Consultorio del portal", "horario": "Lun-Vie 09:00-14:00",
+        "consultorio": "Consultorio del portal", "horario": "Lun-Vie 09:00-14:00", "costo_consulta": "600-900",
         "telefono": "3312345678", "email": "portal@correo.mx",
     }
     folio = client.post("/solicitudes-alta-medico", json=solicitud, headers=admin).json()["folio"]

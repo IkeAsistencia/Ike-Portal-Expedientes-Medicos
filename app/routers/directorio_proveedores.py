@@ -40,10 +40,9 @@ class CitaInput(BaseModel):
     clave_proveedor: str = Field(min_length=1, max_length=20)
     fecha: str = Field(min_length=10, max_length=10, description="YYYY-MM-DD")
     hora: str = Field(min_length=5, max_length=5, description="HH:MM")
-    paciente: str | None = Field(default=None, max_length=150)
-    # Si la cita se coordina desde un expediente (botón "Coordinar cita" de
-    # Seguimiento): el paciente sale del expediente y solo hay una activa.
-    cl_expediente: int | None = Field(default=None, ge=1)
+    # Toda cita es para un expediente (ver app/services/coordinar_cita_service.py):
+    # el paciente sale de ahí y cada expediente tiene una sola cita activa.
+    cl_expediente: int = Field(ge=1)
 
 
 @router.get("")
@@ -52,8 +51,10 @@ def listar():
     El padrón completo, con los dos orígenes en la misma lista y cada uno
     marcado para que la pantalla los distinga (ver mapearProveedor en
     frontend/js/directorio/datos.js):
-      - origen='catalogo' -> llegó en la carga de Excel ("Dentro de la red").
-      - origen='portal'   -> se dio de alta aquí ("Fuera de la red").
+      - origen='catalogo' -> llegó en la carga de Excel ("Dentro de la red":
+        tiene convenio con IKE).
+      - origen='portal'   -> se dio de alta aquí ("Alta rápida": aprobado en
+        el portal, sin el proceso formal de convenio).
     Todos traen `clave` (PRV-000001), que es con lo que se agenda una cita:
     no cambia entre cargas, así que las citas nunca quedan huérfanas.
     El frontend busca/filtra sobre esta lista en el navegador.
@@ -152,14 +153,15 @@ def agendar_cita(data: CitaInput, usuario: dict = Depends(usuario_actual)):
         raise HTTPException(400, "La hora debe tener el formato HH:MM de 24 horas (por ejemplo 12:45).")
     if agenda_proveedores_service.hora_pasada(data.fecha, data.hora):
         raise HTTPException(400, "Esa hora de hoy ya pasó: elige una posterior o cambia la fecha.")
+    fuera_de_horario = agenda_proveedores_service.fuera_del_horario(proveedor.get("horario"), data.fecha, data.hora)
+    if fuera_de_horario:
+        raise HTTPException(400, fuera_de_horario)
 
-    paciente = data.paciente
-    if data.cl_expediente:
-        expediente = coordinar_cita_service.expediente_para_coordinar(data.cl_expediente, usuario)
-        paciente = expediente.nombre_paciente
-        vigente = citas_proveedor_repo.cita_activa_de_expediente(data.cl_expediente)
-        if vigente:
-            raise HTTPException(409, _mensaje_expediente_con_cita(vigente))
+    expediente = coordinar_cita_service.expediente_para_coordinar(data.cl_expediente, usuario)
+    paciente = expediente.nombre_paciente
+    vigente = citas_proveedor_repo.cita_activa_de_expediente(data.cl_expediente)
+    if vigente:
+        raise HTTPException(409, _mensaje_expediente_con_cita(vigente))
 
     rfc_usuario = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
     try:
@@ -170,16 +172,22 @@ def agendar_cita(data: CitaInput, usuario: dict = Depends(usuario_actual)):
         raise HTTPException(409, str(e))
     except citas_proveedor_repo.ExpedienteConCita as e:
         raise HTTPException(409, str(e))
-    respuesta = {
+    return {
         **cita,
         "proveedor_nombre": proveedor["nombre"],
         "proveedor_especialidad": proveedor["especialidad"],
+        # Lo que la pantalla pega en "Observaciones" para revisarlo (ver
+        # app/services/cita_texto_service.py).
+        "observaciones_sugeridas": cita_texto_service.observaciones_de_cita(proveedor, cita, paciente),
     }
-    if data.cl_expediente:
-        # Lo que la pantalla pega en "Observaciones" para que el Proveedor lo
-        # revise (ver app/services/cita_texto_service.py).
-        respuesta["observaciones_sugeridas"] = cita_texto_service.observaciones_de_cita(proveedor, cita, paciente)
-    return respuesta
+
+
+@router.get("/expedientes-para-cita")
+def expedientes_para_cita(usuario: dict = Depends(usuario_actual)):
+    """Los expedientes a los que se les puede agendar cita ahora (estatus
+    accionable y sin cita activa): la lista del paso "¿Para qué expediente?"
+    al agendar desde el directorio. Mismo formato que GET /expedientes."""
+    return coordinar_cita_service.expedientes_para_cita(usuario)
 
 
 def _mensaje_expediente_con_cita(cita: dict) -> str:
@@ -212,9 +220,13 @@ def cancelar_cita(folio: str, usuario: dict = Depends(usuario_actual)):
     cita = citas_proveedor_repo.obtener_por_folio(folio)
     if cita is None:
         raise HTTPException(404, "No se encontró esa cita agendada.")
-    # Una cita ligada a un expediente solo se cambia mientras el Proveedor
-    # todavía puede actuar sobre él; después queda en manos del coordinador.
-    if cita["cl_expediente"] and usuario.get("perfil") != PERFIL_ADMINISTRADOR:
+    # Una cita ligada a un expediente solo se cambia mientras todavía se puede
+    # actuar sobre él; después queda en manos del coordinador. Las citas viejas
+    # sin expediente (de antes de que fuera obligatorio) solo las cancela el
+    # Administrador: antes las podía cancelar cualquiera con el folio.
+    if usuario.get("perfil") != PERFIL_ADMINISTRADOR:
+        if not cita["cl_expediente"]:
+            raise HTTPException(403, "Esta cita no está ligada a un expediente: solo un Administrador puede cancelarla.")
         coordinar_cita_service.expediente_para_coordinar(cita["cl_expediente"], usuario)
     if not citas_proveedor_repo.cancelar(folio):
         raise HTTPException(404, "No se encontró esa cita agendada.")
@@ -232,11 +244,12 @@ def agenda(
     desde: str | None = Query(default=None, description="YYYY-MM-DD; por default hoy"),
 ):
     """Horarios sugeridos que siguen libres de ese proveedor (los ya apartados
-    no salen). Con `desde` se consulta otro día (ej. el que se eligió en la
-    fecha libre). Cualquier otra hora también se puede agendar."""
-    if proveedores_repo.obtener_por_clave(clave) is None:
+    no salen), dentro de su horario de atención si se puede leer. Con `desde`
+    se consulta otro día (ej. el que se eligió en la fecha libre)."""
+    proveedor = proveedores_repo.obtener_por_clave(clave)
+    if proveedor is None:
         raise HTTPException(404, "No se encontró ese proveedor en el padrón.")
     if desde is not None and not agenda_proveedores_service.fecha_valida(desde):
         raise HTTPException(400, "La fecha debe ser de hoy en adelante y dentro del tiempo permitido.")
     inicio = date.fromisoformat(desde) if desde else None
-    return agenda_proveedores_service.agenda_disponible(clave, dias, inicio)
+    return agenda_proveedores_service.agenda_disponible(clave, dias, inicio, proveedor.get("horario"))

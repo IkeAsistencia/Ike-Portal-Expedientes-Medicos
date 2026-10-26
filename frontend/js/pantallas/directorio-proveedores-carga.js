@@ -76,7 +76,7 @@ async function cargarResumen() {
     }
     $("cp-resumen").textContent =
       `Padrón actual: ${data.total} proveedor(es) -- ${data.dentro_de_la_red} dentro de la red y ` +
-      `${data.fuera_de_la_red} fuera de la red. Última carga el ${formatDateTime(ultima.fecha)} ` +
+      `${data.fuera_de_la_red} de alta rápida. Última carga el ${formatDateTime(ultima.fecha)} ` +
       `(${ultima.rfc}): ${ultima.nuevos} nuevo(s), ${ultima.actualizados} actualizado(s)` +
       (ultima.absorbidos ? `, ${ultima.absorbidos} que ya estaban dados de alta en el portal` : "") + ".";
   } catch (err) {

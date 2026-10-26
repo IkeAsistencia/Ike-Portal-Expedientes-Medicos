@@ -16,6 +16,7 @@ registrados, para llamar o buscar otro medio.
 from datetime import date
 
 from app.services.agenda_proveedores_service import DIAS_SEMANA
+from app.services.validacion_rfc_cedula_service import RANGOS_COSTO
 
 # Lo que cabe en Observaciones es 1500 caracteres menos el encabezado con el
 # nombre de quien escribe (ver app/repositories/seguimiento_repo.py); este
@@ -43,6 +44,9 @@ def _costo(valor) -> str:
     texto = _limpio(valor)
     if not texto:
         return ""
+    # Las altas del portal guardan un rango (ver RANGOS_COSTO); el Excel, un número.
+    if texto in RANGOS_COSTO:
+        return f"{RANGOS_COSTO[texto]} (aproximado)"
     return texto if texto.startswith("$") else (f"${texto}" if texto.replace(".", "", 1).isdigit() else texto)
 
 

@@ -12,7 +12,7 @@ import { esPerfilAdministrador, rfcActual } from "../core/sesion.js";
 import {
   URL_VALIDAR_RFC_SAT, URL_CONSULTAR_CEDULA_SEP, DOCUMENTOS_ALTA,
   revisarRfc, normalizarRfc, etiquetaTipoRfc, cedulaConFormatoValido, revisarFormularioAlta,
-  DIAS_SEMANA, serializarHorario,
+  DIAS_SEMANA, serializarHorario, COSTOS_APROXIMADOS, leerCosto,
 } from "./validacion-alta.js";
 import { coordinacionActual } from "../core/coordinar-cita.js";
 
@@ -20,7 +20,7 @@ import { coordinacionActual } from "../core/coordinar-cita.js";
    mismo criterio que ESTATUS_EDITABLES en
    app/repositories/solicitudes_alta_medico_repo.py (el backend lo exige
    igual: editar una ya resuelta responde 409). */
-const ESTATUS_EDITABLES = ["En revisión", "Cédula no localizada"];
+const ESTATUS_EDITABLES = ["En revisión"];
 import { ICONOS } from "../componentes/iconos.js";
 import {
   PRICE_OPTIONS,
@@ -76,9 +76,11 @@ export function calcularSugerencias(s) {
 }
 
 /* El KPI que lleva cada tarjeta de especialidad: cuántos proveedores del
-   padrón hay dentro y fuera de la red (formato que pidió el usuario,
-   2026-10-20). Los conteos son reales -- salen de amarrar cada proveedor a
-   una especialidad del catálogo, ver app/repositories/especialidades_repo.py.
+   padrón hay dentro de la red (Excel oficial, con convenio) y cuántos son
+   alta rápida (aprobados en el portal). El servidor los manda como
+   dentro_de_red / fuera_de_red. Los conteos son reales -- salen de amarrar
+   cada proveedor a una especialidad del catálogo, ver
+   app/repositories/especialidades_repo.py.
 
    Una especialidad en 0 no se esconde: se marca "Sin proveedores" y se deja
    clickeable, porque justo esa es la que hay que salir a contratar (ahí
@@ -87,7 +89,7 @@ function kpiEspecialidad(x) {
   const dentro = Number(x.dentro_de_red) || 0;
   const fuera = Number(x.fuera_de_red) || 0;
   if (dentro + fuera === 0) return "Sin proveedores";
-  return dentro + " dentro de la red · " + fuera + " fuera";
+  return dentro + " dentro de la red · " + fuera + " alta rápida";
 }
 
 function tarjetaEspecialidad(x, i) {
@@ -158,12 +160,32 @@ export function calcular(s) {
   const days = (s.agenda || []).map((dia, i) => ({
     indice: i,
     dow: dia.dia_semana, num: String(dia.dia_mes), fecha: dia.fecha,
-    slots: dia.horarios.length ? dia.horarios.length + " horarios" : "sin cupo",
-    // Un día sin horarios sugeridos libres se puede elegir igual: se captura la hora a mano.
-    disabled: false,
+    slots: dia.atiende === false ? "No atiende" : dia.horarios.length ? dia.horarios.length + " horarios" : "sin cupo",
+    // Un día sin horarios sugeridos libres se puede elegir igual (se captura la
+    // hora a mano), salvo que el médico no atienda ese día.
+    disabled: dia.atiende === false,
     elegido: !fechaLibre && i === bookingDayIndex,
   }));
   const diaElegido = fechaLibre ? s.agendaLibre : (s.agenda || [])[bookingDayIndex];
+  const diaSinAtencion = !!diaElegido && diaElegido.atiende === false;
+
+  // Para qué expediente es la cita (toda cita es para uno).
+  const ctxCita = coordinacionActual();
+  const textoComparable = (t) => normalizarTexto(String(t || "")).toUpperCase().trim();
+  const mismaEspecialidad = (exp) => !!d && !!textoComparable(exp.especialidad)
+    && textoComparable(exp.especialidad) === textoComparable(d.specialty);
+  const busquedaExp = textoComparable(s.expedienteBusqueda);
+  const avisosCita = [];
+  if (ctxCita && d) {
+    if (textoComparable(ctxCita.especialidad) && !mismaEspecialidad(ctxCita)) {
+      avisosCita.push(`El expediente pide ${ctxCita.especialidad} y este médico es ${d.specialty}.`);
+    }
+    const zonaExp = [ctxCita.municipio, ctxCita.entidad].filter(Boolean);
+    const zonaMed = [d.municipio, d.estado].filter(Boolean);
+    if (zonaExp.length && zonaMed.length && zonaExp.map(textoComparable).join("|") !== zonaMed.map(textoComparable).join("|")) {
+      avisosCita.push(`El expediente es de ${zonaExp.join(", ")} y el consultorio está en ${zonaMed.join(", ")}.`);
+    }
+  }
   const horaEfectiva = s.bookingHoraLibre || s.bookingSlot || "";
   const daySlots = (diaElegido ? diaElegido.horarios : []).map(sl => ({
     label: sl, elegido: !s.bookingHoraLibre && sl === s.bookingSlot,
@@ -208,6 +230,7 @@ export function calcular(s) {
         expediente: c.expediente, paciente: c.paciente || "NA", especialidad: c.especialidad || "NA",
         entidad: c.entidad || "NA", municipio: c.municipio || "NA",
         nota: s.coordNota || "", fuera: !!s.coordFuera,
+        desdeDirectorio: c.origen === "directorio",
       };
     })(),
 
@@ -270,6 +293,27 @@ export function calcular(s) {
     detailPrice: d ? d.price : "", detailPhone: d ? d.phone : "", detailSource: d ? d.source : "", detailConvenio: d ? d.convenio : "",
     detailClave: d ? d.clave : "", detailOrigen: d ? d.origen : "",
     bookingIdle: s.bookingStep === "idle", bookingPick: s.bookingStep === "pick", bookingDone: s.bookingStep === "done",
+    bookingExpediente: s.bookingStep === "expediente",
+    // Paso "¿Para qué expediente?": los que coinciden con la especialidad del
+    // médico van primero.
+    expedientesCita: s.expedientesCita === null ? null : s.expedientesCita
+      .filter(x => !busquedaExp || String(x.expediente).includes(busquedaExp) || textoComparable(x.nombre_paciente).includes(busquedaExp))
+      .map(x => ({
+        cl: x.expediente, paciente: x.nombre_paciente || "Sin nombre", especialidad: x.especialidad || "NA",
+        zona: [x.municipio, x.entidad].filter(Boolean).join(", ") || "Sin zona",
+        estatus: x.estatus, cuenta: x.cuenta || "", coincide: mismaEspecialidad(x),
+      }))
+      .sort((a, b) => (b.coincide - a.coincide) || (b.cl - a.cl)),
+    expedientesTotal: (s.expedientesCita || []).length,
+    expedienteBusqueda: s.expedienteBusqueda || "",
+    citaExpediente: ctxCita ? {
+      cl: ctxCita.expediente, paciente: ctxCita.paciente || "NA",
+      especialidad: ctxCita.especialidad || "NA",
+      zona: [ctxCita.municipio, ctxCita.entidad].filter(Boolean).join(", ") || "NA",
+      puedeCambiar: ctxCita.origen === "directorio",
+    } : null,
+    citaAvisos: avisosCita,
+    diaSinAtencion,
     bookingDays: days, bookingSlots: daySlots,
     bookingNote: s.bookingGuardando
       ? "Agendando…"
@@ -286,7 +330,7 @@ export function calcular(s) {
     // "Zonas cubiertas" salían de una cifra generada, y había un KPI de
     // "Importados de Google" que nunca importó nada).
     kpis: [
-      { label: "Proveedores en el padrón", value: String(totalPadron), note: dentroDeRed + " dentro de la red · " + fueraDeRed + " fuera", icono: "personas", clase: "kpi-total" },
+      { label: "Proveedores en el padrón", value: String(totalPadron), note: dentroDeRed + " dentro de la red · " + fueraDeRed + " alta rápida", icono: "personas", clase: "kpi-total" },
       { label: "Municipios con cobertura", value: String(municipiosCubiertos), note: coverageRaw.length + (coverageRaw.length === 1 ? " estado" : " estados"), icono: "ubicacion", clase: "kpi-cita" },
       { label: "Solicitudes en revisión", value: String(pending), note: s.requests.length + " solicitudes totales", icono: "expediente", clase: "kpi-proceso" },
       { label: "Especialidades con proveedor", value: String(especialidadesConProveedor) + " de " + (catalogoEsp.total || 0), note: "Del catálogo de especialidades", icono: "expediente", clase: "kpi-seguimiento" }
@@ -309,11 +353,11 @@ export function calcular(s) {
       indice: i,
       folio: r.folio, name: r.name, specialty: r.specialty, zone: r.zone,
       consultorio: r.consultorio, horario: r.horario,
+      costo: r.costo ? leerCosto(r.costo).texto : "",
       // Cédula y RFC tal como se capturaron. Antes se les ponía una ✓ como si
       // estuvieran verificados; solo se revisó el formato, así que la
       // confirmación la hace quien revisa con los botones de la SEP y el SAT.
       cedula: r.cedula || "—",
-      cedulaNoLocalizada: r.status === "Cédula no localizada",
       rfc: r.rfc || "Sin RFC",
       rfcTipo: etiquetaTipoRfc(r.rfcRevision.tipo),
       // Avisos y botones de verificación: solo para quien revisa (Administrador).
@@ -336,13 +380,11 @@ export function calcular(s) {
       // exclusivo de Administrador; el backend lo exige igual, esto solo
       // evita mostrar botones que iban a responder 403.
       puedeResolver: esAdministrador,
-      // Editar solo mientras nadie la haya resuelto -- es decir, mientras
-      // siga en revisión o su cédula profesional no se haya localizado en
-      // el registro, que es el caso que de verdad hay que poder corregir.
-      // Ya aprobada, el proveedor existe en el padrón con su clave y puede
+      // Editar solo mientras nadie la haya resuelto (en revisión). Ya
+      // aprobada, el proveedor existe en el padrón con su clave y puede
       // tener citas (ver ESTATUS_EDITABLES en el repositorio).
       puedeEditar: esAdministrador && ESTATUS_EDITABLES.includes(r.status),
-      statusClass: r.status === "Aprobada" || r.status === "Validada" ? "activo" : r.status === "Rechazada" || r.status === "Cédula no localizada" ? "inactivo" : "pendiente",
+      statusClass: r.status === "Aprobada" ? "activo" : r.status === "Rechazada" ? "inactivo" : "pendiente",
     })),
 
     // Alta de médico (la misma pantalla sirve para capturar un alta nueva y
@@ -429,8 +471,8 @@ function enlaceVerificar(url, valor, que, texto) {
     title="Copia el ${e(que)} y abre el sitio oficial en otra pestaña">${e(texto)} ↗</a>`;
 }
 /* Color del distintivo según de dónde salió el proveedor: "Dentro de la red"
-   (llegó en la carga) en verde, "Fuera de la red" (alta del portal) en
-   ámbar, para que se note de un vistazo cuál ya está contratado. */
+   (Excel oficial, con convenio) en verde, "Alta rápida" (aprobado en el
+   portal) en ámbar, para que se note de un vistazo cuál tiene convenio. */
 const clasePorOrigen = (origen) => (origen === "portal" ? "pendiente" : "seguimiento");
 
 function encabezado({ volver, accionVolver, titulo, texto, extra = "", idTexto = "" }) {
@@ -474,7 +516,7 @@ export function avisoCoordinacion(v) {
       </div>
       <div class="dp-acciones">
         ${c.fuera ? `<button class="btn btn-secondary" data-accion="ir-fuera-de-red">Buscar fuera de la red</button>` : ""}
-        <button class="btn btn-secondary" data-accion="cancelar-coordinacion">Cancelar y volver al expediente</button>
+        <button class="btn btn-secondary" data-accion="cancelar-coordinacion">${c.desdeDirectorio ? "Quitar expediente" : "Cancelar y volver al expediente"}</button>
       </div>
     </div>`;
 }
@@ -823,7 +865,7 @@ export function pantallaSolicitudes(v) {
       texto: v.mostrarVerificacion
         ? "Antes de aprobar, confirma la cédula en la SEP y el RFC en el SAT con sus botones "
           + "(el dato se copia y el sitio oficial se abre en otra pestaña), y revisa los documentos que se hayan subido. "
-          + "«Editar» solo aparece mientras está sin resolver (en revisión o con la cédula no localizada)."
+          + "«Editar» solo aparece mientras la solicitud sigue en revisión."
         : "Estatus de las solicitudes de alta. Un Administrador las revisa y las aprueba o rechaza.",
       extra: `<span class="dp-nota">${e(v.adminSummary)}</span>`,
     })}
@@ -843,13 +885,13 @@ export function pantallaSolicitudes(v) {
                   <div class="dp-fuerte">${e(r.name)}</div>
                   ${r.consultorio ? `<div class="dp-nota">${e(r.consultorio)}</div>` : ""}
                   ${r.horario ? `<div class="dp-nota">${e(r.horario)}</div>` : ""}
+                  ${r.costo ? `<div class="dp-nota">${e(r.costo)}</div>` : ""}
                 </td>
                 <td data-label="Especialidad">${e(r.specialty)}</td>
                 <td data-label="Zona">${e(r.zone)}</td>
                 <td data-label="Cédula prof.">
                   <div class="dp-dato-verificar">
                     <span class="dp-tabular">${e(r.cedula)}</span>
-                    ${r.cedulaNoLocalizada ? `<span class="dp-advertencia">No localizada</span>` : ""}
                     ${r.mostrarVerificacion ? enlaceVerificar(URL_CONSULTAR_CEDULA_SEP, r.cedula === "—" ? "" : r.cedula, "cédula", "Verificar en la SEP") : ""}
                   </div>
                 </td>
@@ -1200,6 +1242,13 @@ export function pantallaAlta(v) {
             ${campo("dp-tel", "phone", "Teléfono", "10 dígitos", 'maxlength="10" inputmode="tel" pattern="[0-9]*"')}
             ${campo("dp-mail", "email", "Correo electrónico", "consultorio@correo.mx", 'maxlength="120" inputmode="email" autocapitalize="none" spellcheck="false"')}
           </div>
+          <div class="field dp-campo">
+            <label for="dp-costo">Costo aproximado de consulta</label>
+            <select id="dp-costo" data-campo="costoConsulta">
+              <option value="">Selecciona un rango</option>
+              ${COSTOS_APROXIMADOS.map(c => `<option value="${e(c.valor)}"${c.valor === f.costoConsulta ? " selected" : ""}>${e(c.etiqueta)}</option>`).join("")}
+            </select>
+          </div>
           <div class="field dp-campo dp-horario" id="dp-alta-horario" data-campo="horario">${altaHorario(v)}</div>
           <div class="dp-acciones dp-enviar">
             <button class="btn btn-primary" data-accion="enviar-alta">${v.editando ? "Guardar cambios" : "Enviar solicitud de alta"}</button>
@@ -1217,14 +1266,64 @@ export function pantallaAlta(v) {
 }
 
 /* ---------- Ficha del médico y agenda (modal) ---------- */
+
+/* Lista del paso "¿Para qué expediente?" (se repinta sola al buscar). */
+export function listaExpedientesCita(v) {
+  if (v.expedientesCita === null) return `<div class="spinner-row">Consultando expedientes…</div>`;
+  if (!v.expedientesTotal) {
+    return `<p class="dp-nota">No hay expedientes esperando cita: solo aparecen los que están «En Espera de Respuesta» o «Seguimiento de Cita» y todavía no tienen una.</p>`;
+  }
+  if (!v.expedientesCita.length) return `<p class="dp-nota">Ningún expediente coincide con «${e(v.expedienteBusqueda)}».</p>`;
+  return v.expedientesCita.map(x => `
+    <button type="button" class="dp-exp-opcion" data-accion="elegir-expediente" data-cl="${e(x.cl)}">
+      <span class="dp-exp-titulo">
+        <span class="dp-tabular">Exp. ${e(x.cl)}</span>
+        ${x.coincide ? `<span class="badge seguimiento">Misma especialidad</span>` : ""}
+      </span>
+      <span class="dp-fuerte">${e(x.paciente)}</span>
+      <span class="dp-nota">${e(x.especialidad)} · ${e(x.zona)} · ${e(x.estatus)}${x.cuenta ? " · " + e(x.cuenta) : ""}</span>
+    </button>`).join("");
+}
+
+/* Para qué expediente es la cita, y si no cuadra con el médico elegido. */
+function bloqueExpedienteDeLaCita(v) {
+  const x = v.citaExpediente;
+  if (!x) return "";
+  return `
+    <div class="dp-cita-expediente">
+      <div>
+        <span class="dp-subtitulo-chico">Cita para el expediente ${e(x.cl)}</span>
+        <div class="dp-fuerte">${e(x.paciente)}</div>
+        <div class="dp-nota">${e(x.especialidad)} · ${e(x.zona)}</div>
+      </div>
+      ${x.puedeCambiar ? `<button class="btn btn-secondary" data-accion="cambiar-expediente">Cambiar expediente</button>` : ""}
+    </div>
+    ${v.citaAvisos.map(a => `<p class="dp-aviso-coincidencia">${e(a)}</p>`).join("")}`;
+}
+
 export function fichaCuerpo(v) {
   const cabecera = `
     <span class="badge ${clasePorOrigen(v.detailOrigen)}">${e(v.detailSource)}</span>
-    <p class="dp-ficha-sub">${e(v.detailSpecialty)} · Cédula ${e(v.detailCedula)}</p>`;
-  if (v.bookingPick) {
+    <p class="dp-ficha-sub">${e(v.detailSpecialty)}${v.detailCedula ? " · Cédula " + e(v.detailCedula) : ""}</p>`;
+  if (v.bookingExpediente) {
     return `
       ${cabecera}
       <div class="dp-ficha-seccion">
+        <h3 class="dp-subtitulo">¿Para qué expediente es la cita?</h3>
+        <p class="dp-nota">Al confirmar, la cita queda ligada al expediente y sus datos se copian a Observaciones de su Seguimiento.</p>
+        <div class="field">
+          <label for="dp-exp-buscar">Buscar por número de expediente o paciente</label>
+          <input type="search" id="dp-exp-buscar" value="${e(v.expedienteBusqueda)}" autocomplete="off" placeholder="Ej. 4518823 o Juan Pérez">
+        </div>
+        <div class="dp-exp-lista" id="dp-exp-lista">${listaExpedientesCita(v)}</div>
+      </div>`;
+  }
+  if (v.bookingPick) {
+    return `
+      ${cabecera}
+      ${bloqueExpedienteDeLaCita(v)}
+      <div class="dp-ficha-seccion">
+        <p class="dp-nota">Horario de atención: ${e(v.detailSchedule)}</p>
         <h3 class="dp-subtitulo">Elige día</h3>
         <div class="dp-dias">
           ${v.bookingDays.map(day => `
@@ -1239,10 +1338,12 @@ export function fichaCuerpo(v) {
           ${v.bookingSlots.length
             ? v.bookingSlots.map(sl => `
             <button class="dp-horario${sl.elegido ? " dp-sel" : ""}" data-accion="elegir-horario" data-valor="${e(sl.label)}">${e(sl.label)}</button>`).join("")
-            : `<span class="dp-nota">No quedan horarios sugeridos libres este día: captura la hora abajo.</span>`}
+            : v.diaSinAtencion
+              ? `<span class="dp-nota">El médico no atiende ese día: elige otro.</span>`
+              : `<span class="dp-nota">No quedan horarios sugeridos libres este día: captura la hora abajo.</span>`}
         </div>
         <h3 class="dp-subtitulo dp-subtitulo-espacio">¿Otro día u otra hora?</h3>
-        <p class="dp-nota">Si el médico te confirma por teléfono una fecha u hora distinta (por ejemplo, las 12:45), captúrala aquí.</p>
+        <p class="dp-nota">Si el médico te confirma por teléfono una fecha u hora distinta (por ejemplo, las 12:45), captúrala aquí. Debe quedar dentro de su horario de atención.</p>
         <div class="dp-cita-libre">
           <div class="field">
             <label for="dp-fecha-libre">Fecha</label>
@@ -1281,6 +1382,11 @@ export function fichaCuerpo(v) {
 }
 
 export function fichaPie(v) {
+  if (v.bookingExpediente) {
+    return `
+      <button class="btn btn-secondary" data-accion="volver-ficha">Volver</button>
+      <span class="dp-nota">Elige el expediente para continuar.</span>`;
+  }
   if (v.bookingPick) {
     return `
       <button class="btn btn-primary" data-accion="confirmar-cita"${v.bookingGuardando ? " disabled" : ""}>Confirmar cita</button>

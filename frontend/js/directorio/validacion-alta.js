@@ -82,6 +82,28 @@ export const RESTRICCIONES_ALTA = {
 
 const CORREO = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$/;
 
+/* ---------- Costo aproximado de consulta ----------
+   El alta elige un RANGO (el costo real varía). Los cortes son los del filtro
+   de precio del Directorio, para que "Hasta $900" funcione exacto. Mismos
+   valores que RANGOS_COSTO en el servidor. */
+export const COSTOS_APROXIMADOS = [
+  { valor: "0-600", etiqueta: "Hasta $600", maximo: 600 },
+  { valor: "600-900", etiqueta: "$600 a $900", maximo: 900 },
+  { valor: "900-1200", etiqueta: "$900 a $1,200", maximo: 1200 },
+  { valor: "1200+", etiqueta: "Más de $1,200", maximo: 1201 },
+];
+
+/* Lo que guarda el padrón en costo_consulta → { maximo, texto }. Un rango del
+   alta, un número del Excel o nada (maximo null: costo desconocido). */
+export function leerCosto(valor) {
+  const texto = String(valor ?? "").trim();
+  const rango = COSTOS_APROXIMADOS.find(c => c.valor === texto);
+  if (rango) return { maximo: rango.maximo, texto: rango.etiqueta + " (aprox.)" };
+  const numero = parseFloat(texto.replace(/[$,\s]/g, ""));
+  if (Number.isFinite(numero)) return { maximo: numero, texto: "$" + texto.replace(/^\$/, "") + " consulta" };
+  return { maximo: null, texto: "Costo no especificado" };
+}
+
 /* ---------- Horario de atención ----------
    El selector maneja bloques { dias: [0..6], desde: "HH:MM", hasta: "HH:MM" }
    (0 = Lun). Se guarda como texto, igual que el Excel del padrón:
@@ -150,6 +172,7 @@ export function revisarFormularioAlta(f) {
   if (vacio(f.consultorio)) falta("consultorio", "Nombre del consultorio");
   const fallaHorario = revisarHorario(f.horarioBloques);
   if (fallaHorario) falta("horario", "Horario de atención", "Horario de atención: " + fallaHorario);
+  if (!COSTOS_APROXIMADOS.some(c => c.valor === f.costoConsulta)) falta("costoConsulta", "Costo aproximado de consulta");
   if (!cedulaConFormatoValido(f.cedula)) falta("cedula", "Cédula profesional", "Cédula profesional: debe tener 7 u 8 dígitos.");
   const rfc = revisarRfc(f.rfc);
   if (rfc.estado !== "valido") falta("rfc", "RFC", "RFC: " + rfc.mensaje);

@@ -2,8 +2,9 @@
 
    YA ESTÁ CONECTADO AL BACKEND:
      - Búsqueda y resultados: leen el padrón real (GET /directorio-proveedores),
-       con los dos orígenes juntos -- "Dentro de la red" (llegó en la carga de
-       Excel) y "Fuera de la red" (alta hecha en el portal).
+       con los dos orígenes juntos -- "Dentro de la red" (llegó en el Excel
+       oficial: tiene convenio con IKE) y "Alta rápida" (aprobada en el portal,
+       sin el proceso formal de convenio).
      - Alta de médico y sus solicitudes: se guardan de verdad; al aprobarse,
        el médico entra al padrón con su propia clave (PRV-000001).
      - Citas: se agendan contra esa clave y quedan registradas; los horarios
@@ -15,12 +16,11 @@
    portal recién desplegado (padrón vacío) las pantallas se ven vacías a
    propósito: es la verdad del sistema, no una falla.
 
-   Lo ÚNICO que falta conectar es la validación de la cédula profesional
-   contra el RNP de la SEP: hoy solo se valida el formato del número, y así
-   se le dice al usuario (ver altaVerificacion en vistas.js). */
+   De la cédula profesional y el RFC solo se valida el formato; quien revisa
+   las solicitudes los confirma en la SEP y el SAT (ver validacion-alta.js). */
 import { api, apiArchivo } from "../core/api.js";
 import { normalizarEntidad } from "../core/formato.js";
-import { bloqueHorarioVacio, parsearHorario, serializarHorario } from "./validacion-alta.js";
+import { bloqueHorarioVacio, leerCosto, parsearHorario, serializarHorario } from "./validacion-alta.js";
 
 /* Catálogo de especialidades (GET /directorio-proveedores/especialidades).
    Sale de la tabla especialidades_catalogo de SQLite, sembrada con el
@@ -83,6 +83,8 @@ export function formularioVacio() {
     consultorio: "",
     // Horario de atención: bloques { dias, desde, hasta } (ver validacion-alta.js).
     horarioBloques: [bloqueHorarioVacio()],
+    // Rango de COSTOS_APROXIMADOS (ver validacion-alta.js).
+    costoConsulta: "",
     phone: "", email: "",
   };
 }
@@ -131,11 +133,12 @@ export function municipiosAltaCache(codEnt) {
    -- null mientras no se ha pedido todavía, [] si ya se pidió y vino vacío. */
 let catalogoReal = null;
 
-/* Las dos etiquetas del semáforo de origen: un proveedor que llegó en la
-   carga ya está contratado ("Dentro de la red"); uno dado de alta en el
-   portal todavía no ("Fuera de la red"). */
+/* Las dos etiquetas de origen del padrón: un proveedor que llegó en el Excel
+   oficial tiene convenio con IKE ("Dentro de la red"); uno aprobado en el
+   portal es un alta rápida, sin ese proceso formal ("Alta rápida"). "Fuera de
+   la red" queda SOLO para los candidatos del DENUE, que no están en el padrón. */
 export const ETIQUETA_DENTRO_DE_LA_RED = "Dentro de la red";
-export const ETIQUETA_FUERA_DE_LA_RED = "Fuera de la red";
+export const ETIQUETA_ALTA_RAPIDA = "Alta rápida";
 
 /* Domicilio DONDE DA LA CONSULTA, en el orden que se pidió:
    calle con números, colonia y código postal. */
@@ -145,7 +148,7 @@ function domicilioConsulta(row) {
 }
 
 function mapearProveedor(row) {
-  const costo = parseFloat(row.costo_consulta);
+  const costo = leerCosto(row.costo_consulta);
   const esPortal = row.origen === "portal";
   return {
     // La clave la genera el portal (PRV-000001) y es la misma para los dos
@@ -175,8 +178,10 @@ function mapearProveedor(row) {
     // Solo lo que el padrón trae de verdad. Ya no se inventan calificación,
     // distancia ni "disponible hoy": no hay reseñas, ni geolocalización del
     // usuario, ni agenda consultada en este punto.
-    priceNum: Number.isFinite(costo) ? costo : 0,
-    price: row.costo_consulta ? "$" + row.costo_consulta + " consulta" : "Costo no especificado",
+    // null = costo desconocido: no entra a los filtros "Hasta $..." y va al
+    // final al ordenar por precio (antes contaba como $0 y salía el más barato).
+    priceNum: costo.maximo,
+    price: costo.texto,
     tele: !!row.teleconsulta,
     convenio: row.convenio || "Sin convenio",
     phone: row.telefono || "",
@@ -184,7 +189,7 @@ function mapearProveedor(row) {
     codigoPostal: row.codigo_postal || "",
     latitud: row.latitud ?? null,
     longitud: row.longitud ?? null,
-    source: esPortal ? ETIQUETA_FUERA_DE_LA_RED : ETIQUETA_DENTRO_DE_LA_RED,
+    source: esPortal ? ETIQUETA_ALTA_RAPIDA : ETIQUETA_DENTRO_DE_LA_RED,
     origen: esPortal ? "portal" : "catalogo",
   };
 }
@@ -258,7 +263,7 @@ export async function cargarCatalogoReal() {
 /* ---------- Alta de médico (ver pantallas/directorio-proveedores.js) ----------
    La solicitud y su estatus quedan SOLO en este portal (nunca se mandan al
    sistema central). Al aprobarse, el médico entra al padrón con su propia
-   clave y queda "Fuera de la red" hasta que llegue en una carga de Excel:
+   clave y queda como "Alta rápida" hasta que llegue en una carga de Excel:
    ahí el MISMO renglón pasa a "Dentro de la red" conservando su clave, así
    que sus citas no se pierden.
 
@@ -272,7 +277,7 @@ export async function cargarSolicitudesReales() {
       folio: f.folio, name: f.nombre, specialty: f.especialidad,
       zone: [f.municipio, f.estado].filter(Boolean).join(", "),
       cedula: f.cedula || "", rfc: f.rfc || "", status: f.estatus,
-      consultorio: f.consultorio || "", horario: f.horario || "",
+      consultorio: f.consultorio || "", horario: f.horario || "", costo: f.costo_consulta || "",
       claveProveedor: f.clave_proveedor || "",
       // Cómo se ve el RFC (tipo de persona, dígito verificador) y qué
       // documentos opcionales se subieron (solo nombre y fecha).
@@ -291,6 +296,7 @@ export async function cargarSolicitudesReales() {
         consultorio: f.consultorio || "",
         // Una solicitud vieja (sin horario o con otro formato) vuelve a capturarlo.
         horarioBloques: parsearHorario(f.horario).length ? parsearHorario(f.horario) : [bloqueHorarioVacio()],
+        costoConsulta: f.costo_consulta || "",
         // Solo dígitos: las solicitudes viejas pudieron guardar el teléfono con espacios.
         phone: (f.telefono || "").replace(/\D/g, ""), email: f.email || "",
       },
@@ -314,6 +320,7 @@ export function editarSolicitudAlta(folio, form) {
       codigo_postal: form.codigoPostal || null,
       consultorio: form.consultorio || null,
       horario: serializarHorario(form.horarioBloques) || null,
+      costo_consulta: form.costoConsulta || null,
       telefono: form.phone || null, email: form.email || null,
     },
   });
@@ -358,6 +365,7 @@ export function enviarSolicitudAlta(form) {
       codigo_postal: form.codigoPostal || null,
       consultorio: form.consultorio || null,
       horario: serializarHorario(form.horarioBloques) || null,
+      costo_consulta: form.costoConsulta || null,
       telefono: form.phone || null, email: form.email || null,
     },
   });
@@ -456,14 +464,18 @@ export function raw(s) {
    tiene con qué: no hay reseñas ni geolocalización. */
 export function visible(s) {
   const f = s.filters;
+  const sinLimite = f.maxPrice >= 9999;
   const list = raw(s).list.filter(d =>
-    d.priceNum <= f.maxPrice &&
+    // Con "Sin límite" entran todos; con un tope, solo los que tienen costo
+    // conocido y dentro de él (un costo desconocido no se puede prometer).
+    (sinLimite || (d.priceNum !== null && d.priceNum <= f.maxPrice)) &&
     (!f.tele || d.tele) &&
     (!f.seguro || d.convenio !== "Sin convenio")
   );
   const sorters = {
     nombre: (a, b) => a.name.localeCompare(b.name),
-    precio: (a, b) => a.priceNum - b.priceNum,
+    // Los de costo desconocido van al final.
+    precio: (a, b) => (a.priceNum ?? Infinity) - (b.priceNum ?? Infinity) || a.name.localeCompare(b.name),
   };
   return list.slice().sort(sorters[f.orden] || sorters.nombre);
 }
@@ -496,16 +508,20 @@ export async function cargarAgenda(claveProveedor, desde) {
   }
 }
 
-export function agendarCita({ claveProveedor, fecha, hora, paciente, clExpediente }) {
+/* Toda cita es para un expediente: el servidor toma el paciente de ahí, liga
+   la cita y regresa el texto para Observaciones. */
+export function agendarCita({ claveProveedor, fecha, hora, clExpediente }) {
   return api("/directorio-proveedores/citas", {
     method: "POST",
-    body: {
-      clave_proveedor: claveProveedor, fecha, hora, paciente: paciente || null,
-      // Si se coordina desde un expediente, el servidor toma el paciente de
-      // ahí, liga la cita al expediente y regresa el texto para Observaciones.
-      cl_expediente: clExpediente || undefined,
-    },
+    body: { clave_proveedor: claveProveedor, fecha, hora, cl_expediente: clExpediente },
   });
+}
+
+/* Los expedientes a los que se les puede agendar cita ahora (en espera y sin
+   cita): la lista del paso "¿Para qué expediente?". Mismo formato que la
+   lista de Expedientes, así se puede abrir Seguimiento con el mismo registro. */
+export function cargarExpedientesParaCita() {
+  return api("/directorio-proveedores/expedientes-para-cita");
 }
 
 export async function cargarCitas(claveProveedor) {

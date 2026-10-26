@@ -6,7 +6,8 @@
    con el backend (ver js/directorio/datos.js):
      - Búsqueda/resultados: leen el padrón real, con los dos orígenes
        juntos -- "Dentro de la red" (llegó en la carga de Excel que sube
-       Administrador) y "Fuera de la red" (alta hecha en este portal).
+       Administrador) y "Alta rápida" (alta aprobada en este portal, sin el
+       proceso formal de convenio con IKE).
      - Alta de médico / Solicitudes: la solicitud, su estatus y su
        aprobación quedan guardados en este portal (nunca en el sistema
        central); al aprobarse, el médico entra al padrón con su propia
@@ -31,7 +32,7 @@ import {
   editarSolicitudAlta,
   subirDocumentoSolicitud, quitarDocumentoSolicitud, descargarDocumentoSolicitud,
   clavesDeUbicacion,
-  cargarAgenda, agendarCita,
+  cargarAgenda, agendarCita, cargarExpedientesParaCita,
   cargarEntidadesAltaReal, cargarMunicipiosAltaReal,
   buscarFueraDeRed, resolverBusquedaDeExpediente,
   cargarEspecialidadesKpi, olvidarEspecialidadesKpi, todasLasEspecialidades,
@@ -41,7 +42,7 @@ import {
   revisarFormularioAlta, RESTRICCIONES_ALTA, DOCUMENTOS_ALTA, bloqueHorarioVacio, DOCUMENTO_TIPOS_PERMITIDOS, DOCUMENTO_TAMANO_MAXIMO,
 } from "../directorio/validacion-alta.js";
 import { toast } from "../core/toast.js";
-import { coordinacionActual, terminarCoordinacion } from "../core/coordinar-cita.js";
+import { coordinacionActual, iniciarCoordinacion, terminarCoordinacion } from "../core/coordinar-cita.js";
 import { abrirSeguimiento, rellenarObservacionesConCita } from "./seguimiento.js";
 
 const PLANTILLA = `
@@ -85,6 +86,9 @@ function estadoInicial() {
     bookingFechaLibre: "", bookingHoraLibre: "", agendaLibre: null,
     // Agenda real del médico abierto (la manda el servidor, ver cargarAgenda).
     agenda: [], bookingFolio: null, bookingGuardando: false,
+    // Paso "¿Para qué expediente?" al agendar sin venir de uno: la lista (null
+    // mientras se consulta) y lo que se escribió en su buscador.
+    expedientesCita: null, expedienteBusqueda: "",
     registered: null, requests: [],
     // Folio de la solicitud que se está corrigiendo (botón "Editar" de
     // Solicitudes); null = la pantalla de alta captura una nueva.
@@ -703,6 +707,24 @@ async function cambiarComboFuera(el) {
    un horario mientras tanto, se ve al instante. */
 async function abrirAgenda(medico) {
   if (!medico) return;
+  // Toda cita es para un expediente: si no se viene de uno (se entró al
+  // directorio por el menú), primero se elige.
+  if (!coordinacionActual()) {
+    irA({
+      detail: medico, bookingStep: "expediente", expedientesCita: null, expedienteBusqueda: "",
+      bookingFolio: null, bookingGuardando: false,
+    });
+    const g = generacion;
+    let lista = [];
+    try {
+      lista = await cargarExpedientesParaCita();
+    } catch (err) {
+      toast("No se pudieron consultar los expedientes: " + err.message, "error");
+    }
+    if (g !== generacion || estado.detail !== medico || estado.bookingStep !== "expediente") return;
+    irA({ expedientesCita: lista });
+    return;
+  }
   irA({
     detail: medico, bookingStep: "pick", bookingDay: 0, bookingSlot: null,
     bookingFechaLibre: "", bookingHoraLibre: "", agendaLibre: null,
@@ -711,11 +733,52 @@ async function abrirAgenda(medico) {
   const g = generacion;
   const agenda = await cargarAgenda(medico.clave);
   if (g !== generacion || estado.detail !== medico) return;
-  irA({ agenda });
+  // Arranca en el primer día que el médico atiende (no en uno que no).
+  irA({ agenda, bookingDay: Math.max(0, agenda.findIndex(d => d.atiende !== false)) });
+}
+
+/* Se eligió el expediente en el paso "¿Para qué expediente?": a partir de
+   aquí es igual que venir de Seguimiento (al confirmar se regresa a él). */
+function elegirExpediente(el) {
+  const record = (estado.expedientesCita || []).find(x => String(x.expediente) === el.dataset.cl);
+  if (!record || !estado.detail) return;
+  iniciarCoordinacion({ record, fuente: "menu", origen: "directorio" });
+  abrirAgenda(estado.detail);
+}
+
+/* Solo cuando el expediente se eligió aquí; si se vino de Seguimiento, el
+   expediente es ese y para cambiarlo se cancela la coordinación. */
+function cambiarExpediente() {
+  const ctx = coordinacionActual();
+  if (!ctx || ctx.origen !== "directorio") return;
+  terminarCoordinacion();
+  abrirAgenda(estado.detail);
+}
+
+/* Elegido en el directorio, el expediente solo vale para ESTA cita: al cerrar
+   la ficha o cancelar se suelta, para que el siguiente "Agendar" lo pregunte. */
+function soltarExpedienteDelDirectorio() {
+  const ctx = coordinacionActual();
+  if (ctx && ctx.origen === "directorio") terminarCoordinacion();
+}
+
+function cancelarCoordinacion() {
+  const ctx = coordinacionActual();
+  if (ctx && ctx.origen === "directorio") {
+    terminarCoordinacion();
+    irA({ detail: null, bookingStep: "idle", coordNota: "", coordFuera: false });
+    return;
+  }
+  volverAlExpediente(null);
 }
 
 async function confirmarCita() {
   const medico = estado.detail;
+  if (!coordinacionActual()) {
+    // No debería pasar (el paso del expediente va antes), pero sin expediente no hay cita.
+    abrirAgenda(medico);
+    return;
+  }
   // Fecha y hora: las libres si se capturaron, y si no, el día y horario sugerido elegidos.
   const fecha = estado.bookingFechaLibre
     || ((estado.agenda || [])[estado.bookingDay == null ? 0 : estado.bookingDay] || {}).fecha;
@@ -725,17 +788,10 @@ async function confirmarCita() {
   irA({ bookingGuardando: true });
   try {
     const ctx = coordinacionActual();
-    const cita = await agendarCita({
-      claveProveedor: medico.clave, fecha, hora,
-      clExpediente: ctx ? ctx.expediente : undefined,
-    });
-    if (ctx) {
-      // Coordinada desde un expediente: se regresa a Seguimiento con los datos
-      // de la cita ya copiados (el servidor arma el texto).
-      await volverAlExpediente(cita.observaciones_sugeridas, cita.folio);
-      return;
-    }
-    irA({ bookingStep: "done", bookingFolio: cita.folio, bookingGuardando: false });
+    const cita = await agendarCita({ claveProveedor: medico.clave, fecha, hora, clExpediente: ctx.expediente });
+    // Se regresa a Seguimiento del expediente con los datos de la cita ya
+    // copiados en Observaciones (el servidor arma el texto).
+    await volverAlExpediente(cita.observaciones_sugeridas, cita.folio);
   } catch (err) {
     // El caso típico: otra persona tomó ese horario (409). Se refresca la
     // agenda para que ya no aparezca como libre.
@@ -760,7 +816,9 @@ const ACCIONES = {
   "volver-resultados": () => irA({ screen: "results" }),
 
   // Coordinar cita desde un expediente: salir sin agendar
-  "cancelar-coordinacion": () => volverAlExpediente(null),
+  "cancelar-coordinacion": cancelarCoordinacion,
+  "elegir-expediente": elegirExpediente,
+  "cambiar-expediente": cambiarExpediente,
 
   // Fuera de la red (candidatos del DENUE)
   "ir-fuera-de-red": abrirFueraDeRed,
@@ -795,10 +853,13 @@ const ACCIONES = {
   },
 
   // Ficha y agenda
-  "cerrar-ficha": () => irA({
-    detail: null, bookingStep: "idle", agenda: [], bookingFolio: null,
-    bookingFechaLibre: "", bookingHoraLibre: "", agendaLibre: null,
-  }),
+  "cerrar-ficha": () => {
+    soltarExpedienteDelDirectorio();
+    irA({
+      detail: null, bookingStep: "idle", agenda: [], bookingFolio: null,
+      bookingFechaLibre: "", bookingHoraLibre: "", agendaLibre: null,
+    });
+  },
   "agendar": () => abrirAgenda(estado.detail),
   "volver-ficha": () => irA({ bookingStep: "idle" }),
   "confirmar-cita": confirmarCita,
@@ -889,6 +950,15 @@ async function cambiarCombo(el) {
     ponerFormulario({ [campo]: el.value });
     pintarDependientesAlta();
   }
+}
+
+/* Buscador del paso "¿Para qué expediente?": solo se repinta la lista, para
+   no perder el cursor del campo. */
+function alEscribirFicha(e) {
+  if (e.target.id !== "dp-exp-buscar") return;
+  estado.expedienteBusqueda = e.target.value;
+  const lista = document.getElementById("dp-exp-lista");
+  if (lista) lista.innerHTML = V.listaExpedientesCita(V.calcular(estado));
 }
 
 /* Fecha y hora libres de la ficha (el modal vive fuera de #dp-raiz, por eso su
@@ -984,11 +1054,12 @@ export function montar(contenedor) {
     cuerpo: "",
     pie: "",
     // "X" del encabezado o clic fuera de la tarjeta: igual que "Cerrar".
-    alCerrar: () => irA({ detail: null, bookingStep: "idle" }),
+    alCerrar: () => { soltarExpedienteDelDirectorio(); irA({ detail: null, bookingStep: "idle" }); },
   });
   modalFicha.elemento.querySelector(".modal-footer").classList.add("dp-ficha-pie");
   modalFicha.elemento.addEventListener("click", alClic);
   modalFicha.elemento.addEventListener("change", alCambiarFicha);
+  modalFicha.elemento.addEventListener("input", alEscribirFicha);
 
   raiz.addEventListener("click", alClic);
   raiz.addEventListener("change", alCambiar);

@@ -4,7 +4,7 @@ import { api, apiArchivo } from "../core/api.js";
 import { escapeHtml, formatDate, formatDateTime, sanitizarHtmlSeguimiento } from "../core/formato.js";
 import { toast } from "../core/toast.js";
 import { navegar } from "../core/router.js";
-import { esPerfilCabina, esPerfilProveedor, nombreUsuario } from "../core/sesion.js";
+import { esPerfilAdministrador, esPerfilCabina, esPerfilProveedor, nombreUsuario } from "../core/sesion.js";
 import {
   ESTATUS_ACCIONABLES_PROVEEDOR, ESTATUS_DE_REGRESO, notificarCambioEstatus, proveedorPuedeVer,
 } from "../core/reglas-expedientes.js";
@@ -677,7 +677,7 @@ async function registrarSeguimiento() {
    presiona "Actualizar Seguimiento". Un expediente tiene UNA sola cita; para
    cambiarla primero se cancela con "Modificar cita". */
 function puedeCoordinar(record) {
-  return esPerfilProveedor() && ESTATUS_ACCIONABLES_PROVEEDOR.includes(record.estatus);
+  return (esPerfilProveedor() || esPerfilAdministrador()) && ESTATUS_ACCIONABLES_PROVEEDOR.includes(record.estatus);
 }
 
 async function cargarCitaDelExpediente(record) {
@@ -792,8 +792,8 @@ export function aplicarPermisos() {
   // Proveedor no puede cambiar el estado a mano ("Estado del Caso"): en su
   // caso el estatus solo cambia automático al usar "Actualizar Seguimiento".
   $("sg-estatus-card").classList.toggle("hidden-perfil", esPerfilProveedor());
-  // Coordinar cita es del Proveedor (quien registra el seguimiento).
-  $("sg-cita-bloque").classList.toggle("hidden-perfil", !esPerfilProveedor());
+  // Coordinar cita: Proveedor y Administrador (los dos registran seguimiento).
+  $("sg-cita-bloque").classList.toggle("hidden-perfil", !(esPerfilProveedor() || esPerfilAdministrador()));
 
   // Lo que cabe en cada cuadro de texto: 1500 menos el encabezado con el
   // nombre de quien inició sesión.

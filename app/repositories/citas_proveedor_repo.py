@@ -111,6 +111,15 @@ def cita_activa_de_expediente(cl_expediente: int) -> dict | None:
     return dict(fila) if fila else None
 
 
+def expedientes_con_cita_activa() -> set[int]:
+    with get_local_connection() as conn:
+        filas = conn.execute(
+            "SELECT cl_expediente FROM citas_proveedor WHERE cl_expediente IS NOT NULL AND estatus = ?",
+            (ESTATUS_AGENDADA,),
+        ).fetchall()
+    return {fila["cl_expediente"] for fila in filas}
+
+
 def obtener_por_folio(folio: str) -> dict | None:
     with get_local_connection() as conn:
         fila = conn.execute("SELECT * FROM citas_proveedor WHERE folio = ?", (folio,)).fetchone()

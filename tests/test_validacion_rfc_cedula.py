@@ -120,7 +120,7 @@ SOLICITUD = {
     "nombre": "Dr. Emilio Gómez", "especialidad": "Cardiología", "cedula": "12345678",
     "rfc": "gode561231gr8", "estado": "Jalisco", "municipio": "Guadalajara",
     "calle_num_ext_int": "Av. Vallarta 1450", "colonia": "Americana", "codigo_postal": "44100",
-    "consultorio": "Consultorio 302", "horario": "Lun-Vie 09:00-14:00; Sáb 09:00-13:00",
+    "consultorio": "Consultorio 302", "horario": "Lun-Vie 09:00-14:00; Sáb 09:00-13:00", "costo_consulta": "600-900",
     "telefono": "3312345678", "email": "emilio@correo.mx",
 }
 
@@ -147,7 +147,7 @@ def test_crear_rechaza_rfc_o_cedula_mal_formados(client, cambios, fragmento):
 
 @pytest.mark.parametrize("campo", [
     "nombre", "especialidad", "cedula", "rfc", "estado", "municipio",
-    "calle_num_ext_int", "colonia", "codigo_postal", "consultorio", "horario", "telefono", "email",
+    "calle_num_ext_int", "colonia", "codigo_postal", "consultorio", "horario", "costo_consulta", "telefono", "email",
 ])
 def test_todos_los_campos_son_obligatorios(client, campo):
     admin = _admin(client)
@@ -213,6 +213,69 @@ def test_consultorio_y_horario_pasan_al_padron_al_aprobar(client):
     medico = client.get("/directorio-proveedores", headers=admin).json()[0]
     assert medico["consultorio"] == "Consultorio 302"
     assert medico["horario"] == "Lun-Vie 09:00-14:00; Sáb 09:00-13:00"
+
+
+# ---------- Costo aproximado ----------
+
+@pytest.mark.parametrize("costo", ["0-600", "600-900", "900-1200", "1200+"])
+def test_costo_aproximado_por_rango(client, costo):
+    admin = _admin(client)
+    assert _crear(client, admin, costo_consulta=costo).status_code == 200
+    assert client.get("/solicitudes-alta-medico", headers=admin).json()[0]["costo_consulta"] == costo
+
+
+@pytest.mark.parametrize("costo", ["800", "$800", "500-700", "barato"])
+def test_costo_fuera_de_los_rangos_se_rechaza(client, costo):
+    r = _crear(client, _admin(client), costo_consulta=costo)
+    assert r.status_code == 400 and "rangos" in r.json()["detail"]
+
+
+def test_el_costo_pasa_al_padron_al_aprobar(client):
+    admin = _admin(client)
+    folio = _crear(client, admin, costo_consulta="900-1200").json()["folio"]
+    client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"})
+    assert client.get("/directorio-proveedores", headers=admin).json()[0]["costo_consulta"] == "900-1200"
+
+
+# ---------- Duplicados: un RFC puede tener varias altas, no la misma especialidad en el mismo domicilio ----------
+
+def test_mismo_rfc_misma_especialidad_mismo_domicilio_se_rechaza(client):
+    admin = _admin(client)
+    assert _crear(client, admin).status_code == 200
+    # Aunque el domicilio venga escrito distinto (mayúsculas, acentos, signos).
+    r = _crear(client, admin, calle_num_ext_int="AV VALLARTA #1450", especialidad="cardiologia")
+    assert r.status_code == 409
+    assert "otra especialidad o en otro domicilio" in r.json()["detail"]
+
+
+def test_mismo_rfc_con_otra_especialidad_o_en_otra_sucursal_si_se_permite(client):
+    admin = _admin(client)
+    assert _crear(client, admin).status_code == 200
+    assert _crear(client, admin, especialidad="Medicina General").status_code == 200
+    assert _crear(client, admin, calle_num_ext_int="Av. Patria 200", codigo_postal="45110").status_code == 200
+
+
+def test_una_solicitud_rechazada_no_impide_volver_a_intentarlo(client):
+    admin = _admin(client)
+    folio = _crear(client, admin).json()["folio"]
+    client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Rechazada"})
+    assert _crear(client, admin).status_code == 200
+
+
+def test_tampoco_se_repite_lo_que_ya_esta_en_el_padron(client):
+    admin = _admin(client)
+    folio = _crear(client, admin).json()["folio"]
+    client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"})
+    assert _crear(client, admin).status_code == 409
+
+
+def test_editar_una_solicitud_no_choca_consigo_misma_pero_si_con_otra(client):
+    admin = _admin(client)
+    folio = _crear(client, admin).json()["folio"]
+    assert client.put(f"/solicitudes-alta-medico/{folio}", headers=admin, json={**SOLICITUD, "nombre": "Dr. Otro"}).status_code == 200
+    otra = _crear(client, admin, especialidad="Pediatría").json()["folio"]
+    r = client.put(f"/solicitudes-alta-medico/{otra}", headers=admin, json=SOLICITUD)
+    assert r.status_code == 409
 
 
 def test_telefono_con_separadores_se_guarda_solo_con_digitos(client):

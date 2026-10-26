@@ -306,6 +306,7 @@ CREATE TABLE IF NOT EXISTS solicitudes_alta_medico (
     codigo_postal     TEXT,
     consultorio       TEXT,
     horario           TEXT,
+    costo_consulta    TEXT,
     telefono          TEXT,
     email             TEXT,
     estatus           TEXT NOT NULL DEFAULT 'En revisión',
@@ -352,9 +353,14 @@ def _migrar_columnas_faltantes(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE comentarios_seguimiento ADD COLUMN origen TEXT NOT NULL DEFAULT 'proveedor'")
 
     columnas_solicitudes = {row["name"] for row in conn.execute("PRAGMA table_info(solicitudes_alta_medico)")}
-    for columna in ("calle_num_ext_int", "colonia", "codigo_postal", "clave_proveedor", "consultorio", "horario"):
+    for columna in (
+        "calle_num_ext_int", "colonia", "codigo_postal", "clave_proveedor", "consultorio", "horario", "costo_consulta",
+    ):
         if columna not in columnas_solicitudes:
             conn.execute(f"ALTER TABLE solicitudes_alta_medico ADD COLUMN {columna} TEXT")
+    # El estatus "Cédula no localizada" se quitó (no había cómo ponerlo desde la
+    # pantalla): lo que lo tuviera vuelve a estar en revisión.
+    conn.execute("UPDATE solicitudes_alta_medico SET estatus = 'En revisión' WHERE estatus = 'Cédula no localizada'")
 
     columnas_proveedores = {row["name"] for row in conn.execute("PRAGMA table_info(proveedores)")}
     if "cl_especialidad" not in columnas_proveedores:

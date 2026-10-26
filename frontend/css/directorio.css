@@ -274,6 +274,25 @@
 .dp-datos dd{margin:0;font-weight:600;color:var(--navy);}
 /* Campo obligatorio que falta o está mal tras intentar enviar. */
 .dp-formulario [aria-invalid="true"]{border-color:var(--red);box-shadow:0 0 0 1px var(--red);}
+/* Agendar: para qué expediente es la cita */
+.dp-exp-lista{display:grid;gap:8px;max-height:46vh;overflow-y:auto;margin-top:10px;padding-right:2px;}
+.dp-exp-opcion{
+  display:grid;gap:3px;text-align:left;padding:10px 12px;border:1px solid var(--tono-azul-borde);
+  border-radius:var(--radius);background:var(--white);font:inherit;cursor:pointer;
+}
+.dp-exp-opcion:hover{border-color:var(--navy);}
+.dp-exp-opcion:focus-visible{outline:2px solid var(--navy);outline-offset:2px;}
+.dp-exp-titulo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;font-weight:700;color:var(--navy);}
+.dp-cita-expediente{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin:12px 0 4px;padding:10px 12px;border:1px solid var(--tono-azul-borde);border-radius:var(--radius);background:var(--white);
+}
+.dp-aviso-coincidencia{
+  margin:6px 0 0;padding:8px 12px;border-radius:var(--radius);
+  background:var(--amber-bg);color:var(--amber);font-size:13px;font-weight:600;
+}
+.dp-dia[disabled]{opacity:.45;cursor:not-allowed;}
+
 /* Selector del horario de atención */
 .dp-horario{display:grid;gap:12px;padding:12px;border:1px solid var(--tono-azul-borde);border-radius:var(--radius);background:var(--white);}
 .dp-horario[aria-invalid="true"]{border-color:var(--red);}
