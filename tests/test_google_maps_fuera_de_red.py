@@ -145,7 +145,7 @@ def test_la_respuesta_de_google_se_mapea_a_candidatos(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "cod_mun": "00039", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 200, r.text
     cuerpo = r.json()
@@ -175,7 +175,7 @@ def test_no_inventa_cedula_costo_convenio_ni_telefono(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     c = r.json()["candidatos"][0]
     for campo in ("cedula", "costo_consulta", "convenio", "horario", "telefono"):
@@ -187,7 +187,7 @@ def test_sin_resultados_no_es_error(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 200
     assert r.json()["total"] == 0
@@ -199,7 +199,7 @@ def test_area_sin_municipio_es_solo_la_entidad(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.json()["area"] == "JALISCO"
 
@@ -210,7 +210,7 @@ def test_la_consulta_viaja_como_parametro_de_la_peticion(client, monkeypatch):
     client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "cod_mun": "00039", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert capturadas[0]["query"] == "cardiologia en Guadalajara, JALISCO, México"
     assert capturadas[0]["key"] == "llave-de-prueba"
@@ -227,7 +227,7 @@ def test_sin_llave_configurada_responde_503(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 503
     assert "llave" in r.json()["detail"].lower() or "google_maps_api_key" in r.json()["detail"].lower()
@@ -238,7 +238,7 @@ def test_llave_invalida_responde_502_con_mensaje_claro(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 502
     assert "llave" in r.json()["detail"].lower()
@@ -249,7 +249,7 @@ def test_limite_de_cuota_responde_502_con_mensaje_claro(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 502
     assert "límite" in r.json()["detail"].lower() or "limite" in r.json()["detail"].lower()
@@ -263,7 +263,7 @@ def test_timeout_de_google_responde_502(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 502
     assert "tardó" in r.json()["detail"]
@@ -274,7 +274,7 @@ def test_respuesta_que_no_es_json_responde_502(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 502
 
@@ -284,7 +284,7 @@ def test_http_distinto_de_200_responde_502(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 502
 
@@ -297,7 +297,7 @@ def test_la_llave_viaja_pero_no_se_registra_en_el_log(client, monkeypatch, caplo
         r = client.get(
             "/directorio-proveedores/fuera-de-red-google-maps",
             params={"cod_ent": "JC", "especialidad": "cardiologia"},
-            headers=_admin(client),
+            headers=_proveedor(client),
         )
     assert r.status_code == 502
     registros = [x.getMessage() for x in caplog.records if x.name == "google_maps_service"]
@@ -310,7 +310,7 @@ def test_entidad_fuera_del_catalogo_responde_400(client, monkeypatch):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "ZZ", "especialidad": "cardiologia"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 400
 
@@ -319,22 +319,23 @@ def test_especialidad_demasiado_corta_se_rechaza(client):
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "ca"},
-        headers=_admin(client),
+        headers=_proveedor(client),
     )
     assert r.status_code == 422
 
 
 # ---------- Permisos ----------
 
-def test_proveedor_y_administrador_pueden_buscar(client, monkeypatch):
+def test_solo_el_proveedor_busca_fuera_de_la_red_con_google(client, monkeypatch):
+    """Misma restricción que /fuera-de-red (DENUE), decisión del usuario
+    (2026-10-26): del directorio, el Administrador solo usa Solicitudes,
+    Alta de médico, Carga del catálogo y Métricas."""
     _responder(monkeypatch, RespuestaFalsa(200, {"status": "OK", "results": [LUGAR_GOOGLE]}))
-    for headers in (_admin(client), _proveedor(client)):
-        r = client.get(
-            "/directorio-proveedores/fuera-de-red-google-maps",
-            params={"cod_ent": "JC", "especialidad": "cardiologia"},
-            headers=headers,
-        )
-        assert r.status_code == 200
+    parametros = {"cod_ent": "JC", "especialidad": "cardiologia"}
+    r_proveedor = client.get("/directorio-proveedores/fuera-de-red-google-maps", params=parametros, headers=_proveedor(client))
+    assert r_proveedor.status_code == 200
+    r_admin = client.get("/directorio-proveedores/fuera-de-red-google-maps", params=parametros, headers=_admin(client))
+    assert r_admin.status_code == 403
 
 
 def test_cabina_no_puede_usar_el_directorio(client, monkeypatch):

@@ -142,7 +142,7 @@ def buscar_fuera_de_red(
     }
 
 
-@router.get("/fuera-de-red-google-maps")
+@router.get("/fuera-de-red-google-maps", dependencies=[Depends(_requerir_proveedor)])
 def buscar_fuera_de_red_google_maps(
     cod_ent: str = Query(min_length=1, max_length=5, description="CodEnt de la entidad (ej. JC)"),
     especialidad: str = Query(min_length=3, max_length=60),
