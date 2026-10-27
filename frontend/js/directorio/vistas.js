@@ -1103,7 +1103,12 @@ function _sinResultadosFuera(v) {
 /* Google no regresa teléfono en esta búsqueda (eso costaría una consulta de
    "Place Details" por cada candidato -- ver el porqué en
    app/services/google_maps_service.py): en su lugar se da un enlace directo
-   a la ficha del lugar en Google Maps. */
+   a la ficha del lugar en Google Maps.
+
+   La primera columna lleva el MISMO número que el pin del mapa, para poder
+   seguir un consultorio al alternar Mapa/Lista sin perder el hilo. Es la
+   posición en esta lista, así que ambos lados deben recorrerla en el mismo
+   orden (ver el .map con índice). */
 function _tablaGoogle(v) {
   return `
     <div class="dp-aviso-candidatos">
@@ -1119,13 +1124,14 @@ function _tablaGoogle(v) {
       </p>
     </div>
     <div class="table-wrap">
-      <table class="mini-table">
+      <table class="mini-table dp-tabla-candidatos">
         <thead>
-          <tr><th>Establecimiento</th><th>Calificación</th><th>Domicilio</th><th>Enlace</th></tr>
+          <tr><th class="dp-col-num">#</th><th>Establecimiento</th><th>Calificación</th><th>Domicilio</th><th>Enlace</th></tr>
         </thead>
         <tbody>
-          ${v.fueraCandidatos.map(c => `
+          ${v.fueraCandidatos.map((c, i) => `
             <tr>
+              <td class="dp-col-num" data-label="#"><span class="dp-num-pin">${i + 1}</span></td>
               <td data-label="Establecimiento">
                 <div class="dp-fuerte">${e(c.nombre || "Sin nombre registrado")}</div>
                 ${c.abierto_ahora === true ? `<div class="dp-muted">Abierto ahora</div>` : c.abierto_ahora === false ? `<div class="dp-muted">Cerrado ahora</div>` : ""}

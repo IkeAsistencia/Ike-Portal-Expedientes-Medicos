@@ -213,6 +213,55 @@
 .dp-fuera-vista{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px;}
 .dp-fuera-vista .dp-nota{margin:0;}
 
+/* Número del candidato: el MISMO que su pin en el mapa, para poder seguir un
+   consultorio al alternar Mapa/Lista. Mismo tamaño y forma que el pin, con
+   los colores del portal en vez del azul de Google (aquí no es un marcador
+   sobre un mapa, sino una etiqueta de la tabla). */
+.dp-col-num{width:44px;text-align:center;white-space:nowrap;}
+.dp-num-pin{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:24px;height:24px;border-radius:50%;
+  background:var(--blue);color:var(--white);
+  font-size:12px;font-weight:700;line-height:1;
+}
+/* Nombre y domicilio vienen de Google: son texto libre y pueden medir 100+
+   caracteres ("Blvd. Puerta de Hierro 5090-Consultorio 106. Piso 1, HOSPITAL
+   ..."). La tabla global usa white-space:nowrap (bien para columnas cortas,
+   como fechas o folios), pero aquí hacía que la fila midiera 600px y
+   desbordara en celular: se deja que el texto se parta. */
+.dp-tabla-candidatos td{white-space:normal;overflow-wrap:anywhere;}
+
+/* En móvil la tabla se vuelve tarjetas: el número se pega al nombre en vez de
+   ocupar un renglón propio (ver también .mini-table td[data-label="#"] en
+   componentes.css, que lo muestra junto al nombre). */
+@media (max-width:640px){
+  .dp-col-num{width:auto;text-align:left;padding-bottom:0;}
+}
+
+/* En móvil, el renglón de candidatos se arma como grid de dos columnas: el
+   número a la izquierda y el nombre a la derecha, en el MISMO renglón; los
+   demás datos ocupan el ancho completo abajo. Con el flex que usa
+   .mini-table en móvil (justify-content:space-between) el nombre y "Abierto
+   ahora" quedaban apretados uno contra otro y el texto se cortaba.
+   OJO con la especificidad: .mini-table td:not(.mini-empty) (0,2,1) le gana a
+   .dp-tabla-candidatos td (0,1,1), por eso se repite .mini-table aquí. */
+@media (max-width:640px){
+  .mini-table.dp-tabla-candidatos tr{display:grid;grid-template-columns:auto minmax(0, 1fr);align-items:start;}
+  .mini-table.dp-tabla-candidatos td{display:block;grid-column:1 / -1;width:auto;min-width:0;}
+  .mini-table.dp-tabla-candidatos td.dp-col-num{grid-column:1;grid-row:1;padding:4px 8px 4px 0;}
+  .mini-table.dp-tabla-candidatos td[data-label="Establecimiento"]{grid-column:2;grid-row:1;padding-top:4px;}
+  /* El nombre propio del campo ya lo dice el contenido; la etiqueta "Establecimiento"
+     se omite porque el número a la izquierda ya identifica el renglón. */
+  .mini-table.dp-tabla-candidatos td[data-label="Establecimiento"]::before{content:none;}
+  /* La etiqueta del campo va como bloque arriba del valor: en flex+space-between
+     ("::before" + texto) "Domicilio" y la dirección quedaban pegados sin espacio
+     ("DomicilioEmilio Acevedo..."). */
+  .mini-table.dp-tabla-candidatos td[data-label]:not(.dp-col-num)::before{
+    display:block;width:100%;margin-bottom:1px;
+  }
+  .mini-table.dp-tabla-candidatos td[data-label]:not(.dp-col-num){display:block;}
+}
+
 .dp-vacio{padding:28px 0 20px;}
 .dp-vacio-titulo{margin:0 0 8px;font-size:15px;font-weight:600;color:var(--navy);}
 .dp-vacio .dp-texto{max-width:56ch;margin-bottom:16px;}

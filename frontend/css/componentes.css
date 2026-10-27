@@ -375,7 +375,12 @@ tbody tr:hover{background:#FAFAFA;}
   .mini-table tr{border:1px solid var(--gray-border);border-radius:8px;padding:10px 12px;margin-bottom:10px;background:var(--white);}
   .mini-table td:not(.mini-empty){border-bottom:none;padding:4px 0;display:flex;align-items:center;justify-content:space-between;gap:10px;}
   .mini-table td[data-label]::before{content:attr(data-label);font-size:11px;font-weight:600;color:var(--text-secondary);}
-  .mini-table td[data-label="#"]{display:none;}
+  /* Las tablas que no llevan número en la primera columna siguen sin mostrarla;
+     las de "Buscar fuera de la red" sí lo llevan (liga con el pin del mapa),
+     por eso el td trae .dp-col-num y aquí se deja visible y compacto. */
+  .mini-table td[data-label="#"]:not(.dp-col-num){display:none;}
+  .mini-table td.dp-col-num[data-label="#"]{display:inline-flex;width:auto;padding-bottom:0;}
+  .mini-table td.dp-col-num[data-label="#"]::before{content:none;}
   .mini-table tr:has(.mini-empty){border:none;padding:0;}
 }
 
