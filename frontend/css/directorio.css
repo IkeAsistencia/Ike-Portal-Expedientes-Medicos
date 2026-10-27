@@ -205,7 +205,7 @@
 .dp-dato{white-space:nowrap;}
 .dp-medico-acciones{flex:0 0 auto;display:flex;align-items:center;gap:14px;margin-left:auto;}
 
-.dp-mapa{position:relative;height:560px;margin:12px 0 8px;border:1px solid var(--gray-border);border-radius:var(--radius);overflow:hidden;}
+.dp-mapa{position:relative;height:min(560px, 70vh);margin:12px 0 8px;border:1px solid var(--gray-border);border-radius:var(--radius);overflow:hidden;}
 .dp-mapa-marco{position:absolute;inset:0;width:100%;height:100%;border:0;}
 /* Selector Mapa/Lista de "Buscar fuera de la red": separado del aviso de
    candidatos para que se vea como una barra de herramientas, no como parte
@@ -422,8 +422,11 @@ button.dp-doc-chip:hover{border-color:var(--green);}
   /* La ruta va sola en su renglón: "Métricas" se alinea con ella. */
   .dp-migas + .btn.dp-btn-ghost{margin-left:-11px;}
 }
-/* El modal vive fuera del contenedor del directorio: va por ancho de ventana. */
-@media (max-width:560px){ .dp-dias{grid-template-columns:repeat(4, minmax(0, 1fr));} }
+/* El modal vive fuera del contenedor del directorio (.dp-directorio), pero
+   .modal-card (componentes.css) es su propio @container: así el cambio a 4
+   columnas sigue el ancho real del modal, no el de la ventana (el modal ya
+   es más angosto que 640px bastante antes de que la ventana lo sea). */
+@container modal (max-width:560px){ .dp-dias{grid-template-columns:repeat(4, minmax(0, 1fr));} }
 
 /* ---------- Coordinar cita desde un expediente (aviso de arriba) ---------- */
 .dp-aviso-cita{

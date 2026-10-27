@@ -387,6 +387,10 @@ tbody tr:hover{background:#FAFAFA;}
 .modal-card{
   background:var(--white);border-radius:var(--radius);box-shadow:var(--shadow-lg);
   width:640px;max-width:92vw;max-height:86vh;display:flex;flex-direction:column;
+  /* Permite que lo de adentro (ver .dp-dias en directorio.css) reaccione al
+     ancho REAL del modal con @container, no al de la ventana: el modal mide
+     menos de 640px bastante antes de que la ventana llegue a ser angosta. */
+  container-type:inline-size;container-name:modal;
 }
 .modal-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--tono-azul-borde);flex-shrink:0;background:var(--tono-azul);border-radius:var(--radius) var(--radius) 0 0;}
 .modal-header h3{margin:0;font-size:16px;color:var(--navy);}
