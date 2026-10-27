@@ -1,0 +1,116 @@
+name: Deploy Portal Medicos
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: deploy-portal-medicos
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Aprobacion Manual
+        uses: trstringer/manual-approval@v1
+        with:
+          secret: ${{ github.TOKEN }}
+          approvers: IkeAsistencia
+          minimum-approvals: 1
+          fail-on-denial: true
+
+      - name: Prepare deployment package
+        run: |
+          mkdir -p package
+
+          # Copiamos todo el contenido de la raíz del repo excluyendo lo sensible o innecesario
+          rsync -av \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='.DS_Store' \
+            --exclude='**/.DS_Store' \
+            --exclude='venv/' \
+            --exclude='__pycache__/' \
+            --exclude='.env' \
+            ./ package/
+
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY_PROD }}
+          aws-region: mx-central-1
+
+      - name: Abrir puerto 22
+        id: abrir_ssh
+        env:
+          SECURITY_GROUP_ID: ${{ secrets.SECURITY_GROUP_ID_PROD }}
+        run: |
+          set -euo pipefail
+
+          RUNNER_IP="$(curl -4 -fsS --retry 3 --max-time 30 \
+            https://checkip.amazonaws.com | tr -d '\r\n')"
+
+          RULE_ID="$(aws ec2 authorize-security-group-ingress \
+            --group-id "$SECURITY_GROUP_ID" \
+            --protocol tcp \
+            --port 22 \
+            --cidr "$RUNNER_IP/32" \
+            --query 'SecurityGroupRules[0].SecurityGroupRuleId' \
+            --output text)"
+
+          echo "rule_id=$RULE_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy files via SCP
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.HOSTPROD }}
+          username: ${{ secrets.USERNAMEPROD }}
+          port: ${{ secrets.PORTPROD }}
+          key: ${{ secrets.SSHKEYPROD }}
+          source: "package/*"
+          target: "/var/www/Ike-Portal-Expedientes-Medicos"
+          rm: false
+          overwrite: true
+
+      - name: Post-deploy cleanup, dependencies & restart
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.HOSTPROD }}
+          username: ${{ secrets.USERNAMEPROD }}
+          port: ${{ secrets.PORTPROD }}
+          key: ${{ secrets.SSHKEYPROD }}
+          script: |
+            cd /home/ubuntu/Ike-Portal-Expedientes-Medicos
+            
+            # Limpiar la carpeta temporal 'package' si se copió como subdirectorio
+            rm -rf package
+            
+            # Activar entorno virtual y actualizar dependencias de Python
+            source venv/bin/activate
+            pip install -r requirements.txt
+            
+            # Reiniciar tu servicio de Systemd para reflejar el código nuevo
+            sudo systemctl restart portalmedicos
+
+      - name: Cerrar puerto 22
+        if: ${{ always() && steps.abrir_ssh.outputs.rule_id != '' }}
+        env:
+          SECURITY_GROUP_ID: ${{ secrets.SECURITY_GROUP_ID_PROD }}
+          RULE_ID: ${{ steps.abrir_ssh.outputs.rule_id }}
+        run: |
+          set -euo pipefail
+
+          aws ec2 revoke-security-group-ingress \
+            --group-id "$SECURITY_GROUP_ID" \
+            --security-group-rule-ids "$RULE_ID"
