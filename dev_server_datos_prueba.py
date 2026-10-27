@@ -45,14 +45,20 @@ EXPEDIENTES_DEMO = [
     {
         "Expediente": 1001,
         "Cuenta": "Cuenta Demo",
+        "ClCuenta": 2819,
         "TipoServicio": "Servicio Médico",
         "TipoSubservicio": "Consulta Externa",
+        # ClSubServicio y FechaAperturaCompleta los usa el semáforo de tiempos
+        # (ver expedientes_repo.listar_expedientes y semaforo_service); sin
+        # ellos el listado de Expedientes truena con KeyError.
+        "ClSubServicio": 377,
         "NombreTitular": "Juan Pérez López",
         "NombrePaciente": "Paciente de Prueba",
         "Especialidad": "Medicina General",
         "Entidad": "Campeche",
         "Municipio": "Campeche",
         "FechaAperturaServicio": datetime.date(2026, 8, 1),
+        "FechaAperturaCompleta": datetime.datetime(2026, 8, 1, 9, 30),
         "FechaAsignacionProveedor": datetime.date(2026, 8, 1),
         "FechaCita": datetime.date(2026, 8, 3),
         "Telefono": "9811234567",
@@ -61,14 +67,17 @@ EXPEDIENTES_DEMO = [
     {
         "Expediente": 1002,
         "Cuenta": "Cuenta Demo",
+        "ClCuenta": 2819,
         "TipoServicio": "Servicio Médico",
         "TipoSubservicio": "Hospitalización",
+        "ClSubServicio": 420,
         "NombreTitular": "María García Ruiz",
         "NombrePaciente": "Paciente Dos",
         "Especialidad": "Pediatría",
         "Entidad": "Yucatán",
         "Municipio": "Mérida",
         "FechaAperturaServicio": datetime.date(2026, 8, 2),
+        "FechaAperturaCompleta": datetime.datetime(2026, 8, 2, 11, 15),
         "FechaAsignacionProveedor": None,
         "FechaCita": None,
         "Telefono": "9997654321",
@@ -149,6 +158,20 @@ def _entidades_demo():
 
 catalogos_repo_module.listar_entidades = _entidades_demo
 
+
+def _sembrar_estatus_demo():
+    """Los expedientes de demo necesitan estatus en la base local (SQLite):
+    el perfil Proveedor solo ve los que están en "En Espera de Respuesta" o
+    "Seguimiento de Cita" (ver ESTATUS_ACCIONABLES_PROVEEDOR en
+    frontend/js/core/reglas-expedientes.js). Sin esto, la tabla de
+    Expedientes sale vacía aunque el SP devuelva filas."""
+    from app.repositories import estatus_repo
+    from app.schemas.expediente import EstatusExpediente
+
+    estatus_repo.actualizar_estatus(1001, EstatusExpediente.EN_ESPERA_RESPUESTA, "ADMI000001")
+    estatus_repo.actualizar_estatus(1002, EstatusExpediente.SEGUIMIENTO_CITA, "ADMI000001")
+
+
 from app.main import app  # noqa: E402
 
 if __name__ == "__main__":
@@ -156,6 +179,7 @@ if __name__ == "__main__":
 
     # Contraseña común de prueba (este servidor solo sirve datos inventados).
     seed_usuarios_prueba(password="Qwer1234$")
+    _sembrar_estatus_demo()
     print("Servidor de DATOS DE PRUEBA (sin SQL Server) en http://127.0.0.1:8000")
     print("RFC de prueba: " + ", ".join(f"{rfc} ({nombre})" for rfc, nombre, *_ in USUARIOS_PRUEBA))
     print("Contraseña de prueba para los tres: Qwer1234$")
