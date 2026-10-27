@@ -21,6 +21,7 @@ regresa este servidor son inventados en este mismo archivo.
 """
 
 import datetime
+import json
 import os
 
 # Valores dummy: este servidor nunca llama realmente a SQL Server (las
@@ -118,22 +119,16 @@ def fake_call_procedure(sp_name, params=None):
             }
         ]
     if sp_name == "dbo.sp_GetMun":
-        # Municipios de la entidad pedida -- solo se simulan unos cuantos por
-        # entidad (los suficientes para probar "Buscar fuera de la red" y el
-        # Alta de médico sin SQL Server).
-        municipios = {
-            "JC": [
-                {"CodMD": "00039", "dsMunDel": "Guadalajara", "CodEnt": "JC"},
-                {"CodMD": "00120", "dsMunDel": "Zapopan", "CodEnt": "JC"},
-            ],
-            "DF": [
-                {"CodMD": "00015", "dsMunDel": "Ciudad de México", "CodEnt": "DF"},
-            ],
-            "CM": [
-                {"CodMD": "00002", "dsMunDel": "Campeche", "CodEnt": "CM"},
-            ],
-        }
-        return municipios.get((params or {}).get("CodEnt"), [])
+        # Municipios REALES de la entidad pedida, del catálogo del INEGI que
+        # se guardó en scripts/catalogo_inegi_demo.json (32 entidades, 2478
+        # municipios). Antes solo se simulaban 1-2 por entidad, así que el
+        # combo se veía incompleto comparado con SISE.
+        ent = (params or {}).get("CodEnt")
+        datos = _catalogo_inegi().get(ent) or {}
+        return [
+            {"CodMD": m["clave"], "dsMunDel": m["nombre"], "CodEnt": ent}
+            for m in datos.get("municipios", [])
+        ]
     if sp_name == "dbo.sp_EncriptDesEncriptPassword":
         if params.get("pUsuario") == "ijimenez" and params.get("pContraseña") == "clave123":
             return [{"clUsrApp": 42, "Nombre": "Ignacio Jiménez", "Activo": True}]
@@ -156,11 +151,46 @@ seguimiento_repo_module.call_procedure_write = fake_call_procedure_write
 # catalogos_repo.py), así que no pasa por fake_call_procedure. Sin esto, el
 # combo de Estado del Alta de médico y de "Buscar fuera de la red" quedaba
 # vacío en el servidor de prueba.
+_CATALOGO_JSON = os.path.join(os.path.dirname(__file__), "scripts", "catalogo_inegi_demo.json")
+_catalogo_cache = None
+
+
+def _catalogo_inegi() -> dict:
+    """Catálogo de entidades y municipios del INEGI (32 entidades, 2478
+    municipios), descargado con el token del DENUE y guardado en
+    scripts/catalogo_inegi_demo.json. Se lee una sola vez por proceso."""
+    global _catalogo_cache
+    if _catalogo_cache is None:
+        try:
+            with open(_CATALOGO_JSON, encoding="utf-8") as f:
+                _catalogo_cache = json.load(f)
+        except (OSError, ValueError):
+            _catalogo_cache = {}
+    return _catalogo_cache
+
+
 def _entidades_demo():
+    """Las 32 entidades del catálogo del INEGI, con la misma forma que
+    devuelve dbo.cEntFed en SISE (CodEnt, nombre, clave INEGI de 2 dígitos).
+
+    El CodEnt que usa SISE es de 2 letras ("JC" = Jalisco); el catálogo del
+    INEGI solo trae la clave numérica. Para el demo se usa la clave INEGI
+    como CodEnt, que es lo que ya viaja en `clave_inegi` y lo que el
+    endpoint de Google Maps necesita para buscar por nombre.
+    """
+    catalogo = _catalogo_inegi()
+    if not catalogo:
+        # Sin el JSON, al menos las tres de siempre para no dejar el combo vacío.
+        return [
+            catalogos_repo_module.EntidadFederativa(clave="14", descripcion="JALISCO", clave_inegi="14"),
+            catalogos_repo_module.EntidadFederativa(clave="09", descripcion="CIUDAD DE MEXICO", clave_inegi="09"),
+            catalogos_repo_module.EntidadFederativa(clave="04", descripcion="CAMPECHE", clave_inegi="04"),
+        ]
     return [
-        catalogos_repo_module.EntidadFederativa(clave="JC", descripcion="JALISCO", clave_inegi="14"),
-        catalogos_repo_module.EntidadFederativa(clave="DF", descripcion="CIUDAD DE MEXICO", clave_inegi="09"),
-        catalogos_repo_module.EntidadFederativa(clave="CM", descripcion="CAMPECHE", clave_inegi="04"),
+        catalogos_repo_module.EntidadFederativa(
+            clave=clave, descripcion=datos["nombre"].strip(), clave_inegi=clave,
+        )
+        for clave, datos in sorted(catalogo.items(), key=lambda kv: kv[1]["nombre"])
     ]
 
 
