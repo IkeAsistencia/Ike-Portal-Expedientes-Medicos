@@ -160,11 +160,27 @@ def buscar_fuera_de_red_google_maps(
 
     503 si falta GOOGLE_MAPS_API_KEY en el .env (la búsqueda con Google
     queda apagada, pero el DENUE y el resto del portal siguen igual).
+
+    Si el catálogo de entidades no está disponible (ej. SQL Server caído o
+    el servidor de datos de prueba, que no lo simula), se usa el código tal
+    cual como texto de búsqueda en vez de fallar con 500: Google igual
+    encuentra resultados con "JC" o "00039" en muchos casos, y es preferible
+    una búsqueda degradada a una pantalla rota. El campo `catalogo_disponible`
+    de la respuesta lo indica.
     """
-    nombre_entidad = catalogos_repo.nombre_de_entidad(cod_ent)
+    try:
+        nombre_entidad = catalogos_repo.nombre_de_entidad(cod_ent)
+        nombre_municipio = catalogos_repo.nombre_de_municipio(cod_ent, cod_mun)
+        catalogo_disponible = True
+    except Exception:
+        # Cualquier fallo del catálogo (SQL Server caído, sin permisos, etc.)
+        # degrada la búsqueda en vez de tumbar el endpoint.
+        nombre_entidad = cod_ent
+        nombre_municipio = cod_mun
+        catalogo_disponible = False
+
     if nombre_entidad is None:
         raise HTTPException(400, f'La entidad "{cod_ent}" no está en el catálogo.')
-    nombre_municipio = catalogos_repo.nombre_de_municipio(cod_ent, cod_mun)
 
     try:
         candidatos, consulta = google_maps_service.buscar_candidatos(
@@ -179,6 +195,7 @@ def buscar_fuera_de_red_google_maps(
         "fuente": "Google Maps",
         "area": f"{nombre_municipio}, {nombre_entidad}" if nombre_municipio else nombre_entidad,
         "consulta": consulta,
+        "catalogo_disponible": catalogo_disponible,
         "total": len(candidatos),
         "candidatos": candidatos,
     }

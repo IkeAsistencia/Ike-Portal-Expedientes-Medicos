@@ -108,6 +108,15 @@ def fake_call_procedure(sp_name, params=None):
                 "HorasSinRespuesta": 30,
             }
         ]
+    if sp_name == "dbo.sp_GetMun":
+        # Municipios de la entidad pedida -- solo se simulan los de Jalisco
+        # (los que usa el ejemplo de "Buscar fuera de la red" con Google Maps).
+        if (params or {}).get("CodEnt") == "JC":
+            return [
+                {"CodMD": "00039", "dsMunDel": "Guadalajara", "CodEnt": "JC"},
+                {"CodMD": "00120", "dsMunDel": "Zapopan", "CodEnt": "JC"},
+            ]
+        return []
     if sp_name == "dbo.sp_EncriptDesEncriptPassword":
         if params.get("pUsuario") == "ijimenez" and params.get("pContraseña") == "clave123":
             return [{"clUsrApp": 42, "Nombre": "Ignacio Jiménez", "Activo": True}]
@@ -125,6 +134,20 @@ expedientes_repo_module.call_procedure = fake_call_procedure
 catalogos_repo_module.call_procedure = fake_call_procedure
 auth_repo_module.call_procedure = fake_call_procedure
 seguimiento_repo_module.call_procedure_write = fake_call_procedure_write
+
+# listar_entidades() NO usa un SP: lee dbo.cEntFed con SQL directo (ver
+# catalogos_repo.py), así que no pasa por fake_call_procedure. Sin esto, el
+# combo de Estado del Alta de médico y de "Buscar fuera de la red" quedaba
+# vacío en el servidor de prueba.
+def _entidades_demo():
+    return [
+        catalogos_repo_module.EntidadFederativa(clave="JC", descripcion="JALISCO", clave_inegi="14"),
+        catalogos_repo_module.EntidadFederativa(clave="DF", descripcion="CIUDAD DE MEXICO", clave_inegi="09"),
+        catalogos_repo_module.EntidadFederativa(clave="CM", descripcion="CAMPECHE", clave_inegi="04"),
+    ]
+
+
+catalogos_repo_module.listar_entidades = _entidades_demo
 
 from app.main import app  # noqa: E402
 
