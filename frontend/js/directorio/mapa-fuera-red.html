@@ -143,8 +143,18 @@ function render(payload) {
   }
 
   map.invalidateSize();
-  if (pts.length > 1) map.fitBounds(L.latLngBounds(pts).pad(0.4));
-  else if (pts.length === 1) map.setView(pts[0], 14);
+  // Encuadre en el ESTADO que se está buscando, no en los pines: con los
+  // resultados concentrados en una ciudad, ajustar a los pines deja fuera el
+  // resto del estado, que es justo lo que se está explorando (ver
+  // geo-estados.js). Si no llegó el estado, se ajusta a los pines.
+  const est = payload.limites;
+  if (est && typeof est.sur === "number") {
+    map.fitBounds(L.latLngBounds([est.sur, est.oeste], [est.norte, est.este]), { padding: [16, 16] });
+  } else if (pts.length > 1) {
+    map.fitBounds(L.latLngBounds(pts).pad(0.4));
+  } else if (pts.length === 1) {
+    map.setView(pts[0], 14);
+  }
 }
 
 // Solo se aceptan mensajes del propio portal (mismo origen).

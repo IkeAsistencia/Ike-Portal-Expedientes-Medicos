@@ -94,6 +94,27 @@ function coordenada(valor) {
   return Number.isFinite(n) ? n : null;
 }
 
+/* Encuadra el mapa en el ESTADO que se está buscando, no en los pines.
+   Ajustarse a los pines acerca demasiado cuando los resultados se concentran
+   en una ciudad: se pierde de vista el resto del estado, que es justo lo que
+   se está explorando. El estado llega del portal (ver geo-estados.js).
+   Si por lo que sea no llegó, se cae a lo de antes (ajustar a los pines). */
+function encuadrar(limitesPines, limitesEstado) {
+  if (limitesEstado && typeof limitesEstado.sur === "number") {
+    mapa.fitBounds({
+      south: limitesEstado.sur, west: limitesEstado.oeste,
+      north: limitesEstado.norte, east: limitesEstado.este,
+    }, 24);
+    return;
+  }
+  if (limitesPines.getNorthEast().equals(limitesPines.getSouthWest())) {
+    mapa.setCenter(limitesPines.getCenter());
+    mapa.setZoom(14);
+    return;
+  }
+  mapa.fitBounds(limitesPines, 48);
+}
+
 function contenidoFicha(c, indice) {
   const caja = nodo("div", "ficha");
   caja.appendChild(nodo("b", null, (indice + 1) + ". " + (c.nombre || "Sin nombre registrado")));
@@ -168,8 +189,7 @@ function pintar(payload) {
     if (sinCoordenadas) {
       aviso.textContent = sinCoordenadas + " resultado(s) sin coordenadas no aparecen en el mapa.";
     }
-    if (ubicados > 1) mapa.fitBounds(limites, 48);
-    else { mapa.setCenter(limites.getCenter()); mapa.setZoom(14); }
+    encuadrar(limites, payload.limites);
   }
   // Espaciado a propósito: cada vez que el iframe termina de maquetarse, el
   // tamaño cambia y Google necesita que se lo digan para redibujar los pines.

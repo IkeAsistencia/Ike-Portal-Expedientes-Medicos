@@ -33,11 +33,12 @@ import {
   subirDocumentoSolicitud, quitarDocumentoSolicitud, descargarDocumentoSolicitud,
   clavesDeUbicacion,
   cargarAgenda, agendarCita, cargarExpedientesParaCita,
-  cargarEntidadesAltaReal, cargarMunicipiosAltaReal,
+  cargarEntidadesAltaReal, cargarMunicipiosAltaReal, entidadesAltaCache,
   buscarFueraDeRed, buscarFueraDeRedGoogle, configuracionMapa, resolverBusquedaDeExpediente,
   cargarEspecialidadesKpi, olvidarEspecialidadesKpi, todasLasEspecialidades,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
+import { LIMITES_ESTADOS } from "../directorio/geo-estados.js";
 import {
   revisarFormularioAlta, RESTRICCIONES_ALTA, DOCUMENTOS_ALTA, bloqueHorarioVacio, DOCUMENTO_TIPOS_PERMITIDOS, DOCUMENTO_TAMANO_MAXIMO,
 } from "../directorio/validacion-alta.js";
@@ -370,6 +371,20 @@ function enviarConfigMapa() {
   marcoMapaFuera.contentWindow.postMessage({ type: "config-mapa", llave: configMapa.llave, map_id: configMapa.mapId }, location.origin);
 }
 
+/* Límites del estado que se está buscando, para que el mapa se encuadre en
+   él en vez de ajustarse solo a los pines: con los resultados concentrados
+   en una ciudad, ajustar a los pines deja el resto del estado fuera de vista
+   y no se ve dónde más hay consultorios.
+   La llave es la del INEGI (ver geo-estados.js); el CodEnt del catálogo es
+   otra cosa ("JC" para Jalisco), así que se traduce con el catálogo. */
+function limitesDelEstadoBuscado() {
+  const codEnt = estado.fueraForm.codEnt;
+  if (!codEnt) return null;
+  const entidad = entidadesAltaCache().find(x => String(x.clave) === String(codEnt));
+  const clave = entidad && entidad.clave_inegi;
+  return clave ? (LIMITES_ESTADOS[String(clave)] || null) : null;
+}
+
 function enviarMapaFuera() {
   if (!marcoMapaFuera || !marcoMapaFuera.contentWindow) return;
   const datos = estado.fueraResultados;
@@ -378,6 +393,7 @@ function enviarMapaFuera() {
     type: "candidatos",
     area: datos.area,
     fuente: datos.fuente,
+    limites: limitesDelEstadoBuscado(),
     candidatos: (datos.candidatos || []).map(c => ({
       nombre: c.nombre, direccion: c.direccion, calificacion: c.calificacion,
       total_calificaciones: c.total_calificaciones, abierto_ahora: c.abierto_ahora,
