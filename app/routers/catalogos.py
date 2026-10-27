@@ -51,7 +51,7 @@ def entidades():
     está dando de alta a UN médico, siempre hace falta una entidad puntual.
 
     Trae además `clave_inegi` (la clave de entidad del INEGI, dos dígitos),
-    que es la que pide el DENUE en la búsqueda fuera de la red."""
+    que usa el frontend para encuadrar el mapa de "Buscar fuera de la red"."""
     return catalogos_repo.listar_entidades()
 
 

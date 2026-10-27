@@ -34,7 +34,7 @@ import {
   clavesDeUbicacion,
   cargarAgenda, agendarCita, cargarExpedientesParaCita,
   cargarEntidadesAltaReal, cargarMunicipiosAltaReal, entidadesAltaCache,
-  buscarFueraDeRed, buscarFueraDeRedGoogle, configuracionMapa, resolverBusquedaDeExpediente,
+  buscarFueraDeRedGoogle, configuracionMapa, resolverBusquedaDeExpediente,
   cargarEspecialidadesKpi, olvidarEspecialidadesKpi, todasLasEspecialidades,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
@@ -57,7 +57,6 @@ const PLANTILLA = `
   </div>`;
 
 const RUTA_MAPA = "js/directorio/mapa-zona.html";
-const RUTA_MAPA_FUERA = "js/directorio/mapa-fuera-red.html";
 const RUTA_MAPA_GOOGLE = "js/directorio/mapa-google.html";
 const MAX_RECIENTES = 5;
 const MAX_COMPARAR = 3;
@@ -105,12 +104,9 @@ function estadoInicial() {
     // Ya se intentó enviar: a partir de ahí el RFC muestra su error aunque
     // todavía esté corto (antes de eso solo se muestra al tener 12 o más).
     altaIntento: false, enviandoAlta: false,
-    // Búsqueda fuera de la red (candidatos del DENUE o de Google Maps, a
-    // elegir -- ver datos.js). No se guardan: viven solo en este estado
-    // mientras dura la consulta. fueraOrigen decide cuál de las dos fuentes
-    // se usa; "denue" por default porque es gratis y no requiere llave.
+    // Búsqueda fuera de la red (candidatos de Google Maps, ver datos.js). No
+    // se guardan: viven solo en este estado mientras dura la consulta.
     fueraForm: { codEnt: "", codMun: "", especialidad: "" },
-    fueraOrigen: "denue",
     fueraResultados: null, fueraBuscando: false, fueraError: null,
     // Vista de los resultados: "mapa" (default) o "lista".
     fueraVista: "mapa",
@@ -226,7 +222,7 @@ function pintar() {
     montarMapaFuera();
     // La llave del navegador se pide en cuanto se va a usar el mapa de
     // Google (nunca antes: si el usuario solo mira la lista, no se pide).
-    if (estado.fueraOrigen === "google" && !configMapa.cargada) cargarConfigMapa();
+    if (!configMapa.cargada) cargarConfigMapa();
   } else {
     marcoMapaFuera = null;
   }
@@ -323,32 +319,19 @@ function enviarMapa() {
 
 /* ---------- Mapa de "Buscar fuera de la red" ----------
    Mismo patrón que el mapa de la zona (iframe + postMessage), pero con los
-   CANDIDATOS de la búsqueda, que no son proveedores del portal.
+   CANDIDATOS de la búsqueda (Google Maps), que no son proveedores del
+   portal.
 
-   Son DOS archivos según la fuente, y no es capricho: los Términos de
-   Servicio de Google (Maps Service Specific Terms, 14.2) prohíben usar
-   contenido de la Places API sobre un mapa que no sea de Google. Los
-   candidatos de Google salen de Places API -> mapa de Google. Los del DENUE
-   son datos abiertos del INEGI -> Leaflet, que no cuesta ni pide llave.
-
-   Se crea al pintar la vista Mapa y se destruye al volver a Lista o al
-   cambiar de fuente, para no dejar un iframe vivo cargando una librería
-   que ya no se usa. */
-function rutaMapaFuera() {
-  return estado.fueraOrigen === "google" ? RUTA_MAPA_GOOGLE : RUTA_MAPA_FUERA;
-}
-
+   Se crea al pintar la vista Mapa y se destruye al volver a Lista, para no
+   dejar un iframe vivo cargando una librería que ya no se usa. */
 function montarMapaFuera() {
   const zona = $("dp-fuera-mapa");
   if (!zona) { marcoMapaFuera = null; return; }
-  const ruta = rutaMapaFuera();
   // El mapa de Google no puede arrancar sin su llave, y la llave llega por
   // una consulta al servidor: se espera a tenerla antes de crear el iframe.
-  if (ruta === RUTA_MAPA_GOOGLE && !configMapa.cargada) return;
+  if (!configMapa.cargada) return;
   const marcoActual = zona.querySelector("iframe");
-  // Mismo tipo de mapa ya montado: solo se le manda la lista nueva (no se
-  // recarga, que en Google Maps volvería a cargar la librería completa).
-  if (marcoActual && marcoActual.dataset.mapa === ruta) {
+  if (marcoActual) {
     marcoMapaFuera = marcoActual;
     enviarMapaFuera();
     return;
@@ -356,18 +339,16 @@ function montarMapaFuera() {
   marcoMapaFuera = document.createElement("iframe");
   marcoMapaFuera.title = "Mapa de candidatos fuera de la red";
   marcoMapaFuera.className = "dp-mapa-marco";
-  marcoMapaFuera.dataset.mapa = ruta;
   marcoMapaFuera.addEventListener("load", () => { enviarConfigMapa(); enviarMapaFuera(); });
-  marcoMapaFuera.src = ruta;
+  marcoMapaFuera.src = RUTA_MAPA_GOOGLE;
   zona.replaceChildren(marcoMapaFuera);
 }
 
 /* El mapa de Google necesita la llave del NAVEGADOR, que no está escrita en
    el HTML (ver GET /directorio-proveedores/configuracion-mapa): se pide aquí
-   y se le pasa al iframe. El de Leaflet la ignora. */
+   y se le pasa al iframe. */
 function enviarConfigMapa() {
   if (!marcoMapaFuera || !marcoMapaFuera.contentWindow) return;
-  if (marcoMapaFuera.dataset.mapa !== RUTA_MAPA_GOOGLE) return;
   marcoMapaFuera.contentWindow.postMessage({ type: "config-mapa", llave: configMapa.llave, map_id: configMapa.mapId }, location.origin);
 }
 
@@ -750,9 +731,9 @@ function elegirEspecialidadDelCombo(el) {
   if (encontrada) elegirEspecialidad(encontrada.descripcion, id);
 }
 
-/* ---------- Fuera de la red (candidatos del DENUE) ----------
+/* ---------- Fuera de la red (candidatos de Google Maps) ----------
    Se precarga el catálogo de Entidad al entrar, igual que en el Alta de
-   médico: el DENUE necesita la clave del INEGI, que solo viene de ahí. */
+   médico. */
 function abrirFueraDeRed() {
   // Si se venía de una búsqueda por zona, se arrastra la especialidad para
   // no obligar a volver a escribirla.
@@ -775,8 +756,8 @@ function abrirFueraDeRed() {
    una zona, así que esa zona se arrastra al formulario: obligar a volver a
    elegir estado y municipio invita a buscar en otro lado sin querer.
 
-   El directorio trabaja con nombres ("Yucatán", "Valladolid") y el DENUE con
-   las claves del catálogo real, por eso hay que emparejarlos por nombre. */
+   El directorio trabaja con nombres ("Yucatán", "Valladolid") y el catálogo
+   real con sus propias claves, por eso hay que emparejarlos por nombre. */
 async function preseleccionarZonaFuera({ estado: nombreEntidad, municipio: nombreMunicipio }) {
   const g = generacion;
   const entidades = await cargarEntidadesAltaReal();
@@ -808,18 +789,7 @@ function comparable(texto) {
   return (texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
 }
 
-/* Cambiar de fuente (DENUE <-> Google Maps) limpia el resultado anterior:
-   son dos búsquedas distintas y mostrar el aviso/tabla de la fuente vieja
-   con la fuente nueva seleccionada confundiría al usuario. */
-function elegirFueraOrigen(origen) {
-  if (estado.fueraBuscando || estado.fueraOrigen === origen) return;
-  irA({ fueraOrigen: origen, fueraResultados: null, fueraError: null });
-  // El mapa de Google necesita su llave del navegador: se pide al elegir la
-  // fuente, no al pintar, para que ya esté lista cuando lleguen resultados.
-  if (origen === "google" && !configMapa.cargada) cargarConfigMapa();
-}
-
-/* "Mapa" solo se puede elegir si esta fuente sabe dibujarlo (ver
+/* "Mapa" solo se puede elegir si el mapa de Google está listo (ver
    fueraPuedeMapa en vistas.js). */
 function verMapaFuera() {
   const v = V.calcular(estado);
@@ -834,8 +804,7 @@ async function buscarFuera() {
   irA({ fueraBuscando: true, fueraError: null, fueraResultados: null });
   const g = generacion;
   try {
-    const buscar = estado.fueraOrigen === "google" ? buscarFueraDeRedGoogle : buscarFueraDeRed;
-    const datos = await buscar({ codEnt, codMun, especialidad: especialidad.trim() });
+    const datos = await buscarFueraDeRedGoogle({ codEnt, codMun, especialidad: especialidad.trim() });
     if (g !== generacion) return;
     irA({ fueraResultados: datos, fueraBuscando: false });
   } catch (err) {
@@ -979,11 +948,9 @@ const ACCIONES = {
   "elegir-expediente": elegirExpediente,
   "cambiar-expediente": cambiarExpediente,
 
-  // Fuera de la red (candidatos del DENUE o de Google Maps)
+  // Fuera de la red (candidatos de Google Maps)
   "ir-fuera-de-red": abrirFueraDeRed,
   "buscar-fuera-de-red": buscarFuera,
-  "fuera-origen-denue": () => elegirFueraOrigen("denue"),
-  "fuera-origen-google": () => elegirFueraOrigen("google"),
   "fuera-vista-mapa": verMapaFuera,
   "fuera-vista-lista": () => irA({ fueraVista: "lista" }),
 

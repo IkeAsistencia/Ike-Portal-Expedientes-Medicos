@@ -530,7 +530,7 @@ def test_el_administrador_no_consulta_agenda_ni_busca_fuera_de_la_red(client, pr
     url = f"/directorio-proveedores/{proveedor['clave']}/agenda"
     assert client.get(url, headers=proveedor["admin"]).status_code == 403
     assert client.get(url, headers=proveedor["headers"]).status_code == 200
-    assert client.get("/directorio-proveedores/fuera-de-red", params={"cod_ent": "JC", "especialidad": "Cardio"},
+    assert client.get("/directorio-proveedores/fuera-de-red-google-maps", params={"cod_ent": "JC", "especialidad": "Cardio"},
                       headers=proveedor["admin"]).status_code == 403
     # Lo que sí usa (Métricas lee el padrón y las especialidades).
     assert client.get("/directorio-proveedores", headers=proveedor["admin"]).status_code == 200

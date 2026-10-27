@@ -20,8 +20,8 @@ class EntidadFederativa(CatalogoItemTexto):
     """
     Entidad del combo del Alta de médico. Además del CodEnt que usa el
     sistema central ("JC"), trae la clave numérica del INEGI de dos dígitos
-    ("14"), que es la que pide el DENUE para acotar por área geográfica
-    (ver app/services/denue_service.py).
+    ("14"), que usa el frontend para encuadrar el mapa de "Buscar fuera de
+    la red" (ver geo-estados.js).
     """
 
     clave_inegi: str

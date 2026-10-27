@@ -65,18 +65,14 @@ def listar_entidades() -> list[EntidadFederativa]:
     entidad a dbo.sp_GetMun (ver listar_municipios).
 
     También se trae clEntFed (1 a 32) como `clave_inegi`, con dos dígitos:
-    es la clave de entidad federativa del INEGI, que pide el DENUE para
-    acotar el área geográfica en la búsqueda fuera de la red (ver
-    app/services/denue_service.py). Se lee de la misma tabla en vez de
-    mantener aquí una equivalencia "JC -> 14" a mano, que se desincronizaría
-    en silencio.
+    es la clave de entidad federativa del INEGI, que usa el frontend para
+    encuadrar el mapa de "Buscar fuera de la red" (ver geo-estados.js). Se
+    lee de la misma tabla en vez de mantener aquí una equivalencia
+    "JC -> 14" a mano, que se desincronizaría en silencio.
 
     CONFIRMADO contra la base real (2026-10-20): las 32 entidades coinciden
     una a una con el orden oficial del INEGI (01 Aguascalientes ... 32
-    Zacatecas); JC -> 14 Jalisco, y con CodMD "00039" el área "14039" devuelve
-    Guadalajara en el DENUE. Para volver a revisarlo:
-    GET /directorio-proveedores/fuera-de-red regresa en `area` la clave que
-    armó, así se compara contra el catálogo del INEGI sin leer la base.
+    Zacatecas); JC -> 14 Jalisco.
 
     ÚNICA excepción a "solo Stored Procedures" de este módulo: cEntFed es
     una tabla de catálogo de solo lectura, sin ningún valor interpolado en
@@ -103,25 +99,12 @@ def listar_entidades() -> list[EntidadFederativa]:
     ]
 
 
-def clave_inegi_de_entidad(cod_ent: str) -> str | None:
-    """
-    CodEnt del sistema central ("JC") -> clave de entidad del INEGI ("14"),
-    que es la que necesita el DENUE. None si ese CodEnt no está en el
-    catálogo.
-    """
-    for entidad in listar_entidades():
-        if entidad.clave.upper() == (cod_ent or "").strip().upper():
-            return entidad.clave_inegi
-    return None
-
-
 def nombre_de_entidad(cod_ent: str) -> str | None:
     """
     CodEnt del sistema central ("JC") -> nombre legible ("JALISCO"). Lo
     necesita Google Maps en la búsqueda fuera de la red (ver
     app/services/google_maps_service.py), que busca por texto libre en vez
-    de por clave del INEGI como el DENUE. None si ese CodEnt no está en el
-    catálogo.
+    de por clave. None si ese CodEnt no está en el catálogo.
     """
     for entidad in listar_entidades():
         if entidad.clave.upper() == (cod_ent or "").strip().upper():

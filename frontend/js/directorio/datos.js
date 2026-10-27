@@ -161,7 +161,8 @@ let catalogoReal = null;
 /* Las dos etiquetas de origen del padrón: un proveedor que llegó en el Excel
    oficial tiene convenio con IKE ("Dentro de la red"); uno aprobado en el
    portal es un alta rápida, sin ese proceso formal ("Alta rápida"). "Fuera de
-   la red" queda SOLO para los candidatos del DENUE, que no están en el padrón. */
+   la red" queda SOLO para los candidatos de Google Maps, que no están en el
+   padrón. */
 export const ETIQUETA_DENTRO_DE_LA_RED = "Dentro de la red";
 export const ETIQUETA_ALTA_RAPIDA = "Alta rápida";
 
@@ -505,25 +506,15 @@ export function visible(s) {
   return list.slice().sort(sorters[f.orden] || sorters.nombre);
 }
 
-/* ---------- Búsqueda fuera de la red (DENUE del INEGI) ----------
-   Cuando no hay nadie de la red en esa zona, se ofrecen consultorios del
-   DENUE como CANDIDATOS a contratar -- no son proveedores del portal: no
-   tienen clave PRV-, no se les puede agendar y no se guardan en ningún
-   lado (cada búsqueda va en vivo al INEGI). Para incorporar a uno hay que
-   darlo de alta, con su validación de cédula y la aprobación de un
-   Administrador (ver app/services/denue_service.py). */
-export async function buscarFueraDeRed({ codEnt, codMun, especialidad }) {
-  return api("/directorio-proveedores/fuera-de-red", {
-    params: { cod_ent: codEnt, cod_mun: codMun || undefined, especialidad },
-  });
-}
-
 /* ---------- Búsqueda fuera de la red (Google Maps) ----------
-   Misma idea que buscarFueraDeRed, pero contra Google Maps (Places API):
-   el usuario elige la fuente en la misma pantalla (ver
-   app/services/google_maps_service.py para el porqué de tener las dos).
-   Responde 503 mientras no haya GOOGLE_MAPS_API_KEY en el .env del
-   servidor -- el DENUE sigue funcionando igual en ese caso. */
+   Cuando no hay nadie de la red en esa zona, se ofrecen establecimientos de
+   Google Maps (Places API) como CANDIDATOS a contratar -- no son
+   proveedores del portal: no tienen clave PRV-, no se les puede agendar y
+   no se guardan en ningún lado (cada búsqueda va en vivo a Google, ver
+   app/services/google_maps_service.py). Para incorporar a uno hay que
+   darlo de alta, con su validación de cédula y la aprobación de un
+   Administrador. Responde 503 mientras no haya GOOGLE_MAPS_API_KEY en el
+   .env del servidor. */
 export async function buscarFueraDeRedGoogle({ codEnt, codMun, especialidad }) {
   return api("/directorio-proveedores/fuera-de-red-google-maps", {
     params: { cod_ent: codEnt, cod_mun: codMun || undefined, especialidad },

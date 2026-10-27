@@ -16,7 +16,6 @@ from app.services import (
     agenda_proveedores_service,
     cita_texto_service,
     coordinar_cita_service,
-    denue_service,
     google_maps_service,
 )
 
@@ -124,46 +123,6 @@ def configuracion_mapa():
     }
 
 
-@router.get("/fuera-de-red", dependencies=[Depends(_requerir_proveedor)])
-def buscar_fuera_de_red(
-    cod_ent: str = Query(min_length=1, max_length=5, description="CodEnt de la entidad (ej. JC)"),
-    especialidad: str = Query(min_length=3, max_length=60),
-    cod_mun: str | None = Query(default=None, max_length=10, description="CodMD del municipio (ej. 00039)"),
-):
-    """
-    Candidatos a contratar cuando no hay nadie de la red en esa zona: son
-    consultorios del DENUE (INEGI), NO proveedores del portal.
-
-    No se guarda nada: cada consulta va en vivo al INEGI. Para incorporar a
-    uno hay que darlo de alta por "Alta de médico", con su validación de
-    cédula y la aprobación de un Administrador -- el DENUE solo dice que ahí
-    hay un consultorio, no que esté certificado ni que acepte las tarifas.
-
-    OJO con `tipo_consultado`: el DENUE clasifica por tipo de consultorio, no
-    por especialidad médica, así que la especialidad solo sirve para elegir
-    el tipo (ver app/services/denue_service.py). La pantalla lo avisa.
-    """
-    clave_inegi = catalogos_repo.clave_inegi_de_entidad(cod_ent)
-    if clave_inegi is None:
-        raise HTTPException(400, f'La entidad "{cod_ent}" no está en el catálogo.')
-
-    try:
-        candidatos, tipo = denue_service.buscar_candidatos(clave_inegi, cod_mun, especialidad)
-    except denue_service.DenueNoConfigurado as e:
-        raise HTTPException(503, str(e))
-    except denue_service.ErrorDenue as e:
-        raise HTTPException(502, str(e))
-
-    return {
-        "fuente": "DENUE (INEGI)",
-        "area": denue_service.construir_area(clave_inegi, cod_mun),
-        "tipo_consultado": tipo,
-        "tipo_descripcion": denue_service.ETIQUETA_TIPO.get(tipo, tipo),
-        "total": len(candidatos),
-        "candidatos": candidatos,
-    }
-
-
 @router.get("/fuera-de-red-google-maps", dependencies=[Depends(_requerir_proveedor)])
 def buscar_fuera_de_red_google_maps(
     cod_ent: str = Query(min_length=1, max_length=5, description="CodEnt de la entidad (ej. JC)"),
@@ -171,17 +130,16 @@ def buscar_fuera_de_red_google_maps(
     cod_mun: str | None = Query(default=None, max_length=10, description="CodMD del municipio (ej. 00039)"),
 ):
     """
-    Misma idea que /fuera-de-red (candidatos a contratar, NO proveedores del
-    portal), pero contra Google Maps (Places API) en vez del DENUE -- ver
-    el porqué de las dos fuentes en app/services/google_maps_service.py.
+    Candidatos a contratar cuando no hay nadie de la red en esa zona (NO
+    proveedores del portal), contra Google Maps (Places API) -- ver
+    app/services/google_maps_service.py.
 
-    Usa los mismos parámetros que /fuera-de-red (cod_ent/cod_mun del
-    catálogo del sistema central) para que la pantalla reutilice el mismo
-    formulario; aquí se traducen a nombres legibles porque Google busca por
-    texto libre, no por clave del INEGI.
+    cod_ent/cod_mun vienen del catálogo del sistema central; aquí se
+    traducen a nombres legibles porque Google busca por texto libre, no por
+    clave.
 
     503 si falta GOOGLE_MAPS_API_KEY en el .env (la búsqueda con Google
-    queda apagada, pero el DENUE y el resto del portal siguen igual).
+    queda apagada).
 
     Si el catálogo de entidades no está disponible (ej. SQL Server caído o
     el servidor de datos de prueba, que no lo simula), se usa el código tal

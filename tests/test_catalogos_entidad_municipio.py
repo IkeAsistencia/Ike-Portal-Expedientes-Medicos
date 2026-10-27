@@ -58,7 +58,8 @@ class _FilaCEntFed:
         self.CodEnt = cod_ent
         self.dsEntFed = ds_ent_fed
         # clEntFed (1 a 32) es la clave de entidad del INEGI; se expone como
-        # clave_inegi porque es la que pide el DENUE (ver denue_service.py).
+        # clave_inegi para que el frontend encuadre el mapa de "Buscar fuera
+        # de la red" (ver geo-estados.js).
         self.clEntFed = cl_ent_fed
 
 
@@ -105,8 +106,8 @@ def test_entidades_consulta_centfed_estatico(client, monkeypatch):
 
 
 def test_entidades_traen_la_clave_del_inegi_a_dos_digitos(client, monkeypatch):
-    """clEntFed se expone con dos dígitos porque así la pide el DENUE para
-    acotar el área geográfica ("09", no "9")."""
+    """clEntFed se expone con dos dígitos como lo usa el catálogo del INEGI
+    ("09", no "9")."""
     monkeypatch.setattr(
         catalogos_repo_module, "get_connection",
         _fake_get_connection([_FilaCEntFed("AS", "Aguascalientes", 1)]),

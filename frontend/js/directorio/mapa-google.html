@@ -5,16 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Mapa de candidatos (Google Maps)</title>
 <!--
-  Mapa de la vista "Mapa" de "Buscar fuera de la red" cuando la fuente es
-  Google Maps. Lo abre js/pantallas/directorio-proveedores.js en un iframe y
-  le manda por postMessage los candidatos.
+  Mapa de la vista "Mapa" de "Buscar fuera de la red". Lo abre
+  js/pantallas/directorio-proveedores.js en un iframe y le manda por
+  postMessage los candidatos.
 
-  ¿Por qué Google Maps y no Leaflet como mapa-fuera-red.html?
-  Los Términos de Servicio de Google (Maps Service Specific Terms, 14.2)
-  prohíben mostrar contenido de la Places API sobre un mapa que no sea de
-  Google. Como los candidatos que pinta este mapa SÍ salen de Places API,
-  aquí se usa Maps JavaScript API. El DENUE no tiene esa restricción (datos
-  abiertos del INEGI), así que sigue con Leaflet.
+  Se usa Maps JavaScript API (no Leaflet ni otro visor) porque los Términos
+  de Servicio de Google (Maps Service Specific Terms, 14.2) prohíben
+  mostrar contenido de la Places API sobre un mapa que no sea de Google, y
+  los candidatos que pinta este mapa salen de Places API.
 
   La llave que usa este archivo es la del NAVEGADOR (distinta de la del
   servidor): llega por postMessage desde el portal, no está escrita aquí.

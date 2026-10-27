@@ -398,14 +398,10 @@ export function calcular(s) {
     formMunicipios: municipiosAltaCache(s.form.estado),
     formMunicipiosCargados: municipiosAltaCargados(s.form.estado),
 
-    // Búsqueda fuera de la red (DENUE o Google Maps, a elegir -- ver
-    // fueraOrigen). Usa los catálogos REALES de Entidad y Municipio (los
-    // mismos del Alta de médico), no el catálogo de la pantalla Zona: las
-    // dos fuentes necesitan ese catálogo, no el de Zona (una por la clave
-    // del INEGI, la otra por el nombre legible -- ver
-    // app/services/denue_service.py y app/services/google_maps_service.py).
+    // Búsqueda fuera de la red (Google Maps). Usa los catálogos REALES de
+    // Entidad y Municipio (los mismos del Alta de médico), no el catálogo de
+    // la pantalla Zona -- ver app/services/google_maps_service.py.
     fueraForm: s.fueraForm,
-    fueraOrigen: s.fueraOrigen || "denue",
     fueraEntidades: entidadesAltaCache(),
     fueraEntidadesFallaron: entidadesAltaFallaron(),
     fueraMunicipios: municipiosAltaCache(s.fueraForm.codEnt),
@@ -421,11 +417,10 @@ export function calcular(s) {
     // Vista de los resultados: "mapa" (default) o "lista". El mapa es lo que
     // pidió el usuario para decidir a quién contactar por zona.
     fueraVista: s.fueraVista || "mapa",
-    // ¿Se puede dibujar el mapa de esta fuente? El de Google necesita su
-    // llave del navegador (GOOGLE_MAPS_BROWSER_API_KEY, ver
-    // app/config.py); el del DENUE no necesita nada. Sin llave se oculta la
-    // opción Mapa en vez de mostrar un mapa vacío.
-    fueraPuedeMapa: s.fueraOrigen === "google" ? !!s.mapaGoogleListo : true,
+    // ¿Se puede dibujar el mapa? Necesita la llave del navegador
+    // (GOOGLE_MAPS_BROWSER_API_KEY, ver app/config.py). Sin llave se oculta
+    // la opción Mapa en vez de mostrar un mapa vacío.
+    fueraPuedeMapa: !!s.mapaGoogleListo,
     fueraPuedeBuscar: !!(s.fueraForm.codEnt && (s.fueraForm.especialidad || "").trim().length >= 3),
     // Cédula profesional: solo se revisa el formato (7 u 8 dígitos), mientras
     // se escribe y sin botón. Igual que el RFC, el error espera a que se
@@ -1071,7 +1066,7 @@ export function opcionesEspecialidadAlta(elegida) {
   ).join("");
 }
 
-/* ---------- Fuera de la red (candidatos del DENUE) ---------- */
+/* ---------- Fuera de la red (candidatos de Google Maps) ---------- */
 export function opcionesEntidadFuera(v) {
   if (v.fueraEntidadesFallaron) return `<option value="">No se pudo cargar el catálogo. Reintenta.</option>`;
   return `<option value="">Selecciona un estado</option>`
@@ -1089,85 +1084,26 @@ export function opcionesMunicipioFuera(v) {
     + opcionesCatalogoTexto(v.fueraMunicipios, v.fueraForm.codMun);
 }
 
-/* Lo que explica qué fuente se va a consultar, antes de buscar (v.fueraOrigen
-   decide cuál de las dos se muestra). */
-function _introFuera(v) {
-  if (v.fueraOrigen === "google") {
-    return `
-      <div class="dp-vacio">
-        <p class="dp-vacio-titulo">Elige estado y especialidad</p>
-        <p class="dp-texto">Se consultará Google Maps (Places API): indexa el giro real del negocio (mejor que el INEGI para distinguir especialidades), pero cada búsqueda tiene costo y puede incluir el nombre del médico y reseñas de pacientes.</p>
-      </div>`;
-  }
+function _introFuera() {
   return `
     <div class="dp-vacio">
       <p class="dp-vacio-titulo">Elige estado y especialidad</p>
-      <p class="dp-texto">Se consultará el Directorio Estadístico Nacional de Unidades Económicas (DENUE) del INEGI, que es información pública de establecimientos.</p>
+      <p class="dp-texto">Se consultará Google Maps (Places API): indexa el giro real del negocio, pero cada búsqueda tiene costo y puede incluir el nombre del médico y reseñas de pacientes.</p>
     </div>`;
 }
 
 function _sinResultadosFuera(v) {
-  if (v.fueraOrigen === "google") {
-    return `
-      <div class="dp-vacio">
-        <p class="dp-vacio-titulo">Sin resultados para esa búsqueda</p>
-        <p class="dp-texto">Google Maps no reporta nada para «${e(v.fueraConsulta || v.fueraArea)}». Prueba con el municipio "Todo el estado" o con otro término.</p>
-      </div>`;
-  }
   return `
     <div class="dp-vacio">
-      <p class="dp-vacio-titulo">Sin consultorios para esa búsqueda</p>
-      <p class="dp-texto">El INEGI no reporta ${e(v.fueraTipo || "consultorios")} en el área ${e(v.fueraArea)}. Prueba con el municipio "Todo el estado".</p>
+      <p class="dp-vacio-titulo">Sin resultados para esa búsqueda</p>
+      <p class="dp-texto">Google Maps no reporta nada para «${e(v.fueraConsulta || v.fueraArea)}». Prueba con el municipio "Todo el estado" o con otro término.</p>
     </div>`;
 }
 
-function _tablaDenue(v) {
-  return `
-    <div class="dp-aviso-candidatos">
-      <span class="badge pendiente">Fuera de la red</span>
-      <p class="dp-texto">
-        ${e(String(v.fueraCandidatos.length))} establecimiento(s) según ${e(v.fueraFuente)} · área ${e(v.fueraArea)}.
-        <b>No son proveedores del portal:</b> no tienen clave, no se les puede agendar y sus datos no se guardan.
-        El INEGI registra el establecimiento, no al médico -- por eso no trae cédula, costo ni convenio.
-      </p>
-      ${v.fueraTipo ? `<p class="dp-texto dp-aviso-alcance">
-        <b>Se buscaron ${e(v.fueraTipo)}.</b> El INEGI no clasifica por especialidad médica:
-        cardiología, pediatría, dermatología y las demás comparten el mismo giro, así que
-        <b>hay que confirmar la especialidad al contactarlos</b>. Los que mencionan el término
-        buscado en su nombre aparecen primero.
-      </p>` : ""}
-    </div>
-    <div class="table-wrap">
-      <table class="mini-table">
-        <thead>
-          <tr><th>Establecimiento</th><th>Giro registrado</th><th>Domicilio</th><th>Contacto</th></tr>
-        </thead>
-        <tbody>
-          ${v.fueraCandidatos.map(c => `
-            <tr>
-              <td data-label="Establecimiento">
-                <div class="dp-fuerte">${e(c.nombre || "Sin nombre registrado")}</div>
-                ${c.razon_social ? `<div class="dp-muted">${e(c.razon_social)}</div>` : ""}
-              </td>
-              <td data-label="Giro registrado">${e(c.especialidad || "—")}</td>
-              <td data-label="Domicilio">
-                <div>${e(c.calle_num_ext_int || "—")}</div>
-                <div class="dp-muted">${e([c.colonia, c.codigo_postal ? "C.P. " + c.codigo_postal : "", c.ubicacion].filter(Boolean).join(" · "))}</div>
-              </td>
-              <td data-label="Contacto">
-                <div>${e(c.telefono || "Sin teléfono")}</div>
-                ${c.email ? `<div class="dp-muted">${e(c.email)}</div>` : ""}
-              </td>
-            </tr>`).join("")}
-        </tbody>
-      </table>
-    </div>`;
-}
-
-/* A diferencia del DENUE, Google no regresa teléfono en esta búsqueda (eso
-   costaría una consulta de "Place Details" por cada candidato -- ver el
-   porqué en app/services/google_maps_service.py): en su lugar se da un
-   enlace directo a la ficha del lugar en Google Maps. */
+/* Google no regresa teléfono en esta búsqueda (eso costaría una consulta de
+   "Place Details" por cada candidato -- ver el porqué en
+   app/services/google_maps_service.py): en su lugar se da un enlace directo
+   a la ficha del lugar en Google Maps. */
 function _tablaGoogle(v) {
   return `
     <div class="dp-aviso-candidatos">
@@ -1175,8 +1111,7 @@ function _tablaGoogle(v) {
       <p class="dp-texto">
         ${e(String(v.fueraCandidatos.length))} establecimiento(s) según ${e(v.fueraFuente)} · área ${e(v.fueraArea)}.
         <b>No son proveedores del portal:</b> no tienen clave, no se les puede agendar y sus datos no se guardan.
-        Esta búsqueda tiene costo por consulta y puede mostrar el nombre del médico y reseñas de pacientes
-        (a diferencia del DENUE, que solo registra el establecimiento).
+        Esta búsqueda tiene costo por consulta y puede mostrar el nombre del médico y reseñas de pacientes.
       </p>
       <p class="dp-texto dp-aviso-alcance">
         No se trae el teléfono directo para no multiplicar el costo por cada candidato: usa
@@ -1210,8 +1145,7 @@ function _tablaGoogle(v) {
 
 export function fueraResultadosCuerpo(v) {
   if (v.fueraBuscando) {
-    const fuenteTexto = v.fueraOrigen === "google" ? "Google Maps" : "el directorio del INEGI";
-    return `<div class="spinner-row">Consultando ${e(fuenteTexto)}…</div>`;
+    return `<div class="spinner-row">Consultando Google Maps…</div>`;
   }
   if (v.fueraError) {
     return `
@@ -1241,41 +1175,26 @@ export function fueraResultadosCuerpo(v) {
   // Sin llave del navegador el mapa de Google no puede dibujarse: se explica
   // por qué se está mostrando la lista, en vez de dejar el botón "Mapa"
   // apagado sin razón aparente.
-  const notaSinMapa = (!v.fueraPuedeMapa && v.fueraOrigen === "google")
+  const notaSinMapa = !v.fueraPuedeMapa
     ? `<p class="dp-texto dp-nota">El mapa de Google no está configurado en este servidor,
        así que los resultados se muestran en lista.</p>` : "";
 
   const contenido = verMapa
     ? `<div class="dp-mapa" id="dp-fuera-mapa"></div>`
-    : (v.fueraOrigen === "google" ? _tablaGoogle(v) : _tablaDenue(v));
+    : _tablaGoogle(v);
 
   return selector + notaSinMapa + contenido;
 }
 
 export function pantallaFueraDeRed(v) {
-  const esGoogle = v.fueraOrigen === "google";
   return `
     ${encabezado({
       volver: "← Volver al directorio", accionVolver: "ir-inicio",
       titulo: "Buscar fuera de la red",
-      texto: "Establecimientos candidatos a contratar cuando la red no tiene cobertura en una zona. Es información pública: para incorporar a alguien hay que darlo de alta y validar su cédula profesional.",
-      // El alcance real de cada fuente (tipo de consultorio del DENUE o el
-      // costo/alcance de Google) se explica abajo y en el aviso de resultados.
+      texto: "Establecimientos candidatos a contratar cuando la red no tiene cobertura en una zona. Es información pública (Google Maps): para incorporar a alguien hay que darlo de alta y validar su cédula profesional.",
     })}
     <div class="card tono-azul">
       <div class="card-body">
-        <div class="field dp-campo">
-          <label>Buscar en</label>
-          <div class="dp-seg" role="group" aria-label="Fuente de la búsqueda">
-            <button type="button" class="dp-seg-opcion${esGoogle ? "" : " dp-sel"}" data-accion="fuera-origen-denue"${v.fueraBuscando ? " disabled" : ""}>DENUE (INEGI) · gratis</button>
-            <button type="button" class="dp-seg-opcion${esGoogle ? " dp-sel" : ""}" data-accion="fuera-origen-google"${v.fueraBuscando ? " disabled" : ""}>Google Maps</button>
-          </div>
-          <span class="dp-nota">
-            ${esGoogle
-              ? "Google indexa el giro real del negocio (mejor señal por especialidad), pero cada búsqueda tiene costo y puede traer nombre del médico y reseñas de pacientes."
-              : "El INEGI es gratuito y solo registra establecimientos (no personas), pero agrupa por tipo de consultorio, no por especialidad médica."}
-          </span>
-        </div>
         <div class="dp-grid-campos">
           <div class="field dp-campo">
             <label for="dp-fr-estado">Estado</label>
@@ -1290,11 +1209,7 @@ export function pantallaFueraDeRed(v) {
           <div class="field dp-campo">
             <label for="dp-fr-esp">Especialidad o término de búsqueda</label>
             <input type="text" id="dp-fr-esp" data-campo-fuera="especialidad" placeholder="cardiología" value="${e(v.fueraForm.especialidad)}" autocomplete="off">
-            <span class="dp-nota">
-              ${esGoogle
-                ? "Se busca de forma literal (\"cardiología en ...\"); entre más preciso el término, mejores resultados."
-                : "El INEGI agrupa por tipo de consultorio, no por especialidad: las especialidades médicas devuelven \"consultorios de medicina especializada\". Odontología, psicología, nutrición, optometría y terapia sí tienen giro propio."}
-            </span>
+            <span class="dp-nota">Se busca de forma literal ("cardiología en ..."); entre más preciso el término, mejores resultados.</span>
           </div>
         </div>
         <div class="dp-acciones dp-enviar">

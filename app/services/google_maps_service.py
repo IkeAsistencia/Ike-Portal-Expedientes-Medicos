@@ -1,26 +1,16 @@
 """
-Búsqueda FUERA DE LA RED contra Google Maps (Places API), como alternativa
-al DENUE del INEGI (ver app/services/denue_service.py) dentro de la misma
+Búsqueda FUERA DE LA RED contra Google Maps (Places API) dentro de la
 pantalla del Directorio de Proveedores.
 
-Para qué: igual que con el DENUE, cuando el padrón no tiene nadie de la red
-para una especialidad y una zona, esto ofrece establecimientos de esa zona
-como CANDIDATOS a contratar -- no como proveedores del portal.
+Para qué: cuando el padrón no tiene nadie de la red para una especialidad y
+una zona, esto ofrece establecimientos de esa zona como CANDIDATOS a
+contratar -- no como proveedores del portal.
 
-Por qué una alternativa y no un reemplazo del DENUE:
-  - El DENUE es gratis y clasifica por ESTABLECIMIENTO (no por persona): es
-    la opción por default, sin costo y con menor exposición de datos
-    personales (ver el porqué detallado en denue_service.py).
-  - Google Maps sí indexa el giro real del negocio (buscar "cardiólogo"
-    regresa cardiólogos, no "consultorios de medicina especializada" en
-    general como el DENUE) y trae señales útiles para decidir a quién
-    contactar primero (calificación, si está abierto). A cambio: cada
-    consulta tiene costo (requiere una llave de Google Cloud con
-    facturación activa) y los resultados sí pueden traer el nombre del
-    médico y reseñas de pacientes -- más exposición de datos personales
-    que el DENUE.
-  - Por eso la pantalla deja elegir la fuente en cada búsqueda, en vez de
-    sustituir una por la otra.
+Google Maps indexa el giro real del negocio (buscar "cardiólogo" regresa
+cardiólogos) y trae señales útiles para decidir a quién contactar primero
+(calificación, si está abierto). A cambio: cada consulta tiene costo
+(requiere una llave de Google Cloud con facturación activa) y los
+resultados pueden traer el nombre del médico y reseñas de pacientes.
 
 ⚠️ Se usa **Places API (New)** (`places:searchText`), NO la versión legacy
 (`maps/api/place/textsearch`). Comprobado contra la llave real del proyecto
@@ -32,8 +22,7 @@ nuevos -- solo la (New). Si algún día se migra de vuelta, hay que habilitar
 Por qué Text Search y no Nearby Search: Nearby Search exige coordenadas
 (lat/lng) del centro de búsqueda, que este portal no tiene por municipio;
 Text Search acepta un texto libre ("cardiólogo en Mérida, Yucatán, México")
-y es Google quien resuelve la zona -- mismo nivel de información que ya
-maneja el DENUE con entidad/municipio, sin necesitar geocodificación aparte.
+y es Google quien resuelve la zona, sin necesitar geocodificación aparte.
 
 Por qué NO se trae el teléfono real de cada resultado: Google Places solo
 regresa teléfono/sitio web con una llamada de "Place Details" POR CADA
@@ -47,12 +36,11 @@ El `X-Goog-FieldMask` es obligatorio en la API nueva y además define el
 costo: solo se piden los campos que la pantalla muestra (nada de fotos,
 reseñas ni teléfonos), que es la SKU más barata de Text Search.
 
-Nada de lo que regresa se guarda: cada búsqueda consulta en vivo (misma
-decisión que con el DENUE, 2026-10-20). Un resultado de aquí tampoco entra
-al padrón automáticamente: un candidato se vuelve proveedor pasando por
-"Alta de médico", con su validación de cédula y la aprobación de un
-Administrador -- Google solo dice que ahí hay un lugar con ese giro, no que
-esté certificado ni que acepte las tarifas.
+Nada de lo que regresa se guarda: cada búsqueda consulta en vivo. Un
+resultado de aquí tampoco entra al padrón automáticamente: un candidato se
+vuelve proveedor pasando por "Alta de médico", con su validación de cédula
+y la aprobación de un Administrador -- Google solo dice que ahí hay un
+lugar con ese giro, no que esté certificado ni que acepte las tarifas.
 
 Documentación: https://developers.google.com/maps/documentation/places/web-service/text-search
 """
@@ -122,25 +110,20 @@ def construir_consulta(especialidad: str, nombre_entidad: str, nombre_municipio:
 
 def _a_candidato(lugar: dict) -> dict:
     """
-    Un resultado de Google con una forma parecida a la del DENUE (ver
-    denue_service._a_candidato), para reusar el mismo tipo de tarjeta en la
-    pantalla, con sus propios campos donde la fuente es distinta.
-
     Traduce los nombres de campo de la API NUEVA (displayName.text,
     formattedAddress, userRatingCount, currentOpeningHours.openNow,
     location.latitude/longitude) a los que ya usa la pantalla.
 
     Lo que NO se inventa: no hay cédula, costo de consulta, convenio ni
-    teléfono -- igual que con el DENUE, se deja fuera en vez de rellenarlo
-    con algo que después nadie podría distinguir de un dato real.
+    teléfono -- se deja fuera en vez de rellenarlo con algo que después
+    nadie podría distinguir de un dato real.
     """
     ubicacion = lugar.get("location") or {}
     apertura = lugar.get("currentOpeningHours") or {}
     place_id = (lugar.get("id") or "").strip()
     return {
-        # Identificador de Google, NO una clave del portal -- igual que
-        # id_denue, para que sea imposible confundirlo con un proveedor ya
-        # dado de alta.
+        # Identificador de Google, NO una clave del portal, para que sea
+        # imposible confundirlo con un proveedor ya dado de alta.
         "place_id": place_id,
         "nombre": ((lugar.get("displayName") or {}).get("text") or "").strip(),
         "direccion": (lugar.get("formattedAddress") or "").strip(),

@@ -53,37 +53,25 @@ class Settings(BaseSettings):
     # dinámico en cascada del combo Servicio, vía dbo.sp_GetSubServicios2)
     cuentas_permitidas: Optional[str] = "2819,2868,1366,2806,2654,1519"
 
-    # --- Búsqueda fuera de la red: DENUE del INEGI (ver app/services/denue_service.py) ---
-    # Token gratuito que se tramita en https://www.inegi.org.mx/servicios/api_denue.html
-    # Mientras no se configure, la búsqueda fuera de la red queda apagada y
-    # el endpoint responde 503 con un mensaje claro (no truena la pantalla).
-    denue_token: Optional[str] = None
-    denue_timeout_segundos: float = 8.0
-    # Tope de candidatos por consulta -- el DENUE pagina por rango de
-    # registros y no tiene caso traer cientos a una pantalla de prospección.
-    denue_maximo_resultados: int = 50
-
-    # --- Búsqueda fuera de la red (alternativa): Google Maps (Places API) ---
+    # --- Búsqueda fuera de la red: Google Maps (Places API) ---
     # Llave de un proyecto de Google Cloud con la "Places API" habilitada Y
     # con facturación activa (Google no la deja usar sin eso, aunque haya
     # crédito mensual gratuito) -- ver
     # https://developers.google.com/maps/documentation/places/web-service/get-api-key
-    # Mientras no se configure, esta alternativa queda apagada (el DENUE
-    # sigue funcionando igual) y el endpoint responde 503 con un mensaje
-    # claro -- ver app/services/google_maps_service.py.
+    # Mientras no se configure, la búsqueda fuera de la red queda apagada y
+    # el endpoint responde 503 con un mensaje claro -- ver
+    # app/services/google_maps_service.py.
     google_maps_api_key: Optional[str] = None
     google_maps_timeout_segundos: float = 8.0
-    # Tope de candidatos a mostrar -- a diferencia del DENUE, Google cobra
-    # por CONSULTA (no por resultado), así que esto solo recorta lo que
-    # llega en una sola página de respuesta (máximo 20), no ahorra costo.
+    # Tope de candidatos a mostrar -- Google cobra por CONSULTA (no por
+    # resultado), así que esto solo recorta lo que llega en una sola página
+    # de respuesta (máximo 20), no ahorra costo.
     google_maps_maximo_resultados: int = 20
 
     # --- Mapa de los resultados de Google (Maps JavaScript API) ---
     # Los Términos de Servicio de Google (Maps Service Specific Terms, 14.2)
     # prohíben mostrar contenido de la Places API sobre un mapa que no sea
-    # de Google. Por eso los resultados de Google se pintan con Maps
-    # JavaScript API y los del DENUE con Leaflet (esos no tienen esa
-    # restricción: son datos abiertos del INEGI).
+    # de Google. Por eso los resultados se pintan con Maps JavaScript API.
     #
     # Esto obliga a una SEGUNDA llave, distinta de google_maps_api_key: ésta
     # viaja al navegador, así que debe estar restringida por dominio
@@ -136,7 +124,7 @@ class Settings(BaseSettings):
     # pruebas automatizadas o si algún cliente externo lo vuelve a necesitar.
     login_legado_habilitado: bool = False
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     @property
     def connection_string(self) -> str:
@@ -157,10 +145,6 @@ class Settings(BaseSettings):
     @property
     def smtp_configurado(self) -> bool:
         return bool(self.smtp_host and self.smtp_remitente)
-
-    @property
-    def denue_configurado(self) -> bool:
-        return bool(self.denue_token and self.denue_token.strip())
 
     @property
     def google_maps_configurado(self) -> bool:

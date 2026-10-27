@@ -3,9 +3,8 @@ Pruebas de la búsqueda FUERA DE LA RED alternativa
 (GET /directorio-proveedores/fuera-de-red-google-maps), que consulta la
 Places API (New) de Google Maps.
 
-NO pega a Google de verdad: se sustituye httpx.post por respuestas simuladas,
-igual que tests/test_denue_fuera_de_red.py sustituye la del INEGI. Así las
-pruebas corren sin llave, sin red y sin gastar cuota de Google.
+NO pega a Google de verdad: se sustituye httpx.post por respuestas simuladas.
+Así las pruebas corren sin llave, sin red y sin gastar cuota de Google.
 """
 import pytest
 from fastapi.testclient import TestClient
@@ -341,9 +340,8 @@ def test_especialidad_demasiado_corta_se_rechaza(client):
 # ---------- Permisos ----------
 
 def test_solo_el_proveedor_busca_fuera_de_la_red_con_google(client, monkeypatch):
-    """Misma restricción que /fuera-de-red (DENUE), decisión del usuario
-    (2026-10-26): del directorio, el Administrador solo usa Solicitudes,
-    Alta de médico, Carga del catálogo y Métricas."""
+    """Decisión del usuario (2026-10-26): del directorio, el Administrador
+    solo usa Solicitudes, Alta de médico, Carga del catálogo y Métricas."""
     _responder(monkeypatch, RespuestaFalsa(200, {"places": [LUGAR_GOOGLE]}))
     parametros = {"cod_ent": "JC", "especialidad": "cardiologia"}
     r_proveedor = client.get("/directorio-proveedores/fuera-de-red-google-maps", params=parametros, headers=_proveedor(client))
