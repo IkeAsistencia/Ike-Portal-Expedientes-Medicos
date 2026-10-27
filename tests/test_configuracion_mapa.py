@@ -43,6 +43,11 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setenv("LOCAL_DB_PATH", str(tmp_path / "test_local.db"))
     monkeypatch.setenv("JWT_SECRET_KEY", "clave-de-prueba")
     monkeypatch.setenv("GOOGLE_MAPS_API_KEY", LLAVE_SERVIDOR)
+    # Sin esto, la variable del .env del desarrollador se filtra a las pruebas
+    # (Settings lee .env además del entorno) y el caso "sin configurar" falla
+    # en cuanto alguien tenga la llave puesta para probar el mapa.
+    monkeypatch.setenv("GOOGLE_MAPS_BROWSER_API_KEY", "")
+    monkeypatch.setenv("GOOGLE_MAPS_MAP_ID", "")
 
     from app.config import get_settings
 
