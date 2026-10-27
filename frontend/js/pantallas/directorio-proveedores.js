@@ -56,12 +56,14 @@ const PLANTILLA = `
   </div>`;
 
 const RUTA_MAPA = "js/directorio/mapa-zona.html";
+const RUTA_MAPA_FUERA = "js/directorio/mapa-fuera-red.html";
 const MAX_RECIENTES = 5;
 const MAX_COMPARAR = 3;
 
 let raiz = null;
 let modalFicha = null;
 let marcoMapa = null;    // <iframe> del mapa (solo existe con la vista Mapa en Resultados)
+let marcoMapaFuera = null; // <iframe> del mapa de "Buscar fuera de la red"
 let generacion = 0;      // al reiniciar se incrementa: los setTimeout pendientes ya no aplican
 let estado = estadoInicial();
 
@@ -108,6 +110,8 @@ function estadoInicial() {
     fueraForm: { codEnt: "", codMun: "", especialidad: "" },
     fueraOrigen: "denue",
     fueraResultados: null, fueraBuscando: false, fueraError: null,
+    // Vista de los resultados: "mapa" (default) o "lista".
+    fueraVista: "mapa",
     // Aviso de "Coordinar cita" (ver core/coordinar-cita.js): dónde se detuvo
     // la búsqueda y si conviene ofrecer buscar fuera de la red.
     coordNota: "", coordFuera: false,
@@ -211,6 +215,13 @@ function pintar() {
   marcarInvalidosAlta();
   restaurarFoco(foco);
   enviarMapa();
+  // El mapa de "Buscar fuera de la red" solo existe en la vista Mapa; en
+  // Lista se destruye (ver fueraResultadosCuerpo en vistas.js).
+  if (estado.screen === "fuera" && estado.fueraVista === "mapa" && estado.fueraResultados) {
+    montarMapaFuera();
+  } else {
+    marcoMapaFuera = null;
+  }
 }
 
 /* Tras intentar enviar, marca en rojo los campos del alta que faltan o están
@@ -298,6 +309,43 @@ function enviarMapa() {
       price: d.price, origen: d.origen,
       // Coordenadas reales del padrón (null si el proveedor no las trae).
       latitud: d.latitud, longitud: d.longitud,
+    })),
+  }, location.origin);
+}
+
+/* ---------- Mapa de "Buscar fuera de la red" ----------
+   Mismo patrón que el mapa de la zona (iframe + postMessage), pero con los
+   CANDIDATOS de la búsqueda (DENUE o Google Maps), que no son proveedores
+   del portal. Se crea al pintar la vista Mapa y se destruye al volver a
+   Lista, para no dejar un iframe vivo con Leaflet cargado de más. */
+function montarMapaFuera() {
+  const zona = $("dp-fuera-mapa");
+  if (!zona) { marcoMapaFuera = null; return; }
+  if (marcoMapaFuera && marcoMapaFuera.parentElement === zona) {
+    enviarMapaFuera();
+    return;
+  }
+  marcoMapaFuera = document.createElement("iframe");
+  marcoMapaFuera.title = "Mapa de candidatos fuera de la red";
+  marcoMapaFuera.className = "dp-mapa-marco";
+  marcoMapaFuera.addEventListener("load", enviarMapaFuera);
+  marcoMapaFuera.src = RUTA_MAPA_FUERA;
+  zona.appendChild(marcoMapaFuera);
+}
+
+function enviarMapaFuera() {
+  if (!marcoMapaFuera || !marcoMapaFuera.contentWindow) return;
+  const datos = estado.fueraResultados;
+  if (!datos) return;
+  marcoMapaFuera.contentWindow.postMessage({
+    type: "candidatos",
+    area: datos.area,
+    fuente: datos.fuente,
+    candidatos: (datos.candidatos || []).map(c => ({
+      nombre: c.nombre, direccion: c.direccion, calificacion: c.calificacion,
+      total_calificaciones: c.total_calificaciones, abierto_ahora: c.abierto_ahora,
+      enlace_maps: c.enlace_maps, origen: c.origen,
+      latitud: c.latitud, longitud: c.longitud,
     })),
   }, location.origin);
 }
@@ -853,6 +901,8 @@ const ACCIONES = {
   "buscar-fuera-de-red": buscarFuera,
   "fuera-origen-denue": () => elegirFueraOrigen("denue"),
   "fuera-origen-google": () => elegirFueraOrigen("google"),
+  "fuera-vista-mapa": () => irA({ fueraVista: "mapa" }),
+  "fuera-vista-lista": () => irA({ fueraVista: "lista" }),
 
   // Inicio y zona
   "buscar": () => buscar(estado.query),

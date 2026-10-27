@@ -418,6 +418,9 @@ export function calcular(s) {
     fueraConsulta: s.fueraResultados ? (s.fueraResultados.consulta || "") : "",
     fueraCandidatos: s.fueraResultados ? s.fueraResultados.candidatos : [],
     fueraTipo: s.fueraResultados ? (s.fueraResultados.tipo_descripcion || "") : "",
+    // Vista de los resultados: "mapa" (default) o "lista". El mapa es lo que
+    // pidió el usuario para decidir a quién contactar por zona.
+    fueraVista: s.fueraVista || "mapa",
     fueraPuedeBuscar: !!(s.fueraForm.codEnt && (s.fueraForm.especialidad || "").trim().length >= 3),
     // Cédula profesional: solo se revisa el formato (7 u 8 dígitos), mientras
     // se escribe y sin botón. Igual que el RFC, el error espera a que se
@@ -1214,7 +1217,23 @@ export function fueraResultadosCuerpo(v) {
   }
   if (!v.fueraBuscado) return _introFuera(v);
   if (!v.fueraCandidatos.length) return _sinResultadosFuera(v);
-  return v.fueraOrigen === "google" ? _tablaGoogle(v) : _tablaDenue(v);
+
+  // Selector Lista / Mapa: el mapa es la vista por default porque ubicar los
+  // consultorios en la zona es lo que más ayuda a decidir a quién contactar.
+  const selector = `
+    <div class="dp-acciones dp-fuera-vista">
+      <div class="dp-seg" role="group" aria-label="Vista de resultados">
+        <button type="button" class="dp-seg-opcion${v.fueraVista === "mapa" ? " dp-sel" : ""}" data-accion="fuera-vista-mapa">Mapa</button>
+        <button type="button" class="dp-seg-opcion${v.fueraVista === "lista" ? " dp-sel" : ""}" data-accion="fuera-vista-lista">Lista</button>
+      </div>
+      <span class="dp-nota">${e(String(v.fueraCandidatos.length))} resultado(s) · ${e(v.fueraArea)}</span>
+    </div>`;
+
+  const contenido = v.fueraVista === "mapa"
+    ? `<div class="dp-mapa" id="dp-fuera-mapa"></div>`
+    : (v.fueraOrigen === "google" ? _tablaGoogle(v) : _tablaDenue(v));
+
+  return selector + contenido;
 }
 
 export function pantallaFueraDeRed(v) {
