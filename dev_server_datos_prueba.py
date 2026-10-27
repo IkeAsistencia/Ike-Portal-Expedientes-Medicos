@@ -172,16 +172,37 @@ def _sembrar_estatus_demo():
     estatus_repo.actualizar_estatus(1002, EstatusExpediente.SEGUIMIENTO_CITA, "ADMI000001")
 
 
+def preparar_datos_prueba(password: str = "Qwer1234$") -> None:
+    """
+    Deja el servidor de prueba listo para usarse: crea las tablas de la base
+    local, da de alta los tres usuarios y siembra los estatus de los
+    expedientes de demo.
+
+    Es idempotente y se llama al arrancar. Antes habia que acordarse de
+    correr init_local_db() a mano si se borraba data/app_local.db, y si se
+    olvidaba el portal tronaba con "no such table: usuarios_acceso" (login)
+    o "no such table: cuentas_etiqueta" (Expedientes).
+    """
+    from app.db.local_store import init_local_db
+    from scripts.seed_usuarios_prueba import ejecutar as seed_usuarios_prueba
+
+    init_local_db()
+    seed_usuarios_prueba(password)
+    _sembrar_estatus_demo()
+
+
 from app.main import app  # noqa: E402
 
 if __name__ == "__main__":
-    from scripts.seed_usuarios_prueba import USUARIOS_PRUEBA, ejecutar as seed_usuarios_prueba
+    from scripts.seed_usuarios_prueba import USUARIOS_PRUEBA
 
     # Contraseña común de prueba (este servidor solo sirve datos inventados).
-    seed_usuarios_prueba(password="Qwer1234$")
-    _sembrar_estatus_demo()
+    preparar_datos_prueba()
     print("Servidor de DATOS DE PRUEBA (sin SQL Server) en http://127.0.0.1:8000")
     print("RFC de prueba: " + ", ".join(f"{rfc} ({nombre})" for rfc, nombre, *_ in USUARIOS_PRUEBA))
     print("Contraseña de prueba para los tres: Qwer1234$")
     print("Abre http://127.0.0.1:8000 en tu navegador para probarlo.")
-    uvicorn.run(app, host="127.0.0.1", port=8000, log_level="info")
+    # HOST configurable: dentro de Docker hay que escuchar en 0.0.0.0 para
+    # que el puerto publicado (-p 8000:8000) llegue al contenedor; en la
+    # máquina local 127.0.0.1 es lo correcto (no expone el puerto a la red).
+    uvicorn.run(app, host=os.environ.get("HOST", "127.0.0.1"), port=8000, log_level="info")
