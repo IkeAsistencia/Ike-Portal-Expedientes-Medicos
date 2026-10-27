@@ -62,8 +62,8 @@ def listar():
     frontend/js/directorio/datos.js):
       - origen='catalogo' -> llegó en la carga de Excel ("Dentro de la red":
         tiene convenio con IKE).
-      - origen='portal'   -> se dio de alta aquí ("Alta rápida": aprobado en
-        el portal, sin el proceso formal de convenio).
+      - origen='portal'   -> se dio de alta aquí ("Fuera de la red": aprobado
+        en el portal, sin el proceso formal de convenio).
     Todos traen `clave` (PRV-000001), que es con lo que se agenda una cita:
     no cambia entre cargas, así que las citas nunca quedan huérfanas.
     El frontend busca/filtra sobre esta lista en el navegador.

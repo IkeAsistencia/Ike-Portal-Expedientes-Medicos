@@ -76,11 +76,11 @@ export function calcularSugerencias(s) {
 }
 
 /* El KPI que lleva cada tarjeta de especialidad: cuántos proveedores del
-   padrón hay dentro de la red (Excel oficial, con convenio) y cuántos son
-   alta rápida (aprobados en el portal). El servidor los manda como
-   dentro_de_red / fuera_de_red. Los conteos son reales -- salen de amarrar
-   cada proveedor a una especialidad del catálogo, ver
-   app/repositories/especialidades_repo.py.
+   padrón hay dentro de la red (Excel oficial, con convenio) y cuántos están
+   fuera de la red (aprobados en el portal, sin ese proceso formal todavía).
+   El servidor los manda como dentro_de_red / fuera_de_red. Los conteos son
+   reales -- salen de amarrar cada proveedor a una especialidad del catálogo,
+   ver app/repositories/especialidades_repo.py.
 
    Una especialidad en 0 no se esconde: se marca "Sin proveedores" y se deja
    clickeable, porque justo esa es la que hay que salir a contratar (ahí
@@ -89,7 +89,7 @@ function kpiEspecialidad(x) {
   const dentro = Number(x.dentro_de_red) || 0;
   const fuera = Number(x.fuera_de_red) || 0;
   if (dentro + fuera === 0) return "Sin proveedores";
-  return dentro + " dentro de la red · " + fuera + " alta rápida";
+  return dentro + " dentro de la red · " + fuera + " fuera de la red";
 }
 
 function tarjetaEspecialidad(x, i) {
@@ -329,7 +329,7 @@ export function calcular(s) {
     // "Zonas cubiertas" salían de una cifra generada, y había un KPI de
     // "Importados de Google" que nunca importó nada).
     kpis: [
-      { label: "Proveedores en el padrón", value: String(totalPadron), note: dentroDeRed + " dentro de la red · " + fueraDeRed + " alta rápida", icono: "personas", clase: "kpi-total" },
+      { label: "Proveedores en el padrón", value: String(totalPadron), note: dentroDeRed + " dentro de la red · " + fueraDeRed + " fuera de la red", icono: "personas", clase: "kpi-total" },
       { label: "Municipios con cobertura", value: String(municipiosCubiertos), note: coverageRaw.length + (coverageRaw.length === 1 ? " estado" : " estados"), icono: "ubicacion", clase: "kpi-cita" },
       { label: "Solicitudes en revisión", value: String(pending), note: s.requests.length + " solicitudes totales", icono: "expediente", clase: "kpi-proceso" },
       { label: "Especialidades con proveedor", value: String(especialidadesConProveedor) + " de " + (catalogoEsp.total || 0), note: "Del catálogo de especialidades", icono: "expediente", clase: "kpi-seguimiento" }
@@ -483,8 +483,9 @@ function enlaceVerificar(url, valor, que, texto) {
     title="Copia el ${e(que)} y abre el sitio oficial en otra pestaña">${e(texto)} ↗</a>`;
 }
 /* Color del distintivo según de dónde salió el proveedor: "Dentro de la red"
-   (Excel oficial, con convenio) en verde, "Alta rápida" (aprobado en el
-   portal) en ámbar, para que se note de un vistazo cuál tiene convenio. */
+   (Excel oficial, con convenio) en verde, "Fuera de la red" (aprobado en el
+   portal, sin ese proceso formal todavía) en ámbar, para que se note de un
+   vistazo cuál tiene convenio. */
 const clasePorOrigen = (origen) => (origen === "portal" ? "pendiente" : "seguimiento");
 
 /* "Volver": al directorio para el Proveedor; a Solicitudes para el
@@ -766,8 +767,8 @@ export function listaResultados(v) {
       <div class="dp-medico-principal">
         <div class="dp-medico-nombre">
           <span class="dp-origen-punto ${d.origen === "portal" ? "portal" : "catalogo"}" title="${e(d.source)}"></span>
-          <h3>${e(d.name)}</h3>
           <span class="badge ${clasePorOrigen(d.origen)}">${e(d.source)}</span>
+          <h3>${e(d.name)}</h3>
           ${d.tele ? `<span class="badge espera">Teleconsulta</span>` : ""}
         </div>
         <p class="dp-nota">${e(d.specialty)} · Cédula ${e(d.cedula)} · ${e(d.convenio)}</p>

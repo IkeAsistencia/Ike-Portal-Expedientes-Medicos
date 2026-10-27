@@ -6,8 +6,8 @@
    con el backend (ver js/directorio/datos.js):
      - Búsqueda/resultados: leen el padrón real, con los dos orígenes
        juntos -- "Dentro de la red" (llegó en la carga de Excel que sube
-       Administrador) y "Alta rápida" (alta aprobada en este portal, sin el
-       proceso formal de convenio con IKE).
+       Administrador) y "Fuera de la red" (alta aprobada en este portal, sin
+       el proceso formal de convenio con IKE).
      - Alta de médico / Solicitudes: la solicitud, su estatus y su
        aprobación quedan guardados en este portal (nunca en el sistema
        central); al aprobarse, el médico entra al padrón con su propia

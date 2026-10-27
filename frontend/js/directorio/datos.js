@@ -3,8 +3,8 @@
    YA ESTÁ CONECTADO AL BACKEND:
      - Búsqueda y resultados: leen el padrón real (GET /directorio-proveedores),
        con los dos orígenes juntos -- "Dentro de la red" (llegó en el Excel
-       oficial: tiene convenio con IKE) y "Alta rápida" (aprobada en el portal,
-       sin el proceso formal de convenio).
+       oficial: tiene convenio con IKE) y "Fuera de la red" (aprobada en el
+       portal, sin el proceso formal de convenio).
      - Alta de médico y sus solicitudes: se guardan de verdad; al aprobarse,
        el médico entra al padrón con su propia clave (PRV-000001).
      - Citas: se agendan contra esa clave y quedan registradas; los horarios
@@ -160,11 +160,10 @@ let catalogoReal = null;
 
 /* Las dos etiquetas de origen del padrón: un proveedor que llegó en el Excel
    oficial tiene convenio con IKE ("Dentro de la red"); uno aprobado en el
-   portal es un alta rápida, sin ese proceso formal ("Alta rápida"). "Fuera de
-   la red" queda SOLO para los candidatos de Google Maps, que no están en el
-   padrón. */
+   portal, sin ese proceso formal, cuenta como "Fuera de la red" hasta que
+   llegue en una carga de Excel (ver mapearProveedor abajo). */
 export const ETIQUETA_DENTRO_DE_LA_RED = "Dentro de la red";
-export const ETIQUETA_ALTA_RAPIDA = "Alta rápida";
+export const ETIQUETA_FUERA_DE_LA_RED = "Fuera de la red";
 
 /* Domicilio DONDE DA LA CONSULTA, en el orden que se pidió:
    calle con números, colonia y código postal. */
@@ -215,7 +214,7 @@ function mapearProveedor(row) {
     codigoPostal: row.codigo_postal || "",
     latitud: row.latitud ?? null,
     longitud: row.longitud ?? null,
-    source: esPortal ? ETIQUETA_ALTA_RAPIDA : ETIQUETA_DENTRO_DE_LA_RED,
+    source: esPortal ? ETIQUETA_FUERA_DE_LA_RED : ETIQUETA_DENTRO_DE_LA_RED,
     origen: esPortal ? "portal" : "catalogo",
   };
 }
@@ -289,7 +288,7 @@ export async function cargarCatalogoReal() {
 /* ---------- Alta de médico (ver pantallas/directorio-proveedores.js) ----------
    La solicitud y su estatus quedan SOLO en este portal (nunca se mandan al
    sistema central). Al aprobarse, el médico entra al padrón con su propia
-   clave y queda como "Alta rápida" hasta que llegue en una carga de Excel:
+   clave y queda como "Fuera de la red" hasta que llegue en una carga de Excel:
    ahí el MISMO renglón pasa a "Dentro de la red" conservando su clave, así
    que sus citas no se pierden.
 
