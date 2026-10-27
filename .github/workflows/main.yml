@@ -106,7 +106,7 @@ jobs:
       - name: Cerrar puerto 22
         if: ${{ always() && steps.abrir_ssh.outputs.rule_id != '' }}
         env:
-          SECURITY_GROUP_ID: ${{ secrets.SECURITY_GROUP_ID }}
+          SECURITY_GROUP_ID: ${{ secrets.SECURITY_GROUP_ID_PROD }}
           RULE_ID: ${{ steps.abrir_ssh.outputs.rule_id }}
         run: |
           set -euo pipefail
