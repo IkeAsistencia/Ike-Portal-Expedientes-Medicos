@@ -79,7 +79,7 @@ jobs:
           port: ${{ secrets.PORTPROD }}
           key: ${{ secrets.SSHKEYPROD }}
           source: "package/*"
-          target: "/home/ubuntu/Ike-Portal-Expedientes-Medicos"
+          target: "/var/www/Ike-Portal-Expedientes-Medicos"
           rm: false
           overwrite: true
 
