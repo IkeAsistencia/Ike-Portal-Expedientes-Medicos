@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mapa de candidatos (Google Maps)</title>
+<!--
+  Mapa de la vista "Mapa" de "Buscar fuera de la red" cuando la fuente es
+  Google Maps. Lo abre js/pantallas/directorio-proveedores.js en un iframe y
+  le manda por postMessage los candidatos.
+
+  ¿Por qué Google Maps y no Leaflet como mapa-fuera-red.html?
+  Los Términos de Servicio de Google (Maps Service Specific Terms, 14.2)
+  prohíben mostrar contenido de la Places API sobre un mapa que no sea de
+  Google. Como los candidatos que pinta este mapa SÍ salen de Places API,
+  aquí se usa Maps JavaScript API. El DENUE no tiene esa restricción (datos
+  abiertos del INEGI), así que sigue con Leaflet.
+
+  La llave que usa este archivo es la del NAVEGADOR (distinta de la del
+  servidor): llega por postMessage desde el portal, no está escrita aquí.
+-->
+<link rel="stylesheet" href="../../css/base.css">
+<style>
+  html, body { margin: 0; height: 100%; background: var(--white); }
+  #map { position: absolute; inset: 0; }
+  #fallback {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    padding: 24px; text-align: left; font-size: 13px; line-height: 1.5; color: var(--text-secondary);
+    background: var(--gray-bg);
+  }
+  /* Tarjeta del popup: se arma a mano (InfoWindow acepta nodos, no solo
+     texto) para que el enlace "Ver en Google Maps" sea un enlace real y
+     funcione con teclado. */
+  .ficha { font-family: var(--font, system-ui, sans-serif); font-size: 12.5px; line-height: 1.45; max-width: 260px; }
+  .ficha b { display: block; font-size: 13px; color: var(--navy); margin-bottom: 4px; }
+  .ficha .dato { color: var(--text-secondary); }
+  .ficha .estrella { color: #b06000; font-weight: 600; }
+  .ficha a { color: var(--blue); }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="fallback"></div>
+<script>
+// Se evita `innerHTML` con datos de Google: el texto del lugar lo escribe
+// cualquiera en Google Maps, así que se arma con nodos y `textContent`.
+function nodo(etiqueta, clase, texto) {
+  const el = document.createElement(etiqueta);
+  if (clase) el.className = clase;
+  if (texto !== undefined && texto !== null) el.textContent = String(texto);
+  return el;
+}
+
+let mapa = null, marcadores = [], infoWindows = [];
+let llave = null, mapId = null;
+let pendiente = null, arrancando = false;
+
+function mostrarAviso(texto) {
+  const aviso = document.getElementById("fallback");
+  aviso.textContent = texto;
+  aviso.style.display = "flex";
+}
+
+/* Carga Maps JavaScript API una sola vez. Se pide `libraries=marker` porque
+   los pines numerados usan AdvancedMarkerElement: sin él, los marcadores
+   saldrían con el globo rojo genérico, sin el número que cruza mapa y lista.
+
+   OJO con `loading=async`: con ese parámetro el <script> termina de cargar
+   ANTES de que google.maps.importLibrary() exista, así que el evento `load`
+   por sí solo no sirve para saber cuándo ya se puede usar la API. Se usa el
+   parámetro `callback` (el patrón que documenta Google): el propio Maps llama
+   a esa función cuando ya está todo listo. */
+let carga = null;
+function cargarApi() {
+  if (carga) return carga;
+  carga = new Promise((resolver, rechazar) => {
+    const alEstarListo = "__mapaGoogleListo";
+    window[alEstarListo] = () => { delete window[alEstarListo]; resolver(); };
+    const params = new URLSearchParams({
+      key: llave, v: "weekly", libraries: "marker", loading: "async",
+      callback: alEstarListo, language: "es", region: "MX",
+    });
+    const script = document.createElement("script");
+    script.src = "https://maps.googleapis.com/maps/api/js?" + params.toString();
+    script.async = true;
+    script.onerror = () => { delete window[alEstarListo]; rechazar(); };
+    document.head.appendChild(script);
+  });
+  return carga;
+}
+
+function coordenada(valor) {
+  const n = typeof valor === "number" ? valor : parseFloat(valor);
+  return Number.isFinite(n) ? n : null;
+}
+
+function contenidoFicha(c, indice) {
+  const caja = nodo("div", "ficha");
+  caja.appendChild(nodo("b", null, (indice + 1) + ". " + (c.nombre || "Sin nombre registrado")));
+  if (c.direccion) caja.appendChild(nodo("div", "dato", c.direccion));
+  if (c.calificacion != null) {
+    caja.appendChild(nodo("div", "estrella",
+      "★ " + c.calificacion + " (" + (c.total_calificaciones || 0) + " reseñas)"));
+  }
+  if (c.abierto_ahora === true) caja.appendChild(nodo("div", "dato", "Abierto ahora"));
+  else if (c.abierto_ahora === false) caja.appendChild(nodo("div", "dato", "Cerrado ahora"));
+  if (c.enlace_maps) {
+    const enlace = nodo("a", null, "Ver en Google Maps");
+    enlace.href = c.enlace_maps;
+    enlace.target = "_blank";
+    enlace.rel = "noopener noreferrer";
+    caja.appendChild(enlace);
+  }
+  return caja;
+}
+
+function pintar(payload) {
+  if (!mapa) { pendiente = payload; return; }
+
+  marcadores.forEach(m => { m.map = null; });
+  infoWindows.forEach(w => w.close());
+  marcadores = [];
+  infoWindows = [];
+
+  const AdvancedMarkerElement = google.maps.marker.AdvancedMarkerElement;
+  const list = Array.isArray(payload.candidatos) ? payload.candidatos : [];
+  const limites = new google.maps.LatLngBounds();
+  let ubicados = 0, sinCoordenadas = 0;
+
+  list.forEach((c, i) => {
+    const lat = coordenada(c.latitud);
+    const lng = coordenada(c.longitud);
+    // Sin coordenadas no se dibuja: mejor un mapa con menos pines que uno
+    // que los coloca donde no están.
+    if (lat === null || lng === null) { sinCoordenadas++; return; }
+
+    // Pin propio con el número, para cruzar mapa <-> lista. AdvancedMarker
+    // exige Map ID, así que sin uno configurado se usa DEMO_MAP_ID.
+    const pin = document.createElement("div");
+    pin.textContent = String(i + 1);
+    pin.style.cssText = "background:#1a73e8;color:#fff;width:26px;height:26px;border-radius:50%;" +
+      "display:flex;align-items:center;justify-content:center;font:700 12px system-ui,sans-serif;" +
+      "border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4);";
+
+    const marcador = new AdvancedMarkerElement({
+      map: mapa, position: { lat, lng }, title: c.nombre || "", content: pin,
+    });
+    const info = new google.maps.InfoWindow({ content: contenidoFicha(c, i) });
+    // AdvancedMarkerElement es un elemento del DOM: su evento se escucha con
+    // addEventListener, no con addListener (que es para objetos de la API).
+    marcador.addEventListener("gmp-click", () => {
+      infoWindows.forEach(w => w.close());
+      info.open({ map: mapa, anchor: marcador });
+    });
+    marcadores.push(marcador);
+    infoWindows.push(info);
+    limites.extend({ lat, lng });
+    ubicados++;
+  });
+
+  const aviso = document.getElementById("fallback");
+  if (!ubicados) {
+    mostrarAviso(list.length
+      ? "Ninguno de los " + list.length + " resultados de esta búsqueda trae coordenadas, así que no se pueden ubicar en el mapa."
+      : "No hay resultados que mostrar en el mapa.");
+  } else {
+    aviso.style.display = "none";
+    if (sinCoordenadas) {
+      aviso.textContent = sinCoordenadas + " resultado(s) sin coordenadas no aparecen en el mapa.";
+    }
+    if (ubicados > 1) mapa.fitBounds(limites, 48);
+    else { mapa.setCenter(limites.getCenter()); mapa.setZoom(14); }
+  }
+  // Espaciado a propósito: cada vez que el iframe termina de maquetarse, el
+  // tamaño cambia y Google necesita que se lo digan para redibujar los pines.
+  [0, 120, 400].forEach(ms => setTimeout(avisarTamano, ms));
+}
+
+async function arrancar() {
+  // El portal puede mandar "config-mapa" más de una vez (al cargar el iframe
+  // y al repintar). Sin esta guarda se crearía un SEGUNDO mapa sobre el mismo
+  // div: los pines quedarían atados al mapa viejo, ya fuera del DOM, y la
+  // pantalla se vería vacía aunque el código no reporte ningún error.
+  if (mapa || arrancando) return;
+  if (!llave) {
+    mostrarAviso("Falta configurar la llave del navegador (GOOGLE_MAPS_BROWSER_API_KEY) para dibujar el mapa de Google. Los resultados se pueden ver en la vista de lista.");
+    return;
+  }
+  arrancando = true;
+  try {
+    await cargarApi();
+    await google.maps.importLibrary("maps");
+    await google.maps.importLibrary("marker");
+  } catch (e) {
+    arrancando = false;
+    mostrarAviso("No fue posible cargar Google Maps. Revisa la conexión y que la llave tenga permitido este dominio.");
+    return;
+  }
+  mapa = new google.maps.Map(document.getElementById("map"), {
+    center: { lat: 23.2, lng: -100.5 }, zoom: 5,
+    mapId: mapId || "DEMO_MAP_ID",
+    mapTypeControl: false, streetViewControl: false, fullscreenControl: true,
+    // Los atajos de teclado mueven el mapa al hacer scroll: se dejan
+    // apagados para no "robar" el scroll de la página en móvil.
+    keyboardShortcuts: false, gestureHandling: "greedy",
+  });
+  // Dentro de un iframe, Google Maps se inicializa antes de que el navegador
+  // termine de darle tamaño al contenedor: sin este aviso el mapa puede
+  // quedarse "en blanco" y los AdvancedMarkerElement no se dibujan, aunque el
+  // código no reporte ningún error. Se avisa ahora y en cada cambio de tamaño.
+  avisarTamano();
+  if (typeof ResizeObserver === "function") {
+    new ResizeObserver(() => avisarTamano())
+      .observe(document.getElementById("map"));
+  }
+  if (pendiente) { const p = pendiente; pendiente = null; pintar(p); }
+}
+
+/* Le avisa a Google que el contenedor cambió de tamaño. Hace falta también un
+   par de veces después de arrancar: dentro de un iframe recién insertado, el
+   mapa se inicializa con tamaño 0 y los pines quedan "creados" pero sin
+   dibujar (marcadores.length es correcto y el DOM está vacío). */
+function avisarTamano() {
+  if (mapa) google.maps.event.trigger(mapa, "resize");
+}
+
+window.addEventListener("message", (e) => {
+  if (e.origin !== location.origin) return;
+  const d = e.data || {};
+  if (d.type === "config-mapa") {
+    llave = d.llave || null;
+    mapId = d.map_id || null;
+    arrancar();
+  } else if (d.type === "candidatos") {
+    pintar(d);
+  }
+});
+window.addEventListener("resize", () => { if (mapa) google.maps.event.trigger(mapa, "resize"); });
+window.addEventListener("load", () => {
+  if (window.parent !== window) window.parent.postMessage({ type: "mapa-listo" }, location.origin);
+});
+</script>
+</body>
+</html>

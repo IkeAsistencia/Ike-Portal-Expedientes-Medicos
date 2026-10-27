@@ -79,7 +79,8 @@ volumen persistente y respaldado.
 | Salida | TCP 1533 | SQL Server de SISE (**no es el 1433 estándar**; es el que usa SISE hoy) |
 | Salida | TCP 587 | SMTP corporativo |
 | Salida | TCP 443 | API del DENUE (`www.inegi.org.mx`) |
-| Salida | TCP 443 | Places API de Google Maps (`maps.googleapis.com`), solo si se activa la alternativa de la sección 3.5 |
+| Salida | TCP 443 | Places API de Google Maps (`places.googleapis.com`), solo si se activa la alternativa de la sección 3.5 |
+| Salida (navegador del usuario) | TCP 443 | `maps.googleapis.com`, para pintar el mapa de Google (sección 3.5.1). La consume el navegador, no el servidor |
 
 **Configuración del ALB y CloudFront:**
 
@@ -145,6 +146,35 @@ incluir el nombre del médico y reseñas de pacientes -- revisar con
 cumplimiento/legal antes de activarla si eso es relevante para la empresa.
 Tampoco es indispensable para operar: mientras no se configure, el DENUE
 sigue cubriendo la misma necesidad sin costo.
+
+#### 3.5.1 Mapa de los resultados (segunda llave)
+
+Los **Términos de Servicio** de Google prohíben mostrar contenido de la
+Places API sobre un mapa que no sea de Google (*Maps Service Specific Terms*,
+sección 14.2: *"Customer must not use Google Maps Content from the Places API
+in conjunction with a non-Google map"*). Por eso los resultados de Google se
+pintan con **Maps JavaScript API**, mientras que los del DENUE usan Leaflet
+(los datos del INEGI no tienen esa restricción y así no cuestan nada).
+
+Eso obliga a una **segunda llave**, distinta de la anterior:
+
+| Variable | Dónde vive | Restricción obligatoria |
+|---|---|---|
+| `GOOGLE_MAPS_API_KEY` | Solo el servidor (nunca sale al navegador) | Restringir por IP del servidor y limitar a **Places API (New)** |
+| `GOOGLE_MAPS_BROWSER_API_KEY` | **Viaja al navegador** | Restringir por **dominio (HTTP referrers)** y limitar a **Maps JavaScript API** |
+
+Si la segunda llave no se configura, la búsqueda con Google sigue funcionando
+normal: los resultados se muestran en lista y el botón "Mapa" no aparece (el
+portal explica por qué). El DENUE conserva su mapa siempre.
+
+| Requerimiento | Detalle | Si falta |
+|---|---|---|
+| `GOOGLE_MAPS_BROWSER_API_KEY` | Llave restringida por dominio, solo con Maps JavaScript API | Degrada: los resultados de Google se ven en lista; el resto funciona igual |
+| `GOOGLE_MAPS_MAP_ID` | Opcional: Map ID del estilo (Cloud Console > Map Management) | Se usa `DEMO_MAP_ID`, válido para desarrollo pero no para producción |
+| Cargas de mapa | 10,000 cargas/mes sin costo; después ≈ USD $7 por 1,000 | Hay costo sólo si se rebasa el tope mensual |
+
+Referencias: [seguridad de llaves](https://developers.google.com/maps/api-security-best-practices)
+y [precios](https://developers.google.com/maps/billing-and-pricing/pricing).
 
 ### 3.6 Software en el servidor
 
@@ -339,7 +369,8 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE`, `SMTP_USAR_TLS` | Del SMTP corporativo | Sin ellos, los correos solo se registran en el log |
 | `SMTP_DESTINATARIO_PRUEBA` | **Vacío en producción** | Si queda con valor, los correos se desvían a ese buzón |
 | `DENUE_TOKEN` | Token del INEGI | Sin él se apaga la búsqueda fuera de la red (fuente DENUE) |
-| `GOOGLE_MAPS_API_KEY` | Llave de Google Cloud con la Places API habilitada y facturación activa (opcional, sección 3.5) | Sin ella se apaga la alternativa de Google Maps; el DENUE sigue funcionando igual |
+| `GOOGLE_MAPS_API_KEY` | Llave de Google Cloud con la Places API habilitada y facturación activa (opcional, sección 3.5). Solo la usa el servidor | Sin ella se apaga la alternativa de Google Maps; el DENUE sigue funcionando igual |
+| `GOOGLE_MAPS_BROWSER_API_KEY` | Llave **distinta**, restringida por dominio y solo con Maps JavaScript API (sección 3.5.1) | Los resultados de Google se muestran en lista en vez de mapa |
 | `PROXIES_CONFIABLES` | `2` con CloudFront + ALB; `1` si solo hay ALB | Un número mal puesto rompe el conteo de intentos de login |
 | `CORS_ALLOWED_ORIGINS` | **Vacío** | Con valor, otros sitios podrían llamar a la API desde el navegador |
 | `GRAPHQL_IDE_HABILITADO` | **`false`** | Con `true` queda expuesto el explorador de GraphQL |
@@ -368,6 +399,7 @@ al arrancar a que corra con una configuración que nadie quiso.
 | 3 | Abrir un expediente del listado | Trae datos reales de SISE (confirma los Stored Procedures y los permisos) |
 | 4 | Cabina manda un correo a un proveedor de prueba | **Llega de verdad**, no solo al log |
 | 5 | Buscar en el Directorio **fuera de la red**, con las dos fuentes (DENUE y, si se activó, Google Maps) | Devuelve resultados. Si dice "no configurada", falta el `DENUE_TOKEN` o el `GOOGLE_MAPS_API_KEY` según la fuente; si da error de conexión, falta el NAT |
+| 5b | Ver los resultados **en el mapa** (ambas fuentes) | Google pinta con Google Maps y el DENUE con Leaflet. Si Google muestra un mapa gris con "For development purposes only", la llave no tiene restricción/facturación correcta |
 | 6 | Subir un comprobante de ~4 MB | Se guarda (confirma el límite de carga del ALB) |
 | 7 | `journalctl -u portal-expedientes -n 100` | Sin errores |
 | 8 | Esperar al siguiente cambio de hora y revisar `job.log` | El job corrió y dejó su registro |

@@ -78,6 +78,24 @@ class Settings(BaseSettings):
     # llega en una sola página de respuesta (máximo 20), no ahorra costo.
     google_maps_maximo_resultados: int = 20
 
+    # --- Mapa de los resultados de Google (Maps JavaScript API) ---
+    # Los Términos de Servicio de Google (Maps Service Specific Terms, 14.2)
+    # prohíben mostrar contenido de la Places API sobre un mapa que no sea
+    # de Google. Por eso los resultados de Google se pintan con Maps
+    # JavaScript API y los del DENUE con Leaflet (esos no tienen esa
+    # restricción: son datos abiertos del INEGI).
+    #
+    # Esto obliga a una SEGUNDA llave, distinta de google_maps_api_key: ésta
+    # viaja al navegador, así que debe estar restringida por dominio
+    # (HTTP referrers) y solo con "Maps JavaScript API" habilitada. La de
+    # arriba nunca sale del servidor.
+    # https://developers.google.com/maps/api-security-best-practices
+    google_maps_browser_api_key: Optional[str] = None
+    # Map ID del estilo del mapa (Cloud Console > Map Management). Es
+    # opcional: sin uno, Google usa "DEMO_MAP_ID", que sirve para desarrollo
+    # pero no para producción (no tiene estilo propio ni se puede personalizar).
+    google_maps_map_id: Optional[str] = None
+
     # --- Correo a proveedores (ver app/services/email_service.py) ---
     # Mientras no se configure un SMTP real, el envío queda "simulado"
     # (se registra en el log pero no se manda un correo de verdad).
@@ -147,6 +165,13 @@ class Settings(BaseSettings):
     @property
     def google_maps_configurado(self) -> bool:
         return bool(self.google_maps_api_key and self.google_maps_api_key.strip())
+
+    @property
+    def google_maps_mapa_configurado(self) -> bool:
+        """Hay llave para pintar el mapa en el navegador. Es independiente de
+        `google_maps_configurado`: se puede buscar con Google y no poder
+        dibujar el mapa (o al revés) -- la pantalla lo maneja por separado."""
+        return bool(self.google_maps_browser_api_key and self.google_maps_browser_api_key.strip())
 
 @lru_cache
 def get_settings() -> "Settings":

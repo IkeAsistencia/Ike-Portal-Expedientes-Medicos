@@ -3,6 +3,7 @@ from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from app.config import get_settings
 from app.core.security import usuario_actual
 from app.repositories import (
     catalogos_repo,
@@ -99,6 +100,27 @@ def listar_especialidades():
         "maximo_tarjetas": corte,
         "tarjetas": tarjetas,
         "combo": [x for x in todas if x["cl_especialidad"] not in claves_en_tarjeta],
+    }
+
+
+@router.get("/configuracion-mapa", dependencies=[Depends(_requerir_proveedor)])
+def configuracion_mapa():
+    """
+    Llave del navegador para pintar el mapa de Google con los resultados de
+    "fuera de la red" (ver frontend/js/directorio/mapa-google.html).
+
+    Esta llave SÍ viaja al navegador -- a diferencia de google_maps_api_key,
+    que solo usa el servidor para consultar Places API. Por eso es una llave
+    distinta, restringida por dominio y limitada a "Maps JavaScript API"
+    (ver el comentario en app/config.py).
+
+    Responde `llave: null` mientras no esté configurada: la pantalla, en ese
+    caso, cae a la vista de lista en vez de mostrar un mapa vacío.
+    """
+    settings = get_settings()
+    return {
+        "llave": settings.google_maps_browser_api_key.strip() if settings.google_maps_mapa_configurado else None,
+        "map_id": settings.google_maps_map_id or None,
     }
 
 

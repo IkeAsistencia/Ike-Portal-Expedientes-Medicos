@@ -421,6 +421,11 @@ export function calcular(s) {
     // Vista de los resultados: "mapa" (default) o "lista". El mapa es lo que
     // pidió el usuario para decidir a quién contactar por zona.
     fueraVista: s.fueraVista || "mapa",
+    // ¿Se puede dibujar el mapa de esta fuente? El de Google necesita su
+    // llave del navegador (GOOGLE_MAPS_BROWSER_API_KEY, ver
+    // app/config.py); el del DENUE no necesita nada. Sin llave se oculta la
+    // opción Mapa en vez de mostrar un mapa vacío.
+    fueraPuedeMapa: s.fueraOrigen === "google" ? !!s.mapaGoogleListo : true,
     fueraPuedeBuscar: !!(s.fueraForm.codEnt && (s.fueraForm.especialidad || "").trim().length >= 3),
     // Cédula profesional: solo se revisa el formato (7 u 8 dígitos), mientras
     // se escribe y sin botón. Igual que el RFC, el error espera a que se
@@ -1220,20 +1225,31 @@ export function fueraResultadosCuerpo(v) {
 
   // Selector Lista / Mapa: el mapa es la vista por default porque ubicar los
   // consultorios en la zona es lo que más ayuda a decidir a quién contactar.
+  // Si esta fuente no puede dibujar mapa (Google sin llave del navegador) el
+  // botón no se pinta: mejor una sola opción real que una que falle.
+  const verMapa = v.fueraVista === "mapa" && v.fueraPuedeMapa;
   const selector = `
     <div class="dp-acciones dp-fuera-vista">
+      ${v.fueraPuedeMapa ? `
       <div class="dp-seg" role="group" aria-label="Vista de resultados">
-        <button type="button" class="dp-seg-opcion${v.fueraVista === "mapa" ? " dp-sel" : ""}" data-accion="fuera-vista-mapa">Mapa</button>
-        <button type="button" class="dp-seg-opcion${v.fueraVista === "lista" ? " dp-sel" : ""}" data-accion="fuera-vista-lista">Lista</button>
-      </div>
+        <button type="button" class="dp-seg-opcion${verMapa ? " dp-sel" : ""}" data-accion="fuera-vista-mapa">Mapa</button>
+        <button type="button" class="dp-seg-opcion${verMapa ? "" : " dp-sel"}" data-accion="fuera-vista-lista">Lista</button>
+      </div>` : ""}
       <span class="dp-nota">${e(String(v.fueraCandidatos.length))} resultado(s) · ${e(v.fueraArea)}</span>
     </div>`;
 
-  const contenido = v.fueraVista === "mapa"
+  // Sin llave del navegador el mapa de Google no puede dibujarse: se explica
+  // por qué se está mostrando la lista, en vez de dejar el botón "Mapa"
+  // apagado sin razón aparente.
+  const notaSinMapa = (!v.fueraPuedeMapa && v.fueraOrigen === "google")
+    ? `<p class="dp-texto dp-nota">El mapa de Google no está configurado en este servidor,
+       así que los resultados se muestran en lista.</p>` : "";
+
+  const contenido = verMapa
     ? `<div class="dp-mapa" id="dp-fuera-mapa"></div>`
     : (v.fueraOrigen === "google" ? _tablaGoogle(v) : _tablaDenue(v));
 
-  return selector + contenido;
+  return selector + notaSinMapa + contenido;
 }
 
 export function pantallaFueraDeRed(v) {

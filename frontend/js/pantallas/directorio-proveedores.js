@@ -34,7 +34,7 @@ import {
   clavesDeUbicacion,
   cargarAgenda, agendarCita, cargarExpedientesParaCita,
   cargarEntidadesAltaReal, cargarMunicipiosAltaReal,
-  buscarFueraDeRed, buscarFueraDeRedGoogle, resolverBusquedaDeExpediente,
+  buscarFueraDeRed, buscarFueraDeRedGoogle, configuracionMapa, resolverBusquedaDeExpediente,
   cargarEspecialidadesKpi, olvidarEspecialidadesKpi, todasLasEspecialidades,
 } from "../directorio/datos.js";
 import * as V from "../directorio/vistas.js";
@@ -57,6 +57,7 @@ const PLANTILLA = `
 
 const RUTA_MAPA = "js/directorio/mapa-zona.html";
 const RUTA_MAPA_FUERA = "js/directorio/mapa-fuera-red.html";
+const RUTA_MAPA_GOOGLE = "js/directorio/mapa-google.html";
 const MAX_RECIENTES = 5;
 const MAX_COMPARAR = 3;
 
@@ -112,6 +113,9 @@ function estadoInicial() {
     fueraResultados: null, fueraBuscando: false, fueraError: null,
     // Vista de los resultados: "mapa" (default) o "lista".
     fueraVista: "mapa",
+    // El servidor ya entregó la llave del navegador para el mapa de Google
+    // (ver cargarConfigMapa). Arranca en false porque todavía no se pidió.
+    mapaGoogleListo: false,
     // Aviso de "Coordinar cita" (ver core/coordinar-cita.js): dónde se detuvo
     // la búsqueda y si conviene ofrecer buscar fuera de la red.
     coordNota: "", coordFuera: false,
@@ -219,6 +223,9 @@ function pintar() {
   // Lista se destruye (ver fueraResultadosCuerpo en vistas.js).
   if (estado.screen === "fuera" && estado.fueraVista === "mapa" && estado.fueraResultados) {
     montarMapaFuera();
+    // La llave del navegador se pide en cuanto se va a usar el mapa de
+    // Google (nunca antes: si el usuario solo mira la lista, no se pide).
+    if (estado.fueraOrigen === "google" && !configMapa.cargada) cargarConfigMapa();
   } else {
     marcoMapaFuera = null;
   }
@@ -315,22 +322,52 @@ function enviarMapa() {
 
 /* ---------- Mapa de "Buscar fuera de la red" ----------
    Mismo patrón que el mapa de la zona (iframe + postMessage), pero con los
-   CANDIDATOS de la búsqueda (DENUE o Google Maps), que no son proveedores
-   del portal. Se crea al pintar la vista Mapa y se destruye al volver a
-   Lista, para no dejar un iframe vivo con Leaflet cargado de más. */
+   CANDIDATOS de la búsqueda, que no son proveedores del portal.
+
+   Son DOS archivos según la fuente, y no es capricho: los Términos de
+   Servicio de Google (Maps Service Specific Terms, 14.2) prohíben usar
+   contenido de la Places API sobre un mapa que no sea de Google. Los
+   candidatos de Google salen de Places API -> mapa de Google. Los del DENUE
+   son datos abiertos del INEGI -> Leaflet, que no cuesta ni pide llave.
+
+   Se crea al pintar la vista Mapa y se destruye al volver a Lista o al
+   cambiar de fuente, para no dejar un iframe vivo cargando una librería
+   que ya no se usa. */
+function rutaMapaFuera() {
+  return estado.fueraOrigen === "google" ? RUTA_MAPA_GOOGLE : RUTA_MAPA_FUERA;
+}
+
 function montarMapaFuera() {
   const zona = $("dp-fuera-mapa");
   if (!zona) { marcoMapaFuera = null; return; }
-  if (marcoMapaFuera && marcoMapaFuera.parentElement === zona) {
+  const ruta = rutaMapaFuera();
+  // El mapa de Google no puede arrancar sin su llave, y la llave llega por
+  // una consulta al servidor: se espera a tenerla antes de crear el iframe.
+  if (ruta === RUTA_MAPA_GOOGLE && !configMapa.cargada) return;
+  const marcoActual = zona.querySelector("iframe");
+  // Mismo tipo de mapa ya montado: solo se le manda la lista nueva (no se
+  // recarga, que en Google Maps volvería a cargar la librería completa).
+  if (marcoActual && marcoActual.dataset.mapa === ruta) {
+    marcoMapaFuera = marcoActual;
     enviarMapaFuera();
     return;
   }
   marcoMapaFuera = document.createElement("iframe");
   marcoMapaFuera.title = "Mapa de candidatos fuera de la red";
   marcoMapaFuera.className = "dp-mapa-marco";
-  marcoMapaFuera.addEventListener("load", enviarMapaFuera);
-  marcoMapaFuera.src = RUTA_MAPA_FUERA;
-  zona.appendChild(marcoMapaFuera);
+  marcoMapaFuera.dataset.mapa = ruta;
+  marcoMapaFuera.addEventListener("load", () => { enviarConfigMapa(); enviarMapaFuera(); });
+  marcoMapaFuera.src = ruta;
+  zona.replaceChildren(marcoMapaFuera);
+}
+
+/* El mapa de Google necesita la llave del NAVEGADOR, que no está escrita en
+   el HTML (ver GET /directorio-proveedores/configuracion-mapa): se pide aquí
+   y se le pasa al iframe. El de Leaflet la ignora. */
+function enviarConfigMapa() {
+  if (!marcoMapaFuera || !marcoMapaFuera.contentWindow) return;
+  if (marcoMapaFuera.dataset.mapa !== RUTA_MAPA_GOOGLE) return;
+  marcoMapaFuera.contentWindow.postMessage({ type: "config-mapa", llave: configMapa.llave, map_id: configMapa.mapId }, location.origin);
 }
 
 function enviarMapaFuera() {
@@ -348,6 +385,25 @@ function enviarMapaFuera() {
       latitud: c.latitud, longitud: c.longitud,
     })),
   }, location.origin);
+}
+
+/* La llave del navegador se pide UNA vez por sesión de pantalla y se
+   reutiliza. Si el servidor no la tiene configurada (`llave: null`), el mapa
+   de Google avisa y la vista cae a lista (ver fuentesSinMapa). */
+let configMapa = { llave: null, mapId: null, cargada: false };
+
+async function cargarConfigMapa() {
+  if (configMapa.cargada) return;
+  configMapa.cargada = true;
+  try {
+    const cfg = await configuracionMapa();
+    configMapa = { llave: cfg.llave, mapId: cfg.map_id, cargada: true };
+  } catch (e) {
+    // Sin llave no se rompe nada: el selector sigue ofreciendo Lista.
+    configMapa = { llave: null, mapId: null, cargada: true };
+  }
+  estado.mapaGoogleListo = !!configMapa.llave;
+  if (estado.screen === "fuera") pintar();
 }
 
 /* Repintados parciales mientras se escribe (sin tocar el campo). */
@@ -742,6 +798,17 @@ function comparable(texto) {
 function elegirFueraOrigen(origen) {
   if (estado.fueraBuscando || estado.fueraOrigen === origen) return;
   irA({ fueraOrigen: origen, fueraResultados: null, fueraError: null });
+  // El mapa de Google necesita su llave del navegador: se pide al elegir la
+  // fuente, no al pintar, para que ya esté lista cuando lleguen resultados.
+  if (origen === "google" && !configMapa.cargada) cargarConfigMapa();
+}
+
+/* "Mapa" solo se puede elegir si esta fuente sabe dibujarlo (ver
+   fueraPuedeMapa en vistas.js). */
+function verMapaFuera() {
+  const v = V.calcular(estado);
+  if (!v.fueraPuedeMapa) return;
+  irA({ fueraVista: "mapa" });
 }
 
 async function buscarFuera() {
@@ -901,7 +968,7 @@ const ACCIONES = {
   "buscar-fuera-de-red": buscarFuera,
   "fuera-origen-denue": () => elegirFueraOrigen("denue"),
   "fuera-origen-google": () => elegirFueraOrigen("google"),
-  "fuera-vista-mapa": () => irA({ fueraVista: "mapa" }),
+  "fuera-vista-mapa": verMapaFuera,
   "fuera-vista-lista": () => irA({ fueraVista: "lista" }),
 
   // Inicio y zona

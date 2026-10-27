@@ -530,6 +530,14 @@ export async function buscarFueraDeRedGoogle({ codEnt, codMun, especialidad }) {
   });
 }
 
+/* Llave del navegador para pintar el mapa de Google (Maps JavaScript API).
+   Es una llave DISTINTA de la del servidor, restringida por dominio -- ver
+   GET /directorio-proveedores/configuracion-mapa. Regresa { llave: null }
+   mientras no esté configurada. */
+export async function configuracionMapa() {
+  return api("/directorio-proveedores/configuracion-mapa");
+}
+
 /* ---------- Citas ----------
    La disponibilidad la decide el servidor: es el único que sabe qué horarios
    ya están apartados. Antes se inventaba con un hash, así que dos personas
