@@ -22,6 +22,13 @@ Por qué una alternativa y no un reemplazo del DENUE:
   - Por eso la pantalla deja elegir la fuente en cada búsqueda, en vez de
     sustituir una por la otra.
 
+⚠️ Se usa **Places API (New)** (`places:searchText`), NO la versión legacy
+(`maps/api/place/textsearch`). Comprobado contra la llave real del proyecto
+el 2026-10-27: la legacy responde `REQUEST_DENIED` con
+"LegacyApiNotActivatedMapError" porque Google ya no la habilita en proyectos
+nuevos -- solo la (New). Si algún día se migra de vuelta, hay que habilitar
+"Places API" (legacy) en Google Cloud Console.
+
 Por qué Text Search y no Nearby Search: Nearby Search exige coordenadas
 (lat/lng) del centro de búsqueda, que este portal no tiene por municipio;
 Text Search acepta un texto libre ("cardiólogo en Mérida, Yucatán, México")
@@ -35,6 +42,10 @@ no multiplicar el gasto por el número de resultados, aquí se usa únicamente
 lo que ya trae la búsqueda de texto (nombre, dirección, calificación, si
 está abierto) y se entrega un enlace directo a la ficha de Google Maps del
 lugar, desde donde el usuario puede ver el teléfono si lo necesita.
+
+El `X-Goog-FieldMask` es obligatorio en la API nueva y además define el
+costo: solo se piden los campos que la pantalla muestra (nada de fotos,
+reseñas ni teléfonos), que es la SKU más barata de Text Search.
 
 Nada de lo que regresa se guarda: cada búsqueda consulta en vivo (misma
 decisión que con el DENUE, 2026-10-20). Un resultado de aquí tampoco entra
@@ -55,21 +66,40 @@ from app.core.log_seguro import sanear_para_log
 
 logger = logging.getLogger("google_maps_service")
 
-_BASE = "https://maps.googleapis.com/maps/api/place/textsearch/json"
+_BASE = "https://places.googleapis.com/v1/places:searchText"
 
-# Mensaje legible por cada "status" que puede regresar la Places API (no son
-# códigos HTTP: la API casi siempre responde 200 y el resultado real viene
-# en este campo). Lo que no esté aquí cae en el genérico de abajo.
-_MENSAJES_ESTADO = {
-    "OVER_QUERY_LIMIT": (
+# Campos que se piden a la API nueva. Es obligatorio mandar el FieldMask y,
+# además, define el precio: pedir menos campos = SKU más barata. Aquí solo
+# van los que la pantalla pinta (ver _a_candidato y la tabla de
+# frontend/js/directorio/vistas.js).
+_FIELD_MASK = ",".join((
+    "places.id",
+    "places.displayName",
+    "places.formattedAddress",
+    "places.rating",
+    "places.userRatingCount",
+    "places.currentOpeningHours.openNow",
+    "places.location",
+))
+
+# Mensaje legible por cada código de error de la API nueva. A diferencia de
+# la legacy (que respondía 200 con un campo "status"), la nueva usa códigos
+# HTTP + un cuerpo con "error.status" y "error.message".
+_MENSAJES_ERROR = {
+    "PERMISSION_DENIED": (
+        "Google Maps rechazó la consulta: revisa que la llave (GOOGLE_MAPS_API_KEY) sea "
+        "válida, que la \"Places API (New)\" esté habilitada y que la facturación del "
+        "proyecto esté activa."
+    ),
+    "RESOURCE_EXHAUSTED": (
         "Se alcanzó el límite de consultas de Google Maps (cuota o presupuesto diario). "
         "Intenta más tarde o revisa el presupuesto del proyecto en Google Cloud."
     ),
-    "REQUEST_DENIED": (
-        "Google Maps rechazó la consulta: revisa que la llave (GOOGLE_MAPS_API_KEY) sea "
-        "válida, que la \"Places API\" esté habilitada y que la facturación del proyecto esté activa."
+    "INVALID_ARGUMENT": "La búsqueda no se pudo completar: faltó información para construirla.",
+    "UNAUTHENTICATED": (
+        "Google Maps no reconoció la llave (GOOGLE_MAPS_API_KEY). Revisa que esté bien "
+        "copiada en el .env del servidor."
     ),
-    "INVALID_REQUEST": "La búsqueda no se pudo completar: faltó información para construirla.",
 }
 _MENSAJE_GENERICO = "Google Maps devolvió una respuesta inesperada. Intenta más tarde."
 
@@ -96,25 +126,29 @@ def _a_candidato(lugar: dict) -> dict:
     denue_service._a_candidato), para reusar el mismo tipo de tarjeta en la
     pantalla, con sus propios campos donde la fuente es distinta.
 
+    Traduce los nombres de campo de la API NUEVA (displayName.text,
+    formattedAddress, userRatingCount, currentOpeningHours.openNow,
+    location.latitude/longitude) a los que ya usa la pantalla.
+
     Lo que NO se inventa: no hay cédula, costo de consulta, convenio ni
     teléfono -- igual que con el DENUE, se deja fuera en vez de rellenarlo
     con algo que después nadie podría distinguir de un dato real.
     """
-    ubicacion = ((lugar.get("geometry") or {}).get("location")) or {}
-    apertura = lugar.get("opening_hours") or {}
-    place_id = (lugar.get("place_id") or "").strip()
+    ubicacion = lugar.get("location") or {}
+    apertura = lugar.get("currentOpeningHours") or {}
+    place_id = (lugar.get("id") or "").strip()
     return {
         # Identificador de Google, NO una clave del portal -- igual que
         # id_denue, para que sea imposible confundirlo con un proveedor ya
         # dado de alta.
         "place_id": place_id,
-        "nombre": (lugar.get("name") or "").strip(),
-        "direccion": (lugar.get("formatted_address") or "").strip(),
+        "nombre": ((lugar.get("displayName") or {}).get("text") or "").strip(),
+        "direccion": (lugar.get("formattedAddress") or "").strip(),
         "calificacion": lugar.get("rating"),
-        "total_calificaciones": lugar.get("user_ratings_total"),
-        "abierto_ahora": apertura.get("open_now"),
-        "latitud": ubicacion.get("lat"),
-        "longitud": ubicacion.get("lng"),
+        "total_calificaciones": lugar.get("userRatingCount"),
+        "abierto_ahora": apertura.get("openNow"),
+        "latitud": ubicacion.get("latitude"),
+        "longitud": ubicacion.get("longitude"),
         # Ficha pública del lugar en Google Maps -- de ahí el usuario puede
         # ver teléfono, sitio web y horario sin que el portal tenga que
         # pagar una consulta de "Place Details" por cada candidato.
@@ -144,26 +178,28 @@ def buscar_candidatos(
     consulta = construir_consulta(especialidad, nombre_entidad, nombre_municipio)
     datos = _consultar(consulta, settings.google_maps_api_key.strip(), settings.google_maps_timeout_segundos)
 
-    estado_resp = datos.get("status")
-    if estado_resp == "ZERO_RESULTS":
-        return [], consulta
-    if estado_resp != "OK":
-        # La llave viaja en la petición (nunca en lo que se registra aquí).
-        logger.warning(
-            "Google Maps devolvió status=%s en la consulta de candidatos (consulta: %s)",
-            sanear_para_log(estado_resp), sanear_para_log(consulta),
-        )
-        raise ErrorGoogleMaps(_MENSAJES_ESTADO.get(estado_resp, _MENSAJE_GENERICO))
-
-    resultados = datos.get("results") or []
+    # La API nueva NO devuelve "status": si no hay resultados responde 200
+    # con el objeto vacío (sin la clave "places").
+    resultados = datos.get("places") or []
     candidatos = [_a_candidato(r) for r in resultados if isinstance(r, dict)]
     return candidatos[: settings.google_maps_maximo_resultados], consulta
 
 
 def _consultar(consulta: str, api_key: str, timeout: float) -> dict:
-    params = {"query": consulta, "language": "es-419", "region": "mx", "key": api_key}
+    cuerpo = {
+        "textQuery": consulta,
+        "languageCode": "es-419",
+        "regionCode": "MX",
+    }
+    encabezados = {
+        "Content-Type": "application/json",
+        # La llave va en el encabezado (no en la URL): así no puede quedar
+        # en un log de proxy ni en el historial de nadie.
+        "X-Goog-Api-Key": api_key,
+        "X-Goog-FieldMask": _FIELD_MASK,
+    }
     try:
-        respuesta = httpx.get(_BASE, params=params, timeout=timeout)
+        respuesta = httpx.post(_BASE, json=cuerpo, headers=encabezados, timeout=timeout)
     except httpx.TimeoutException as e:
         raise ErrorGoogleMaps(
             "Google Maps tardó demasiado en responder. Vuelve a intentarlo en un momento."
@@ -172,12 +208,20 @@ def _consultar(consulta: str, api_key: str, timeout: float) -> dict:
         raise ErrorGoogleMaps("No fue posible conectar con Google Maps.") from e
 
     if respuesta.status_code != 200:
-        # La llave va en los parámetros de la petición, no en esta cadena.
+        # El cuerpo del error trae {"error": {"status": "...", "message": "..."}}.
+        # Se registra el status (nunca la llave, que va en el encabezado).
+        try:
+            cuerpo_error = respuesta.json()
+        except ValueError:
+            cuerpo_error = None
+        detalle = (cuerpo_error or {}).get("error") if isinstance(cuerpo_error, dict) else None
+        detalle = detalle if isinstance(detalle, dict) else {}
+        estado = detalle.get("status") or f"HTTP_{respuesta.status_code}"
         logger.warning(
-            "Google Maps respondió HTTP %s en la consulta de candidatos (consulta: %s)",
-            respuesta.status_code, sanear_para_log(consulta),
+            "Google Maps respondió %s (%s) en la consulta de candidatos (consulta: %s)",
+            respuesta.status_code, sanear_para_log(estado), sanear_para_log(consulta),
         )
-        raise ErrorGoogleMaps("Google Maps respondió con un error. Intenta más tarde.")
+        raise ErrorGoogleMaps(_MENSAJES_ERROR.get(estado, _MENSAJE_GENERICO))
 
     try:
         return respuesta.json()

@@ -1,9 +1,9 @@
 """
 Pruebas de la búsqueda FUERA DE LA RED alternativa
 (GET /directorio-proveedores/fuera-de-red-google-maps), que consulta la
-Places API de Google Maps.
+Places API (New) de Google Maps.
 
-NO pega a Google de verdad: se sustituye httpx.get por respuestas simuladas,
+NO pega a Google de verdad: se sustituye httpx.post por respuestas simuladas,
 igual que tests/test_denue_fuera_de_red.py sustituye la del INEGI. Así las
 pruebas corren sin llave, sin red y sin gastar cuota de Google.
 """
@@ -13,16 +13,18 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.services import google_maps_service
 
-# Un resultado tal como lo regresa Text Search (ver la documentación de la
-# Places API), con los nombres de campo exactos.
+# Un resultado tal como lo regresa Places API (New) / places:searchText, con
+# los nombres de campo exactos de la API nueva (displayName.text,
+# formattedAddress, userRatingCount, currentOpeningHours.openNow,
+# location.latitude/longitude).
 LUGAR_GOOGLE = {
-    "place_id": "ChIJ_algun_place_id",
-    "name": "Consultorio Dr. Pérez - Cardiología",
-    "formatted_address": "Av. Vallarta 1450, Americana, 44100 Guadalajara, Jal., México",
+    "id": "ChIJ_algun_place_id",
+    "displayName": {"text": "Consultorio Dr. Pérez - Cardiología", "languageCode": "es"},
+    "formattedAddress": "Av. Vallarta 1450, Americana, 44100 Guadalajara, Jal., México",
     "rating": 4.7,
-    "user_ratings_total": 83,
-    "opening_hours": {"open_now": True},
-    "geometry": {"location": {"lat": 20.6736, "lng": -103.3444}},
+    "userRatingCount": 83,
+    "currentOpeningHours": {"openNow": True},
+    "location": {"latitude": 20.6736, "longitude": -103.3444},
 }
 
 ENTIDADES_FALSAS = [
@@ -118,11 +120,11 @@ def _cabina(client):
 
 
 def _responder(monkeypatch, respuesta, capturadas=None):
-    def fake_get(url, params=None, **kwargs):
+    def fake_post(url, json=None, headers=None, **kwargs):
         if capturadas is not None:
-            capturadas.append(params or {})
+            capturadas.append({"url": url, "json": json or {}, "headers": headers or {}})
         return respuesta
-    monkeypatch.setattr(google_maps_service.httpx, "get", fake_get)
+    monkeypatch.setattr(google_maps_service.httpx, "post", fake_post)
 
 
 # ---------- Construcción de la consulta de texto libre ----------
@@ -137,10 +139,10 @@ def test_sin_municipio_la_consulta_usa_toda_la_entidad():
     assert consulta == "Cardiología en JALISCO, México"
 
 
-# ---------- Mapeo de la respuesta ----------
+# ---------- Mapeo de la respuesta (API nueva) ----------
 
 def test_la_respuesta_de_google_se_mapea_a_candidatos(client, monkeypatch):
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "OK", "results": [LUGAR_GOOGLE]}))
+    _responder(monkeypatch, RespuestaFalsa(200, {"places": [LUGAR_GOOGLE]}))
 
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
@@ -154,6 +156,8 @@ def test_la_respuesta_de_google_se_mapea_a_candidatos(client, monkeypatch):
     assert cuerpo["total"] == 1
 
     c = cuerpo["candidatos"][0]
+    # Los nombres de campo de la API nueva se traducen a los que ya usa la
+    # pantalla (displayName.text -> nombre, userRatingCount -> total_calificaciones...).
     assert c["nombre"] == "Consultorio Dr. Pérez - Cardiología"
     assert c["direccion"].startswith("Av. Vallarta 1450")
     assert c["calificacion"] == pytest.approx(4.7)
@@ -171,7 +175,7 @@ def test_la_respuesta_de_google_se_mapea_a_candidatos(client, monkeypatch):
 def test_no_inventa_cedula_costo_convenio_ni_telefono(client, monkeypatch):
     """Google no regresa teléfono en Text Search (costaría una consulta de
     Place Details por cada candidato) -- no debe rellenarse con nada."""
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "OK", "results": [LUGAR_GOOGLE]}))
+    _responder(monkeypatch, RespuestaFalsa(200, {"places": [LUGAR_GOOGLE]}))
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
@@ -183,7 +187,9 @@ def test_no_inventa_cedula_costo_convenio_ni_telefono(client, monkeypatch):
 
 
 def test_sin_resultados_no_es_error(client, monkeypatch):
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "ZERO_RESULTS", "results": []}))
+    """La API nueva responde 200 con el objeto vacío (sin la clave "places")
+    cuando no hay coincidencias -- eso es "no encontré nada", no un fallo."""
+    _responder(monkeypatch, RespuestaFalsa(200, {}))
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
@@ -195,7 +201,7 @@ def test_sin_resultados_no_es_error(client, monkeypatch):
 
 
 def test_area_sin_municipio_es_solo_la_entidad(client, monkeypatch):
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "OK", "results": [LUGAR_GOOGLE]}))
+    _responder(monkeypatch, RespuestaFalsa(200, {"places": [LUGAR_GOOGLE]}))
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
@@ -204,16 +210,24 @@ def test_area_sin_municipio_es_solo_la_entidad(client, monkeypatch):
     assert r.json()["area"] == "JALISCO"
 
 
-def test_la_consulta_viaja_como_parametro_de_la_peticion(client, monkeypatch):
+def test_la_consulta_viaja_en_el_cuerpo_y_la_llave_en_el_encabezado(client, monkeypatch):
+    """La API nueva recibe el texto en el cuerpo JSON y la llave en
+    X-Goog-Api-Key (no en la URL, para que no quede en logs de proxy)."""
     capturadas = []
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "OK", "results": []}), capturadas=capturadas)
+    _responder(monkeypatch, RespuestaFalsa(200, {"places": []}), capturadas=capturadas)
     client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "cod_mun": "00039", "especialidad": "cardiologia"},
         headers=_proveedor(client),
     )
-    assert capturadas[0]["query"] == "cardiologia en Guadalajara, JALISCO, México"
-    assert capturadas[0]["key"] == "llave-de-prueba"
+    peticion = capturadas[0]
+    assert peticion["url"] == "https://places.googleapis.com/v1/places:searchText"
+    assert peticion["json"]["textQuery"] == "cardiologia en Guadalajara, JALISCO, México"
+    assert peticion["json"]["regionCode"] == "MX"
+    assert peticion["headers"]["X-Goog-Api-Key"] == "llave-de-prueba"
+    # El FieldMask es obligatorio en la API nueva y define el costo.
+    assert "places.displayName" in peticion["headers"]["X-Goog-FieldMask"]
+    assert "places.formattedAddress" in peticion["headers"]["X-Goog-FieldMask"]
 
 
 # ---------- Errores del servicio ----------
@@ -234,7 +248,7 @@ def test_sin_llave_configurada_responde_503(client, monkeypatch):
 
 
 def test_llave_invalida_responde_502_con_mensaje_claro(client, monkeypatch):
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "REQUEST_DENIED", "results": []}))
+    _responder(monkeypatch, RespuestaFalsa(403, {"error": {"status": "PERMISSION_DENIED", "message": "denied"}}))
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
@@ -245,7 +259,7 @@ def test_llave_invalida_responde_502_con_mensaje_claro(client, monkeypatch):
 
 
 def test_limite_de_cuota_responde_502_con_mensaje_claro(client, monkeypatch):
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "OVER_QUERY_LIMIT", "results": []}))
+    _responder(monkeypatch, RespuestaFalsa(429, {"error": {"status": "RESOURCE_EXHAUSTED", "message": "quota"}}))
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
@@ -256,9 +270,9 @@ def test_limite_de_cuota_responde_502_con_mensaje_claro(client, monkeypatch):
 
 
 def test_timeout_de_google_responde_502(client, monkeypatch):
-    def fake_get(*args, **kwargs):
+    def fake_post(*args, **kwargs):
         raise google_maps_service.httpx.TimeoutException("tardó demasiado")
-    monkeypatch.setattr(google_maps_service.httpx, "get", fake_get)
+    monkeypatch.setattr(google_maps_service.httpx, "post", fake_post)
 
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
@@ -292,7 +306,7 @@ def test_http_distinto_de_200_responde_502(client, monkeypatch):
 def test_la_llave_viaja_pero_no_se_registra_en_el_log(client, monkeypatch, caplog):
     import logging
 
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "REQUEST_DENIED", "results": []}))
+    _responder(monkeypatch, RespuestaFalsa(403, {"error": {"status": "PERMISSION_DENIED", "message": "denied"}}))
     with caplog.at_level(logging.WARNING, logger="google_maps_service"):
         r = client.get(
             "/directorio-proveedores/fuera-de-red-google-maps",
@@ -306,7 +320,7 @@ def test_la_llave_viaja_pero_no_se_registra_en_el_log(client, monkeypatch, caplo
 
 
 def test_entidad_fuera_del_catalogo_responde_400(client, monkeypatch):
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "OK", "results": [LUGAR_GOOGLE]}))
+    _responder(monkeypatch, RespuestaFalsa(200, {"places": [LUGAR_GOOGLE]}))
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "ZZ", "especialidad": "cardiologia"},
@@ -330,7 +344,7 @@ def test_solo_el_proveedor_busca_fuera_de_la_red_con_google(client, monkeypatch)
     """Misma restricción que /fuera-de-red (DENUE), decisión del usuario
     (2026-10-26): del directorio, el Administrador solo usa Solicitudes,
     Alta de médico, Carga del catálogo y Métricas."""
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "OK", "results": [LUGAR_GOOGLE]}))
+    _responder(monkeypatch, RespuestaFalsa(200, {"places": [LUGAR_GOOGLE]}))
     parametros = {"cod_ent": "JC", "especialidad": "cardiologia"}
     r_proveedor = client.get("/directorio-proveedores/fuera-de-red-google-maps", params=parametros, headers=_proveedor(client))
     assert r_proveedor.status_code == 200
@@ -339,7 +353,7 @@ def test_solo_el_proveedor_busca_fuera_de_la_red_con_google(client, monkeypatch)
 
 
 def test_cabina_no_puede_usar_el_directorio(client, monkeypatch):
-    _responder(monkeypatch, RespuestaFalsa(200, {"status": "OK", "results": [LUGAR_GOOGLE]}))
+    _responder(monkeypatch, RespuestaFalsa(200, {"places": [LUGAR_GOOGLE]}))
     r = client.get(
         "/directorio-proveedores/fuera-de-red-google-maps",
         params={"cod_ent": "JC", "especialidad": "cardiologia"},
