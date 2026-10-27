@@ -51,7 +51,7 @@ const PLANTILLA = `
 
   <div class="card tono-verdeazul">
     <div class="card-header">
-      <h2>Accesos registrados (<span id="accCount">0</span>)</h2>
+      <h2>Accesos registrados (<span id="accCount">…</span>)</h2>
     </div>
     <div class="card-body">
       <div class="field" style="max-width:320px;">
@@ -114,6 +114,14 @@ function accesosFiltrados() {
   );
 }
 
+/* El backend guarda "NA" (SIN_APLICA, ver accesos_repo.py) para los campos
+   que no aplican a un perfil (ej. entidad de un Administrador). En la grilla
+   se muestra "—", igual que en el resto del portal. */
+function sinAplica(valor) {
+  const texto = (valor || "").trim();
+  return !texto || texto.toUpperCase() === "NA" ? "—" : texto;
+}
+
 function renderGrid() {
   const tbody = $("acc-tbody");
   const filtrados = accesosFiltrados();
@@ -138,8 +146,8 @@ function renderGrid() {
       <td data-label="RFC">${escapeHtml(a.rfc)}</td>
       <td data-label="Nombre">${escapeHtml(a.nombre)}</td>
       <td data-label="Perfil"><span class="badge perfil-${a.perfil}">${escapeHtml(NOMBRES_PERFIL[String(a.perfil)] || a.perfil)}</span></td>
-      <td data-label="Entidad">${escapeHtml(a.entidad || "NA")}</td>
-      <td data-label="Correo">${escapeHtml(a.correo || "NA")}</td>
+      <td data-label="Entidad">${escapeHtml(sinAplica(a.entidad))}</td>
+      <td data-label="Correo">${escapeHtml(sinAplica(a.correo))}</td>
       <td data-label="Estado"><span class="badge ${a.activo ? "activo" : "inactivo"}">${a.activo ? "Activo" : "Inactivo"}</span></td>
       <td data-label="Contraseña">${a.tiene_password ? '<span class="muted">Ya creada</span>' : '<span class="muted">Pendiente</span>'}</td>
       <td data-label="Acciones">

@@ -113,6 +113,60 @@ python -c "import secrets; print(secrets.token_hex(32))"
 Con el entorno virtual activado, los comandos `python ...` de este README
 son iguales en Windows y en Linux.
 
+### Alternativa: con Docker (sin instalar el driver ODBC en tu máquina)
+
+Si en Windows no puedes instalar el *Microsoft ODBC Driver 18 for SQL
+Server* (por ejemplo, porque falta el visto bueno de Soporte Técnico),
+puedes correr el portal dentro de un contenedor Linux que ya lo trae
+instalado -- no toca nada del sistema operativo de tu máquina. Necesitas
+[Docker Desktop](https://www.docker.com/products/docker-desktop/) instalado
+y corriendo.
+
+```powershell
+Copy-Item .env.example .env   # si todavía no existe; edítalo igual que en la instalación nativa
+docker compose up --build
+```
+
+Esto levanta el portal en `http://localhost:8000`, con:
+
+- El driver ODBC 18 ya instalado dentro del contenedor (ver `Dockerfile`),
+  sin importar lo que diga `DB_DRIVER` en tu `.env` (`docker-compose.yml`
+  lo fuerza a `ODBC Driver 18 for SQL Server`).
+- El código con recarga en vivo (`--reload`): edita archivos en tu editor
+  de siempre y el contenedor los recoge solo.
+- `data/app_local.db` (SQLite) en tu propia carpeta `data/`, no dentro del
+  contenedor: sobrevive a un `docker compose down` y a reconstruir la imagen.
+
+Para pararlo: `docker compose down`. Para reconstruir después de cambiar
+`requirements.txt`: `docker compose up --build`.
+
+**Importante -- limitación real, confirmada probando contra el SQL Server
+de desarrollo de IKE (2026-10-27):** esto resuelve el *driver*, pero no
+necesariamente la *red* contra un SQL Server detrás de VPN:
+
+- Si la VPN no está conectada, el log muestra `Login timeout expired`: el
+  contenedor ni siquiera alcanza el servidor (ver `DB_SERVER`).
+- Si la VPN SÍ está conectada pero el log muestra `TCP Provider: Error
+  code 0x2746 (10054)` (conexión reiniciada): el contenedor SÍ alcanza el
+  servidor (el TCP "handshake" pasa), pero el intento de login se corta.
+  En nuestro caso la causa fue que Docker Desktop (backend WSL2) le
+  asigna al contenedor una identidad de red propia (`192.168.65.x`), que
+  no es la IP que la VPN le asignó a la máquina -- y el firewall/SQL
+  Server del otro lado solo deja completar el login a la IP real de la
+  VPN. Confirmado probando con el driver ODBC genérico que Windows ya
+  trae instalado (`DRIVER={SQL Server}`), **sin Docker**: conecta bien.
+  Si te pasa esto, Docker no es la solución -- hace falta instalar el
+  driver 18 directamente en Windows (ver la instalación nativa de arriba)
+  para que la conexión salga con la identidad de red real de la VPN.
+
+Mientras tanto, `python dev_server_datos_prueba.py` (ver más abajo) sigue
+funcionando igual en cualquiera de los dos casos, sin necesitar nada de
+esto (ni VPN, ni SQL Server real).
+
+Esto es para **desarrollo local**, no para producción: el despliegue real
+sigue el procedimiento de [`DESPLIEGUE-PRODUCCION.md`](DESPLIEGUE-PRODUCCION.md)
+(EC2 + systemd, sin contenedores).
+
 ## Antes de arrancar: correr los scripts SQL
 
 Sigue el orden indicado en `sql/README.md` (empieza por

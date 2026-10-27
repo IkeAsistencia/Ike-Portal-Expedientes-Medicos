@@ -97,16 +97,31 @@ export function formularioVacio() {
    dbo.sp_GetMun (GET /catalogos/municipios?cod_ent=...), cacheado por
    entidad para no volver a pedirlo si el usuario va y viene. */
 let entidadesAlta = null;
+// true cuando el último intento de cargar el catálogo falló -- la pantalla lo
+// usa para avisar en vez de mostrar un combo vacío sin explicación.
+let entidadesAltaFallo = false;
 const municipiosPorEntidad = new Map();
 
 export async function cargarEntidadesAltaReal() {
   if (entidadesAlta) return entidadesAlta;
   try {
     entidadesAlta = await api("/catalogos/entidades");
+    entidadesAltaFallo = false;
   } catch (err) {
-    entidadesAlta = [];
+    // NO se cachea el fallo: si se guardara [] aquí, el `if (entidadesAlta)`
+    // de arriba lo tomaría como "ya cargado" (un array vacío es truthy) y el
+    // combo se quedaría vacío el resto de la sesión, sin reintentar ni
+    // avisar. Devolviendo [] sin asignarlo, la próxima llamada vuelve a
+    // intentar. El aviso al usuario lo da quien llama (ver
+    // entidadesAltaFallaron).
+    entidadesAltaFallo = true;
+    return [];
   }
   return entidadesAlta;
+}
+
+export function entidadesAltaFallaron() {
+  return entidadesAltaFallo;
 }
 
 export function entidadesAltaCache() {

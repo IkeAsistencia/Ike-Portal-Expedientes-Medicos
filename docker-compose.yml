@@ -1,0 +1,32 @@
+# Uso para DESARROLLO local, cuando no se puede instalar el driver ODBC de
+# Microsoft en la máquina anfitriona (ver Dockerfile). NO es el despliegue
+# de producción (ver DESPLIEGUE-PRODUCCION.md).
+#
+#   docker compose up --build
+#
+# Requiere tener tu .env ya configurado en la raíz del proyecto (ver
+# README.md, sección Instalación) -- nunca se copia a la imagen: se
+# inyecta aquí en tiempo de ejecución con env_file.
+services:
+  portal:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Si tu .env trae DB_DRIVER=ODBC Driver 17 for SQL Server (plantilla
+      # de .env.example), aquí SIEMPRE se usa el 18 que instala el
+      # Dockerfile -- Windows y Linux no comparten el mismo driver.
+      - DB_DRIVER=ODBC Driver 18 for SQL Server
+    volumes:
+      # SQLite local (accesos, estatus, comentarios, padrón de
+      # proveedores): persiste entre "docker compose down/up" porque vive
+      # en el host, no dentro del contenedor.
+      - ./data:/app/data
+      # Código en vivo: edita en tu editor de Windows y uvicorn --reload
+      # (ver "command" abajo) lo recarga sin reconstruir la imagen. No
+      # afecta los paquetes de Python, que se instalaron en la imagen.
+      - .:/app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    restart: unless-stopped

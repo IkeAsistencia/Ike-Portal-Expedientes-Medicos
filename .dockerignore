@@ -1,0 +1,28 @@
+# No copiar al contexto de build nada que sea específico de Windows/del
+# desarrollador o que ya se descarta en .gitignore -- la imagen trae su
+# propio entorno Python (ver Dockerfile), no el venv de Windows.
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.vscode/
+.idea/
+.git/
+
+# Datos locales: viven en un volumen (ver docker-compose.yml), no en la
+# imagen -- si se copiaran, un rebuild "congelaría" ese estado dentro de
+# la imagen en vez de seguir siendo el SQLite real de data/app_local.db.
+data/*.db
+
+# Documentos generados, no código fuente (igual que en .gitignore).
+*.docx
+*.pdf
+*.zip
+*.xlsx
+
+# El .env NUNCA debe entrar a una imagen: se inyecta en tiempo de
+# ejecución (ver docker-compose.yml, env_file) para que las credenciales
+# no queden grabadas en ninguna capa de la imagen.
+.env
+.env.local

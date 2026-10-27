@@ -25,7 +25,7 @@ import { ICONOS } from "../componentes/iconos.js";
 import {
   PRICE_OPTIONS,
   raw, visible, valoresUnicosCatalogo, zonasDelPadron, resumenDelPadron,
-  entidadesAltaCache, municipiosAltaCache,
+  entidadesAltaCache, entidadesAltaFallaron, municipiosAltaCache,
   especialidadesKpiCache, todasLasEspecialidades,
 } from "./datos.js";
 
@@ -394,6 +394,7 @@ export function calcular(s) {
     editandoFolio: s.editandoFolio || "",
     form: s.form,
     formEntidades: entidadesAltaCache(),
+    formEntidadesFallaron: entidadesAltaFallaron(),
     formMunicipios: municipiosAltaCache(s.form.estado),
 
     // Búsqueda fuera de la red (DENUE o Google Maps, a elegir -- ver
@@ -405,6 +406,7 @@ export function calcular(s) {
     fueraForm: s.fueraForm,
     fueraOrigen: s.fueraOrigen || "denue",
     fueraEntidades: entidadesAltaCache(),
+    fueraEntidadesFallaron: entidadesAltaFallaron(),
     fueraMunicipios: municipiosAltaCache(s.fueraForm.codEnt),
     fueraBuscando: !!s.fueraBuscando,
     fueraError: s.fueraError || "",
@@ -1034,6 +1036,9 @@ function opcionesCatalogoTexto(lista, elegido) {
 }
 
 export function opcionesEntidadAlta(v) {
+  // Si el catálogo no cargó, se dice explícitamente en vez de dejar el combo
+  // vacío sin explicación (ver cargarEntidadesAltaReal en datos.js).
+  if (v.formEntidadesFallaron) return `<option value="">No se pudo cargar el catálogo. Reintenta.</option>`;
   return opcionesCatalogoTexto(v.formEntidades, v.form.estado);
 }
 
@@ -1057,6 +1062,7 @@ export function opcionesEspecialidadAlta(elegida) {
 
 /* ---------- Fuera de la red (candidatos del DENUE) ---------- */
 export function opcionesEntidadFuera(v) {
+  if (v.fueraEntidadesFallaron) return `<option value="">No se pudo cargar el catálogo. Reintenta.</option>`;
   return `<option value="">Selecciona un estado</option>`
     + opcionesCatalogoTexto(v.fueraEntidades, v.fueraForm.codEnt);
 }
