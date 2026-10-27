@@ -118,14 +118,22 @@ def fake_call_procedure(sp_name, params=None):
             }
         ]
     if sp_name == "dbo.sp_GetMun":
-        # Municipios de la entidad pedida -- solo se simulan los de Jalisco
-        # (los que usa el ejemplo de "Buscar fuera de la red" con Google Maps).
-        if (params or {}).get("CodEnt") == "JC":
-            return [
+        # Municipios de la entidad pedida -- solo se simulan unos cuantos por
+        # entidad (los suficientes para probar "Buscar fuera de la red" y el
+        # Alta de médico sin SQL Server).
+        municipios = {
+            "JC": [
                 {"CodMD": "00039", "dsMunDel": "Guadalajara", "CodEnt": "JC"},
                 {"CodMD": "00120", "dsMunDel": "Zapopan", "CodEnt": "JC"},
-            ]
-        return []
+            ],
+            "DF": [
+                {"CodMD": "00015", "dsMunDel": "Ciudad de México", "CodEnt": "DF"},
+            ],
+            "CM": [
+                {"CodMD": "00002", "dsMunDel": "Campeche", "CodEnt": "CM"},
+            ],
+        }
+        return municipios.get((params or {}).get("CodEnt"), [])
     if sp_name == "dbo.sp_EncriptDesEncriptPassword":
         if params.get("pUsuario") == "ijimenez" and params.get("pContraseña") == "clave123":
             return [{"clUsrApp": 42, "Nombre": "Ignacio Jiménez", "Activo": True}]

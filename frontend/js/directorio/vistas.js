@@ -25,7 +25,7 @@ import { ICONOS } from "../componentes/iconos.js";
 import {
   PRICE_OPTIONS,
   raw, visible, valoresUnicosCatalogo, zonasDelPadron, resumenDelPadron,
-  entidadesAltaCache, entidadesAltaFallaron, municipiosAltaCache,
+  entidadesAltaCache, entidadesAltaFallaron, municipiosAltaCache, municipiosAltaCargados,
   especialidadesKpiCache, todasLasEspecialidades,
 } from "./datos.js";
 
@@ -396,6 +396,7 @@ export function calcular(s) {
     formEntidades: entidadesAltaCache(),
     formEntidadesFallaron: entidadesAltaFallaron(),
     formMunicipios: municipiosAltaCache(s.form.estado),
+    formMunicipiosCargados: municipiosAltaCargados(s.form.estado),
 
     // Búsqueda fuera de la red (DENUE o Google Maps, a elegir -- ver
     // fueraOrigen). Usa los catálogos REALES de Entidad y Municipio (los
@@ -408,6 +409,7 @@ export function calcular(s) {
     fueraEntidades: entidadesAltaCache(),
     fueraEntidadesFallaron: entidadesAltaFallaron(),
     fueraMunicipios: municipiosAltaCache(s.fueraForm.codEnt),
+    fueraMunicipiosCargados: municipiosAltaCargados(s.fueraForm.codEnt),
     fueraBuscando: !!s.fueraBuscando,
     fueraError: s.fueraError || "",
     fueraBuscado: !!s.fueraResultados,
@@ -1044,7 +1046,8 @@ export function opcionesEntidadAlta(v) {
 
 export function opcionesMunicipio(v) {
   if (!v.form.estado) return `<option value="">Elige un estado primero</option>`;
-  if (!v.formMunicipios.length) return `<option value="">Cargando…</option>`;
+  if (!v.formMunicipiosCargados) return `<option value="">Cargando…</option>`;
+  if (!v.formMunicipios.length) return `<option value="">Sin municipios para este estado</option>`;
   return opcionesCatalogoTexto(v.formMunicipios, v.form.municipio);
 }
 
@@ -1069,7 +1072,10 @@ export function opcionesEntidadFuera(v) {
 
 export function opcionesMunicipioFuera(v) {
   if (!v.fueraForm.codEnt) return `<option value="">Elige un estado primero</option>`;
-  if (!v.fueraMunicipios.length) return `<option value="">Cargando…</option>`;
+  // "Cargando…" solo mientras de verdad se está pidiendo; si ya se pidió y
+  // vino vacío, se dice eso en vez de dejar el combo girando para siempre.
+  if (!v.fueraMunicipiosCargados) return `<option value="">Cargando…</option>`;
+  if (!v.fueraMunicipios.length) return `<option value="">Sin municipios para este estado</option>`;
   // Sin municipio = toda la entidad: útil cuando en el municipio no hay nada.
   return `<option value="">Todo el estado</option>`
     + opcionesCatalogoTexto(v.fueraMunicipios, v.fueraForm.codMun);

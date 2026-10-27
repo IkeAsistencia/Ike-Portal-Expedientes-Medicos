@@ -136,12 +136,22 @@ export async function cargarMunicipiosAltaReal(codEnt) {
     municipiosPorEntidad.set(codEnt, municipios);
     return municipios;
   } catch (err) {
+    // Igual que con las entidades: NO se cachea el fallo, para que la próxima
+    // vez se reintente en vez de quedarse vacío el resto de la sesión.
     return [];
   }
 }
 
 export function municipiosAltaCache(codEnt) {
   return municipiosPorEntidad.get(codEnt) || [];
+}
+
+/* true cuando ya se pidió la lista de municipios de esa entidad (haya venido
+   con datos o vacía). Sirve para distinguir "Cargando…" de "esta entidad no
+   tiene municipios", que antes se veían igual y dejaba el combo en
+   "Cargando…" para siempre. */
+export function municipiosAltaCargados(codEnt) {
+  return municipiosPorEntidad.has(codEnt);
 }
 
 /* Catálogo real (cargado por Administrador, ver GET /directorio-proveedores)
