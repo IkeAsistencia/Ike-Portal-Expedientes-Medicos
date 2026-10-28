@@ -129,9 +129,33 @@ def _crear(client, headers, **cambios):
     return client.post("/solicitudes-alta-medico", headers=headers, json={**SOLICITUD, **cambios})
 
 
-def test_rfc_es_obligatorio(client):
-    sin_rfc = {k: v for k, v in SOLICITUD.items() if k != "rfc"}
-    assert client.post("/solicitudes-alta-medico", headers=_admin(client), json=sin_rfc).status_code == 422
+@pytest.mark.parametrize("omitir", [("rfc",), ("cedula",), ("rfc", "cedula")])
+def test_rfc_y_cedula_son_opcionales(client, omitir):
+    """Sin RFC ni cédula (omitidos del JSON) la solicitud se guarda igual."""
+    admin = _admin(client)
+    cuerpo = {k: v for k, v in SOLICITUD.items() if k not in omitir}
+    r = client.post("/solicitudes-alta-medico", headers=admin, json=cuerpo)
+    assert r.status_code == 201 or r.status_code == 200, r.text
+    fila = client.get("/solicitudes-alta-medico", headers=admin).json()[0]
+    for campo in omitir:
+        assert fila[campo] == ""
+
+
+@pytest.mark.parametrize("vacio", ["", "   "])
+def test_rfc_y_cedula_en_blanco_se_guardan_vacios_y_se_pueden_aprobar(client, vacio):
+    admin = _admin(client)
+    folio = _crear(client, admin, rfc=vacio, cedula=vacio).json()["folio"]
+    r = client.post(f"/solicitudes-alta-medico/{folio}/estatus", headers=admin, json={"estatus": "Aprobada"})
+    assert r.status_code == 200, r.text
+    fila = client.get("/solicitudes-alta-medico", headers=admin).json()[0]
+    assert fila["rfc"] == "" and fila["cedula"] == "" and fila["clave_proveedor"]
+
+
+def test_si_se_captura_rfc_o_cedula_se_siguen_revisando(client):
+    """Opcional no es "sin revisar": con valor, un RFC o cédula mal formados se rechazan."""
+    admin = _admin(client)
+    assert _crear(client, admin, rfc="ABC", cedula="").status_code == 400
+    assert _crear(client, admin, rfc="", cedula="123").status_code == 400
 
 
 @pytest.mark.parametrize("cambios, fragmento", [
@@ -146,7 +170,7 @@ def test_crear_rechaza_rfc_o_cedula_mal_formados(client, cambios, fragmento):
 
 
 @pytest.mark.parametrize("campo", [
-    "nombre", "especialidad", "cedula", "rfc", "estado", "municipio",
+    "nombre", "especialidad", "estado", "municipio",
     "calle_num_ext_int", "colonia", "codigo_postal", "consultorio", "horario", "costo_consulta", "telefono", "email",
 ])
 def test_todos_los_campos_son_obligatorios(client, campo):

@@ -144,20 +144,17 @@ tbody tr:hover{background:#FAFAFA;}
 .tabla-expedientes td{overflow:hidden;text-overflow:ellipsis;}
 .tabla-expedientes thead th{position:sticky;top:0;z-index:3;}
 
-/* Franjas alternadas (zebra) en renglones pares -- azul pastel del mismo
-   sistema de color (--blue-light, el de los focus rings/KPIs), tenue a
-   propósito para no afectar la lectura. El hover (abajo y arriba) debe
-   seguir ganándole a la franja, por eso este bloque va ANTES de los
-   .col-frozen con hover -- en un empate de especificidad gana el último
-   en el archivo. */
-.tabla-expedientes tbody tr:nth-child(even){background:var(--blue-light);}
+/* Todos los renglones en blanco (sin franjas alternadas): así solo resaltan
+   los que llevan el color de su cuenta (Qualitas, Libra Plus...; ver
+   COLORES DE CUENTAS abajo). El hover va ANTES de los .col-frozen con hover
+   -- en un empate de especificidad gana el último en el archivo. */
+.tabla-expedientes tbody tr{background:var(--white);}
 .tabla-expedientes tbody tr:hover{background:#FAFAFA;}
 
 /* Columnas fijas al hacer scroll horizontal (Fecha Apertura, Expediente, Cuenta, Servicio, Subservicio) */
 .tabla-expedientes th.col-frozen,
 .tabla-expedientes td.col-frozen{position:sticky;z-index:1;background:var(--white);}
 .tabla-expedientes thead th.col-frozen{background:var(--gray-bg);z-index:4;}
-.tabla-expedientes tbody tr:nth-child(even) td.col-frozen{background:var(--blue-light);}
 .tabla-expedientes tbody tr:hover td.col-frozen{background:#FAFAFA;}
 .tabla-expedientes .col-frozen-last{border-right:2px solid var(--gray-border);}
 
@@ -421,14 +418,12 @@ tbody tr:hover{background:#FAFAFA;}
 .cta-arena{--cta-bg:#F6EEE0;--cta-fuerte:#A8803A;--cta-texto:#6B4F17;}
 .cta-gris{--cta-bg:#ECEBEA;--cta-fuerte:#6B6A68;--cta-texto:#3F3E3D;}
 
-/* Va DESPUÉS de las reglas de franjas y columnas fijas de .tabla-expedientes
+/* Va DESPUÉS de las reglas de fondo y columnas fijas de .tabla-expedientes
    (misma especificidad: gana el último) para que el color se vea también en
-   las columnas fijas y en los renglones pares. */
+   las columnas fijas. */
 .tabla-expedientes tbody tr.fila-cta td,
-.tabla-expedientes tbody tr.fila-cta td.col-frozen,
-.tabla-expedientes tbody tr.fila-cta:nth-child(even) td.col-frozen{background:var(--cta-bg);}
-.tabla-expedientes tbody tr.fila-cta,
-.tabla-expedientes tbody tr.fila-cta:nth-child(even){background:var(--cta-bg);}
+.tabla-expedientes tbody tr.fila-cta td.col-frozen{background:var(--cta-bg);}
+.tabla-expedientes tbody tr.fila-cta{background:var(--cta-bg);}
 .tabla-expedientes tbody tr.fila-cta:hover{background:color-mix(in srgb, var(--cta-bg) 88%, #000 6%);}
 .tabla-expedientes tbody tr.fila-cta:hover td,
 .tabla-expedientes tbody tr.fila-cta:hover td.col-frozen{background:color-mix(in srgb, var(--cta-bg) 88%, #000 6%);}

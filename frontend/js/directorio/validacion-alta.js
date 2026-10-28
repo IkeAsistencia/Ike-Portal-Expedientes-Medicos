@@ -159,9 +159,10 @@ export function revisarHorario(bloques) {
   return null;
 }
 
-/* Todos los campos del alta son obligatorios (solo los documentos son
-   opcionales). Regresa [{ campo, etiqueta, mensaje }] con lo que falta o está
-   mal; [] si todo está bien. `campo` es la llave del formulario. */
+/* Todos los campos del alta son obligatorios, salvo la cédula, el RFC y los
+   documentos: vacíos no estorban, pero si se captura uno se revisa su formato.
+   Regresa [{ campo, etiqueta, mensaje }] con lo que falta o está mal; [] si
+   todo está bien. `campo` es la llave del formulario. */
 export function revisarFormularioAlta(f) {
   const faltas = [];
   const falta = (campo, etiqueta, mensaje) => faltas.push({ campo, etiqueta, mensaje: mensaje || `${etiqueta}: es obligatorio.` });
@@ -173,9 +174,9 @@ export function revisarFormularioAlta(f) {
   const fallaHorario = revisarHorario(f.horarioBloques);
   if (fallaHorario) falta("horario", "Horario de atención", "Horario de atención: " + fallaHorario);
   if (!COSTOS_APROXIMADOS.some(c => c.valor === f.costoConsulta)) falta("costoConsulta", "Costo aproximado de consulta");
-  if (!cedulaConFormatoValido(f.cedula)) falta("cedula", "Cédula profesional", "Cédula profesional: debe tener 7 u 8 dígitos.");
+  if (!vacio(f.cedula) && !cedulaConFormatoValido(f.cedula)) falta("cedula", "Cédula profesional", "Cédula profesional: debe tener 7 u 8 dígitos.");
   const rfc = revisarRfc(f.rfc);
-  if (rfc.estado !== "valido") falta("rfc", "RFC", "RFC: " + rfc.mensaje);
+  if (rfc.estado !== "vacio" && rfc.estado !== "valido") falta("rfc", "RFC", "RFC: " + rfc.mensaje);
   if (vacio(f.estado)) falta("estado", "Estado");
   if (vacio(f.municipio)) falta("municipio", "Municipio");
   if (vacio(f.calleNumExtInt)) falta("calleNumExtInt", "Calle y número");

@@ -127,6 +127,7 @@ export function calcular(s) {
   const listed = s.screen === "results" ? visible(s) : [];
   const d = s.detail;
   const cedulaOk = cedulaConFormatoValido(s.form.cedula);
+  const cedulaVacia = !(s.form.cedula || "").trim();
   const faltasAlta = revisarFormularioAlta(s.form);
   const rfcAlta = revisarRfc(s.form.rfc);
   const rfcMostrarError = !!s.altaIntento || normalizarRfc(s.form.rfc).length >= 12;
@@ -426,24 +427,26 @@ export function calcular(s) {
     // se escribe y sin botón. Igual que el RFC, el error espera a que se
     // intente enviar para no marcarlo a la primera tecla.
     cedulaValor: (s.form.cedula || "").trim(),
-    cedulaMensaje: cedulaOk ? "Formato correcto."
-      : s.altaIntento ? "La cédula debe tener 7 u 8 dígitos." : "Obligatoria: 7 u 8 dígitos.",
-    cedulaClase: cedulaOk ? "dp-ok" : s.altaIntento ? "dp-error" : "dp-neutro",
+    cedulaMensaje: cedulaVacia ? "Opcional: 7 u 8 dígitos."
+      : cedulaOk ? "Formato correcto."
+      : s.altaIntento ? "La cédula debe tener 7 u 8 dígitos." : "7 u 8 dígitos.",
+    cedulaClase: cedulaVacia ? "dp-neutro" : cedulaOk ? "dp-ok" : s.altaIntento ? "dp-error" : "dp-neutro",
     submitNote: faltasAlta.length
       ? (s.altaIntento ? `Faltan por completar o corregir: ${faltasAlta.map(f => f.etiqueta).join(", ")}.` : "Completa todos los datos para enviar.")
       : (s.editandoFolio ? "Puedes guardar los cambios." : "Puedes enviar la solicitud."),
 
-    // RFC del alta (obligatorio). El error se muestra hasta que ya tiene el
-    // largo de un RFC o se intentó enviar: no a la primera letra.
+    // RFC del alta (opcional). El error se muestra hasta que ya tiene el
+    // largo de un RFC o se intentó enviar: no a la primera letra. Vacío nunca
+    // es error.
     rfcValor: normalizarRfc(s.form.rfc),
     rfcTipo: rfcAlta.estado === "valido" ? etiquetaTipoRfc(rfcAlta.tipo) : "",
     horarioResumen: serializarHorario(s.form.horarioBloques) || "Elige los días y las horas de atención.",
 
     // La advertencia del dígito verificador es para quien revisa
     // (Administrador): a quien captura solo se le dice si el formato es válido.
-    rfcMensaje: !rfcMostrarError ? "Obligatorio: 13 caracteres (persona física) o 12 (persona moral)."
+    rfcMensaje: rfcAlta.estado === "vacio" || !rfcMostrarError ? "Opcional: 13 caracteres (persona física) o 12 (persona moral)."
       : rfcAlta.estado === "valido" && !esAdministrador ? "Formato correcto." : rfcAlta.mensaje,
-    rfcClase: !rfcMostrarError ? "dp-neutro"
+    rfcClase: rfcAlta.estado === "vacio" || !rfcMostrarError ? "dp-neutro"
       : rfcAlta.estado !== "valido" ? "dp-error"
       : rfcAlta.digitoCorrecto || !esAdministrador ? "dp-ok" : "dp-advertencia",
     // Botones del SAT y la SEP e indicaciones de revisión: solo Administrador.
@@ -1277,7 +1280,7 @@ export function pantallaAlta(v) {
     <div class="dp-dos-columnas dp-alta">
       <div class="card tono-azul">
         <div class="card-body dp-formulario">
-          <p class="dp-nota">Todos los datos son obligatorios. Solo los documentos son opcionales.</p>
+          <p class="dp-nota">Todos los datos son obligatorios, excepto la cédula profesional, el RFC y los documentos.</p>
           <div class="dp-grid-campos">
             ${campo("dp-nombre", "name", "Nombre completo", "Dra. Laura Méndez Ruiz")}
             <div class="field dp-campo">
@@ -1289,8 +1292,8 @@ export function pantallaAlta(v) {
             </div>
           </div>
           <div class="dp-grid-campos">
-            ${campo("dp-ced", "cedula", "Cédula profesional", "7 u 8 dígitos", 'maxlength="8" inputmode="numeric" pattern="[0-9]*"')}
-            ${campo("dp-rfc", "rfc", "Cédula fiscal / RFC", "GODE561231GR8", 'maxlength="13" autocapitalize="characters" spellcheck="false"')}
+            ${campo("dp-ced", "cedula", "Cédula profesional (opcional)", "7 u 8 dígitos", 'maxlength="8" inputmode="numeric" pattern="[0-9]*"')}
+            ${campo("dp-rfc", "rfc", "Cédula fiscal / RFC (opcional)", "GODE561231GR8", 'maxlength="13" autocapitalize="characters" spellcheck="false"')}
           </div>
           <div class="dp-verificacion" id="dp-alta-verificacion">${altaVerificacion(v)}</div>
           <div class="dp-verificacion dp-verificacion-rfc" id="dp-alta-rfc">${altaRfc(v)}</div>

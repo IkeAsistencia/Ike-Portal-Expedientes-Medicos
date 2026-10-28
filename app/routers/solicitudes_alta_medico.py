@@ -54,10 +54,12 @@ class SolicitudAltaInput(BaseModel):
 
     nombre: str = Field(min_length=1, max_length=150)
     especialidad: str = Field(min_length=1, max_length=100)
-    # Todos los campos son obligatorios (lo único opcional son los documentos);
-    # su formato se revisa en _validar_datos.
-    cedula: str = Field(min_length=1, max_length=20)
-    rfc: str = Field(min_length=1, max_length=20)
+    # Todos los campos son obligatorios, salvo la cédula, el RFC y los
+    # documentos (decisión del usuario, 2026-10-28): sin ellos la solicitud se
+    # guarda igual, pero si se captura uno se revisa su formato. Su formato se
+    # revisa en _validar_datos.
+    cedula: str = Field(default="", max_length=20)
+    rfc: str = Field(default="", max_length=20)
     estado: str = Field(min_length=1, max_length=60)
     municipio: str = Field(min_length=1, max_length=80)
     calle_num_ext_int: str = Field(min_length=1, max_length=180)
@@ -76,15 +78,18 @@ class EstatusInput(BaseModel):
 
 def _validar_datos(data: SolicitudAltaInput) -> dict:
     """Todos los campos con valor y bien formados (ver
-    validacion_rfc_cedula_service). Se guardan ya normalizados: sin espacios
-    de más, el RFC en mayúsculas y el teléfono solo con sus 10 dígitos."""
+    validacion_rfc_cedula_service), menos la cédula y el RFC, que pueden ir
+    vacíos pero, si traen algo, también se revisan. Se guardan ya
+    normalizados: sin espacios de más, el RFC en mayúsculas y el teléfono solo
+    con sus 10 dígitos. Sin cédula ni RFC se guarda "" (la columna cedula no
+    admite NULL)."""
     try:
         return {
             **data.model_dump(),
             "nombre": validacion.exigir_texto(data.nombre, "El nombre"),
             "especialidad": validacion.exigir_texto(data.especialidad, "La especialidad"),
-            "cedula": validacion.revisar_cedula(data.cedula),
-            "rfc": validacion.revisar_rfc(data.rfc).rfc,
+            "cedula": validacion.revisar_cedula(data.cedula) if data.cedula.strip() else "",
+            "rfc": validacion.revisar_rfc(data.rfc).rfc if data.rfc.strip() else "",
             "estado": validacion.exigir_texto(data.estado, "El estado"),
             "municipio": validacion.exigir_texto(data.municipio, "El municipio"),
             "calle_num_ext_int": validacion.exigir_texto(data.calle_num_ext_int, "La calle y número"),
