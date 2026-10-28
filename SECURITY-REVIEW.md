@@ -485,3 +485,102 @@ versionado de la rama `dir-medicos` menos `.gitignore`, `.gitattributes`,
 recién integrado desde `cuentas-color` y el Directorio de Proveedores ya
 con lógica real -- a diferencia del paquete del 2026-10-16, donde se
 excluyó por ser todavía una maqueta.
+
+---
+
+# Escaneo Checkmarx — 2026-10-26 (triage) y autorrevisión — 2026-10-28
+
+Reporte del área de seguridad (`Cx_ScanReport_2026-10-26_180709.pdf`,
+proyecto Checkmarx `Ike-DrVideo-Back`, scan id
+`78adcfbe-6734-470d-b944-861cc42a4bac`). 9 hallazgos nuevos, todos Medium,
+0 críticos/altos: 6 `Unchecked_Input_for_Loop_Condition` (CWE-606) y 3
+`Privacy_Violation` (CWE-359). El reporte trae además 520 "Resolved
+Vulnerabilities" históricos cuyo `Query Path` empieza en `Java\...` -- no
+corresponden a este portal (100% Python); son arrastre de un escaneo
+previo de otro proyecto bajo el mismo nombre en Checkmarx y no deben
+leerse como progreso de este repo.
+
+## Triage de los 9 hallazgos
+
+5 son la misma recurrencia que ya se documentó en el escaneo del
+2026-10-13 (segunda corrida, arriba): el motor no reconoce `Query(ge=,
+le=, max_length=)` ni `Field(max_length=)` de FastAPI/Pydantic como
+validación previa al ciclo.
+
+| Dónde | Tipo | Estado |
+|---|---|---|
+| `catalogos.py` -- `cl_servicio` en `/servicios` | Unchecked_Input_for_Loop_Condition | Recurrente, no explotable (`Query(ge=1, le=9999)`) |
+| `catalogos.py` -- `cl_servicio` en `/subservicios` | Unchecked_Input_for_Loop_Condition | Recurrente, no explotable |
+| `catalogos.py` -- `cod_ent` en `/municipios` | Unchecked_Input_for_Loop_Condition | Recurrente, no explotable (`max_length=2`) |
+| `expedientes.py` -- `data.expedientes` en `/corte` | Unchecked_Input_for_Loop_Condition | Recurrente, ya corregido (`max_length=2000`) |
+| `auth.py` -- password hacia `LoginResponse` | Privacy_Violation | Recurrente, falso positivo (`LoginResponse` no incluye password) |
+
+Los otros 4 son la primera corrida de Checkmarx contra el Directorio de
+Proveedores con lógica real (el paquete del 2026-10-16 lo había excluido
+por ser maqueta) y entran con el mismo patrón de siempre:
+
+| Dónde | Tipo | Por qué no aplica |
+|---|---|---|
+| `catalogos.py` -- `texto` en `/cuentas/buscar` | Unchecked_Input_for_Loop_Condition | `max_length=60` (`LARGO_MAXIMO_BUSQUEDA_CUENTA`), 422 antes del ciclo |
+| `directorio_proveedores.py` -- `dias` hacia `agenda_disponible` | Unchecked_Input_for_Loop_Condition | `Query(ge=1, le=DIAS_AGENDA_MAXIMO)` |
+| `proveedores_repo.py` -- `obtener_por_clave` hacia `directorio_proveedores.py` | Privacy_Violation | Regresa un registro público del padrón (nombre, consultorio, horario), no datos sensibles de un usuario |
+| `directorio_proveedores.py` -- `clave` hacia `agenda_disponible` | Privacy_Violation | Mismo patrón: `clave` es el identificador público del proveedor, no un dato privado |
+
+**Conclusión: los 9 son "Not Exploitable" / falso positivo, ninguno requiere
+cambio de código.** Se documentan aquí para triage directo en Checkmarx.
+
+## Autorrevisión propia — 2026-10-28
+
+Repetición del barrido SCA + SAST local antes de responder este escaneo,
+mismo método que el del 2026-10-16/19.
+
+**SCA (`pip-audit` sobre `requirements.txt`):** sin vulnerabilidades
+conocidas.
+
+**SAST (`bandit` sobre `app/`, `scripts/`, `dev_server_datos_prueba.py`):**
+16 hallazgos (12 Medium `B608`, 3 Low `B105`/`B107`, 1 Low `B311`, 1 Medium
+`B310`), todos revisados uno por uno:
+
+- **12 × B608 ("posible SQL injection")** en `citas_proveedor_repo.py`,
+  `especialidades_repo.py`, `estatus_repo.py`, `proveedores_repo.py` y
+  `solicitudes_alta_medico_repo.py`: el mismo patrón ya documentado en la
+  tabla de falsos positivos del 2026-10-19 (arriba) -- lo interpolado son
+  nombres de tabla/columna de tuplas constantes (`_CAMPOS_DATOS`,
+  `_CAMPOS_SOLICITUD`, `SEMILLA`) o conteos de `?` (`marcadores`) basados
+  en listas fijas/enums, nunca texto libre del usuario; los valores
+  siempre viajan parametrizados. Dos de ellos (`citas_proveedor_repo.py:33`,
+  `proveedores_repo.py:102`) ni siquiera reciben un parámetro: interpolan
+  `len(PREFIJO_FOLIO)` / `len(PREFIJO_CLAVE)`, constantes del propio
+  código.
+- **B105/B107 (`'Qwer1234$'`, `'CAMBIA-ESTE-VALOR-EN-TU-.env'`)** y
+  **B105 en `acceso.py`**: los mismos 3 de la autorrevisión del
+  2026-10-16, sin cambios -- contraseña semilla de desarrollo, valor por
+  defecto que fuerza a fallar si falta `JWT_SECRET_KEY`, y el texto de un
+  `ValueError`.
+- **B311 (`random.choices` en `solicitudes_alta_medico_repo.py:94`)**:
+  genera el folio visible `ALT-00001`, no un secreto ni un token -- no
+  necesita ser criptográficamente seguro.
+- **B310 (`urllib.request.urlopen` en `scripts/generar_limites_estados.py:90`)**:
+  `URL` es una constante `https://` fija en el código (geojson de
+  INEGI/GitHub); el script se corre a mano una sola vez para regenerar
+  `geo-estados.js` y nunca se ejecuta en arranque ni en despliegue.
+
+Ningún hallazgo de `bandit` requiere cambio de código.
+
+## Paquete generado
+
+`portal-promedico-security-scan_20261028.zip` (árbol versionado de la rama
+`dev` -- igual al estado actual de `main` tras la sincronización del
+2026-10-26 -- menos `.gitignore`, `.gitattributes`,
+`dev_server_datos_prueba.py` y `prompts/`, mismo criterio de exclusión que
+los paquetes anteriores).
+
+## Siguiente paso
+
+Responder al escaneo Checkmarx de 2026-10-26 marcando los 9 hallazgos como
+"Not Exploitable" con la justificación de arriba, y subir
+`portal-promedico-security-scan_20261028.zip` a SGI para la siguiente
+corrida. Si el área de seguridad insiste en cerrarlos en código, la
+alternativa sigue siendo la misma del escaneo anterior: agregar un `if`
+explícito redundante solo para que el motor estático lo reconozca, sin
+protección real adicional.
