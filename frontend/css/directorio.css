@@ -182,8 +182,8 @@
    claro que son establecimientos del INEGI, no proveedores del portal. */
 .dp-aviso-candidatos{
   display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;
-  padding:12px 14px;margin:0 0 4px;
-  background:var(--tono-ambar);border-bottom:1px solid var(--tono-ambar-borde);
+  padding:12px 14px;margin:0 0 12px;
+  background:var(--tono-ambar);border:1px solid var(--tono-ambar-borde);border-radius:var(--radius);
 }
 .dp-aviso-candidatos .dp-texto{margin:0;flex:1 1 280px;min-width:0;}
 /* Segundo párrafo del aviso: el alcance real de la consulta al INEGI
@@ -212,6 +212,11 @@
    del texto explicativo. */
 .dp-fuera-vista{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:0 0 12px;}
 .dp-fuera-vista .dp-nota{margin:0;}
+/* Formulario de "Buscar fuera de la red": aire entre los combos y "Buscar". */
+.dp-fuera-form{display:grid;gap:16px;}
+/* Dentro de la tarjeta de resultados el padding ya lo pone .card-body. */
+#dp-fuera-resultados .dp-vacio{padding:8px 0 4px;}
+#dp-fuera-resultados .dp-vacio .dp-texto{margin-bottom:0;}
 
 /* Número del candidato: el MISMO que su pin en el mapa, para poder seguir un
    consultorio al alternar Mapa/Lista. Mismo tamaño y forma que el pin, con

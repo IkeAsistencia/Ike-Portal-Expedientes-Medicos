@@ -56,14 +56,12 @@ const PLANTILLA = `
     <div class="dp-barra-comparar hidden" id="dp-barra-comparar"></div>
   </div>`;
 
-const RUTA_MAPA = "js/directorio/mapa-zona.html";
 const RUTA_MAPA_GOOGLE = "js/directorio/mapa-google.html";
 const MAX_RECIENTES = 5;
 const MAX_COMPARAR = 3;
 
 let raiz = null;
 let modalFicha = null;
-let marcoMapa = null;    // <iframe> del mapa (solo existe con la vista Mapa en Resultados)
 let marcoMapaFuera = null; // <iframe> del mapa de "Buscar fuera de la red"
 let generacion = 0;      // al reiniciar se incrementa: los setTimeout pendientes ya no aplican
 let estado = estadoInicial();
@@ -79,7 +77,6 @@ function estadoInicial() {
     // el conteo de la tarjeta y los resultados coincidan.
     specialtyId: null,
     query: "", searchTerm: null, recent: [],
-    view: "list",
     // Solo los filtros que se resuelven con datos reales del padrón (ver
     // visible() en datos.js).
     filters: { maxPrice: 9999, tele: false, seguro: false, orden: "nombre" },
@@ -215,7 +212,6 @@ function pintar() {
   pintarFicha(v);
   marcarInvalidosAlta();
   restaurarFoco(foco);
-  enviarMapa();
   // El mapa de "Buscar fuera de la red" solo existe en la vista Mapa; en
   // Lista se destruye (ver fueraResultadosCuerpo en vistas.js).
   if (estado.screen === "fuera" && estado.fueraVista === "mapa" && estado.fueraResultados) {
@@ -252,7 +248,6 @@ function pintarPantalla(v) {
     };
     cuerpo.innerHTML = plantillas[v.screen](v);
     cuerpo.dataset.pantalla = v.screen;
-    marcoMapa = null;
   }
   // Al cambiar de sub-pantalla se regresa arriba (el scroll vive en .content).
   if (anterior && anterior !== v.screen) raiz.closest(".content")?.scrollTo(0, 0);
@@ -262,32 +257,11 @@ function pintarResultados(v, cuerpo) {
   if (cuerpo.dataset.pantalla !== "results") {
     cuerpo.innerHTML = V.esqueletoResultados();
     cuerpo.dataset.pantalla = "results";
-    marcoMapa = null;
   }
   $("dp-res-cabecera").innerHTML = V.cabeceraResultados(v);
   $("dp-res-filtros").innerHTML = V.filtrosResultados(v);
   $("dp-res-conteo").innerHTML = V.conteoResultados(v);
-
-  // El iframe del mapa se crea al pasar a la vista Mapa y se quita al volver
-  // a Lista (igual que el original). Con los filtros NO se recarga: solo se
-  // le manda la lista nueva por postMessage (ver enviarMapa).
-  const zonaMapa = $("dp-res-mapa");
-  if (v.viewMap) {
-    zonaMapa.classList.remove("hidden");
-    if (!marcoMapa) {
-      marcoMapa = document.createElement("iframe");
-      marcoMapa.title = "Mapa de la zona";
-      marcoMapa.className = "dp-mapa-marco";
-      marcoMapa.addEventListener("load", enviarMapa);
-      marcoMapa.src = RUTA_MAPA;
-      zonaMapa.appendChild(marcoMapa);
-    }
-  } else {
-    zonaMapa.classList.add("hidden");
-    zonaMapa.innerHTML = "";
-    marcoMapa = null;
-  }
-  $("dp-res-lista").innerHTML = v.viewList ? V.listaResultados(v) : "";
+  $("dp-res-lista").innerHTML = V.listaResultados(v);
 }
 
 function pintarFicha(v) {
@@ -301,20 +275,6 @@ function pintarFicha(v) {
   overlay.querySelector(".modal-body").innerHTML = V.fichaCuerpo(v);
   overlay.querySelector(".modal-footer").innerHTML = V.fichaPie(v);
   overlay.classList.remove("hidden");
-}
-
-/* Lista de la zona al iframe del mapa. Solo a nuestro propio origen. */
-function enviarMapa() {
-  if (!marcoMapa || !marcoMapa.contentWindow || estado.view !== "map") return;
-  marcoMapa.contentWindow.postMessage({
-    type: "zona", estado: estado.estado, municipio: estado.municipio,
-    doctors: visible(estado).map(d => ({
-      id: d.id, name: d.name, specialty: d.specialty, clinic: d.clinic, municipio: d.municipio,
-      price: d.price, origen: d.origen,
-      // Coordenadas reales del padrón (null si el proveedor no las trae).
-      latitud: d.latitud, longitud: d.longitud,
-    })),
-  }, location.origin);
 }
 
 /* ---------- Mapa de "Buscar fuera de la red" ----------
@@ -444,7 +404,7 @@ function aplicarCoordinacion() {
   const r = resolverBusquedaDeExpediente(ctx);
   irA({
     // Filtros y comparador en blanco: que lo de una visita anterior no esconda médicos.
-    detail: null, searchTerm: null, view: "list", compare: [],
+    detail: null, searchTerm: null, compare: [],
     filters: { maxPrice: 9999, tele: false, seguro: false, orden: "nombre" },
     screen: r.screen,
     specialty: r.especialidad ? r.especialidad.descripcion : null,
@@ -735,10 +695,9 @@ function elegirEspecialidadDelCombo(el) {
    Se precarga el catálogo de Entidad al entrar, igual que en el Alta de
    médico. */
 function abrirFueraDeRed() {
-  // Si se venía de una búsqueda por zona, se arrastra la especialidad para
-  // no obligar a volver a escribirla.
-  const especialidad = estado.specialty || estado.searchTerm || "";
-  // Viniendo de un expediente, la zona por defecto es la suya.
+  // El formulario se arma SIEMPRE con lo que se está viendo (zona y
+  // especialidad), nunca con la búsqueda anterior: conservarla hacía que,
+  // viniendo de Gustavo A. Madero, apareciera el estado de la vez pasada.
   const ctx = coordinacionActual();
   const zona = {
     estado: estado.estado || (ctx && ctx.entidad) || null,
@@ -746,10 +705,24 @@ function abrirFueraDeRed() {
   };
   irA({
     screen: "fuera", detail: null,
-    fueraForm: { ...estado.fueraForm, especialidad: estado.fueraForm.especialidad || especialidad },
+    fueraForm: { codEnt: "", codMun: "", especialidad: especialidadParaFuera() },
     fueraResultados: null, fueraError: null, fueraBuscando: false,
   });
   preseleccionarZonaFuera(zona);
+}
+
+/* La especialidad del combo, si lo que se estaba buscando es una del
+   catálogo del directorio. Un texto libre que no es del catálogo no se
+   arrastra: el combo no lo podría mostrar. */
+function especialidadParaFuera() {
+  const candidatos = [estado.specialty, estado.searchTerm].filter(Boolean);
+  const catalogo = todasLasEspecialidades();
+  if (!catalogo.length) return estado.specialty || "";
+  for (const nombre of candidatos) {
+    const encontrada = catalogo.find(x => comparable(x.descripcion) === comparable(nombre));
+    if (encontrada) return encontrada.descripcion;
+  }
+  return "";
 }
 
 /* El botón de "fuera de la red" sale justo cuando la red no tiene a nadie en
@@ -763,9 +736,7 @@ async function preseleccionarZonaFuera({ estado: nombreEntidad, municipio: nombr
   const entidades = await cargarEntidadesAltaReal();
   if (g !== generacion || estado.screen !== "fuera") return;
 
-  const entidad = nombreEntidad && !estado.fueraForm.codEnt
-    ? entidades.find(x => comparable(x.descripcion) === comparable(nombreEntidad))
-    : null;
+  const entidad = buscarPorNombre(entidades, nombreEntidad);
   if (!entidad) {
     pintar();
     return;
@@ -775,18 +746,33 @@ async function preseleccionarZonaFuera({ estado: nombreEntidad, municipio: nombr
   pintar();
 
   const municipios = await cargarMunicipiosAltaReal(entidad.clave);
-  if (g !== generacion || estado.screen !== "fuera") return;
-  const municipio = nombreMunicipio
-    ? municipios.find(x => comparable(x.descripcion) === comparable(nombreMunicipio))
-    : null;
+  // Si mientras cargaban los municipios la persona eligió otro estado, se
+  // respeta su elección.
+  if (g !== generacion || estado.screen !== "fuera" || estado.fueraForm.codEnt !== entidad.clave) return;
+  const municipio = buscarPorNombre(municipios, nombreMunicipio);
   if (municipio) estado.fueraForm = { ...estado.fueraForm, codMun: municipio.clave };
   pintar();
 }
 
-/* El catálogo viene en mayúsculas y sin acentos ("MERIDA"); el directorio
-   los trae con acento ("Mérida"). */
+/* Empareja un nombre del padrón con el catálogo. Primero igual; si no, el
+   catálogo puede traer el nombre oficial completo ("COAHUILA" ->
+   "Coahuila de Zaragoza", "VERACRUZ" -> "Veracruz de Ignacio de la Llave"),
+   y se acepta solo si hay UNO que empiece así (para no adivinar). */
+function buscarPorNombre(lista, nombre) {
+  const buscado = comparable(nombre);
+  if (!buscado) return null;
+  const igual = lista.find(x => comparable(x.descripcion) === buscado);
+  if (igual) return igual;
+  const empiezan = lista.filter(x => comparable(x.descripcion).startsWith(buscado + " "));
+  return empiezan.length === 1 ? empiezan[0] : null;
+}
+
+/* El catálogo viene con acentos y puntos ("Gustavo A. Madero") y el padrón
+   en mayúsculas, sin acentos ni puntos ("GUSTAVO A MADERO"): se comparan
+   solo letras y números. */
 function comparable(texto) {
-  return (texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toUpperCase();
+  return (texto || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
 }
 
 /* "Mapa" solo se puede elegir si el mapa de Google está listo (ver
@@ -962,8 +948,6 @@ const ACCIONES = {
   "elegir-municipio": (el) => irA({ screen: "results", municipio: el.dataset.valor, searchTerm: null }),
 
   // Resultados
-  "vista-lista": () => irA({ view: "list" }),
-  "vista-mapa": () => irA({ view: "map" }),
   "precio": (el) => { ponerFiltros({ maxPrice: Number(el.dataset.valor) }); pintar(); },
   "limpiar-filtros": () => { ponerFiltros({ maxPrice: 9999, tele: false, seguro: false }); pintar(); },
   "ficha": (el) => {
@@ -1121,13 +1105,6 @@ function alEscribir(e) {
     pintarSugerencias();
     return;
   }
-  if (el.dataset.campoFuera) {
-    // Solo se guarda el valor y se refresca el botón "Buscar": NO se
-    // repinta toda la pantalla en cada tecla, para no perder el cursor.
-    estado.fueraForm = { ...estado.fueraForm, [el.dataset.campoFuera]: el.value };
-    pintarBotonFuera();
-    return;
-  }
   if (el.tagName !== "INPUT" || !el.dataset.campo) return;
   const campo = el.dataset.campo;
   if (RESTRICCIONES_ALTA[campo]) {
@@ -1154,21 +1131,6 @@ function alTeclear(e) {
   if (e.target.dataset.campoFuera && e.key === "Enter") {
     e.preventDefault();
     buscarFuera();
-  }
-}
-
-/* Habilita/deshabilita "Buscar" mientras se escribe la especialidad, sin
-   repintar la pantalla completa. */
-function pintarBotonFuera() {
-  const boton = raiz.querySelector("[data-accion='buscar-fuera-de-red']");
-  if (!boton) return;
-  const v = V.calcular(estado);
-  boton.disabled = !(v.fueraPuedeBuscar && !v.fueraBuscando);
-  const nota = boton.parentElement.querySelector(".dp-nota");
-  if (nota) {
-    nota.textContent = v.fueraPuedeBuscar
-      ? "Listo para buscar."
-      : "Elige un estado y escribe al menos 3 caracteres de la especialidad.";
   }
 }
 

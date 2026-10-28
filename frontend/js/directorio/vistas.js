@@ -250,7 +250,6 @@ export function calcular(s) {
     })),
 
     // Resultados
-    viewList: s.view === "list", viewMap: s.view === "map",
     priceOptions: PRICE_OPTIONS.map(p => ({ label: p.label, max: p.max, elegido: f.maxPrice === p.max })),
     fTele: f.tele, fSeguro: f.seguro, orden: f.orden,
     filterSummary: [f.maxPrice < 9999 ? "≤ $" + f.maxPrice : null, f.tele ? "teleconsulta" : null, f.seguro ? "con convenio" : null].filter(Boolean).join(" · ") || "Sin filtros activos",
@@ -406,6 +405,7 @@ export function calcular(s) {
     fueraEntidadesFallaron: entidadesAltaFallaron(),
     fueraMunicipios: municipiosAltaCache(s.fueraForm.codEnt),
     fueraMunicipiosCargados: municipiosAltaCargados(s.fueraForm.codEnt),
+    fueraEspecialidades: todasLasEspecialidades().map(x => x.descripcion).sort((a, b) => a.localeCompare(b, "es")),
     fueraBuscando: !!s.fueraBuscando,
     fueraError: s.fueraError || "",
     fueraBuscado: !!s.fueraResultados,
@@ -421,7 +421,7 @@ export function calcular(s) {
     // (GOOGLE_MAPS_BROWSER_API_KEY, ver app/config.py). Sin llave se oculta
     // la opción Mapa en vez de mostrar un mapa vacío.
     fueraPuedeMapa: !!s.mapaGoogleListo,
-    fueraPuedeBuscar: !!(s.fueraForm.codEnt && (s.fueraForm.especialidad || "").trim().length >= 3),
+    fueraPuedeBuscar: !!(s.fueraForm.codEnt && s.fueraForm.especialidad),
     // Cédula profesional: solo se revisa el formato (7 u 8 dígitos), mientras
     // se escribe y sin botón. Igual que el RFC, el error espera a que se
     // intente enviar para no marcarlo a la primera tecla.
@@ -685,7 +685,7 @@ export function pantallaZona(v) {
 
 /* ---------- Resultados ---------- */
 // El esqueleto se pinta una sola vez al entrar a Resultados; después solo se
-// repintan sus partes, para que el iframe del mapa no se recargue.
+// repintan sus partes (cabecera, filtros, conteo y lista).
 export function esqueletoResultados() {
   return `
     <div id="dp-res-cabecera"></div>
@@ -696,20 +696,18 @@ export function esqueletoResultados() {
       <div class="card tono-verdeazul dp-panel-resultados">
         <div class="card-header" id="dp-res-conteo"></div>
         <div class="card-body">
-          <div class="dp-mapa hidden" id="dp-res-mapa"></div>
           <div id="dp-res-lista"></div>
         </div>
       </div>
     </div>`;
 }
 
+// Sin selector Lista/Mapa: el padrón casi no trae coordenadas, así que el
+// mapa de la zona salía vacío (se quitó, instrucción del usuario 2026-10-28).
+// El mapa que sí funciona es el de "Buscar fuera de la red" (Google).
 export function cabeceraResultados(v) {
   const acciones = `
     <div class="dp-acciones">
-      <div class="dp-seg" role="group" aria-label="Vista">
-        <button class="dp-seg-opcion${v.viewList ? " dp-sel" : ""}" data-accion="vista-lista">Lista</button>
-        <button class="dp-seg-opcion${v.viewMap ? " dp-sel" : ""}" data-accion="vista-mapa">Mapa</button>
-      </div>
       <button class="btn btn-secondary" data-accion="ir-fuera-de-red">Buscar fuera de la red</button>
       <button class="btn btn-primary" data-accion="ir-inicio">Nueva búsqueda</button>
     </div>`;
@@ -1085,6 +1083,18 @@ export function opcionesMunicipioFuera(v) {
     + opcionesCatalogoTexto(v.fueraMunicipios, v.fueraForm.codMun);
 }
 
+/* Las mismas especialidades del directorio (tarjetas + combo), en orden
+   alfabético para encontrarlas rápido. El valor es el nombre: es lo que se
+   le manda a Google como término de búsqueda. */
+export function opcionesEspecialidadFuera(v) {
+  if (!v.fueraEspecialidades.length) return `<option value="">Cargando…</option>`;
+  const elegida = normalizarTexto(v.fueraForm.especialidad);
+  return `<option value="">Selecciona una especialidad</option>`
+    + v.fueraEspecialidades.map(x =>
+      `<option value="${e(x)}"${normalizarTexto(x) === elegida ? " selected" : ""}>${e(x)}</option>`
+    ).join("");
+}
+
 function _introFuera() {
   return `
     <div class="dp-vacio">
@@ -1201,7 +1211,7 @@ export function pantallaFueraDeRed(v) {
       texto: "Establecimientos candidatos a contratar cuando la red no tiene cobertura en una zona. Es información pública (Google Maps): para incorporar a alguien hay que darlo de alta y validar su cédula profesional.",
     })}
     <div class="card tono-azul">
-      <div class="card-body">
+      <div class="card-body dp-fuera-form">
         <div class="dp-grid-campos">
           <div class="field dp-campo">
             <label for="dp-fr-estado">Estado</label>
@@ -1211,21 +1221,18 @@ export function pantallaFueraDeRed(v) {
             <label for="dp-fr-mun">Municipio</label>
             <select id="dp-fr-mun" data-campo-fuera="codMun">${opcionesMunicipioFuera(v)}</select>
           </div>
-        </div>
-        <div class="dp-grid-campos">
           <div class="field dp-campo">
-            <label for="dp-fr-esp">Especialidad o término de búsqueda</label>
-            <input type="text" id="dp-fr-esp" data-campo-fuera="especialidad" placeholder="cardiología" value="${e(v.fueraForm.especialidad)}" autocomplete="off">
-            <span class="dp-nota">Se busca de forma literal ("cardiología en ..."); entre más preciso el término, mejores resultados.</span>
+            <label for="dp-fr-esp">Especialidad</label>
+            <select id="dp-fr-esp" data-campo-fuera="especialidad">${opcionesEspecialidadFuera(v)}</select>
           </div>
         </div>
         <div class="dp-acciones dp-enviar">
           <button class="btn btn-primary" data-accion="buscar-fuera-de-red"${v.fueraPuedeBuscar && !v.fueraBuscando ? "" : " disabled"}>Buscar</button>
-          <span class="dp-nota">${e(v.fueraPuedeBuscar ? "Listo para buscar." : "Elige un estado y escribe al menos 3 caracteres de la especialidad.")}</span>
+          <span class="dp-nota">${e(v.fueraPuedeBuscar ? "Listo para buscar." : "Elige un estado y una especialidad.")}</span>
         </div>
       </div>
     </div>
-    <div class="card tono-verdeazul" id="dp-fuera-resultados">${fueraResultadosCuerpo(v)}</div>`;
+    <div class="card tono-verdeazul" id="dp-fuera-resultados"><div class="card-body">${fueraResultadosCuerpo(v)}</div></div>`;
 }
 
 export function pantallaAlta(v) {
