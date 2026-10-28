@@ -270,6 +270,11 @@
 .dp-vacio{padding:28px 0 20px;}
 .dp-vacio-titulo{margin:0 0 8px;font-size:15px;font-weight:600;color:var(--navy);}
 .dp-vacio .dp-texto{max-width:56ch;margin-bottom:16px;}
+/* Cuando el estado vacío es hijo DIRECTO de la tarjeta (sin .card-body, ej.
+   "Sin cobertura para X"), el padding del .dp-vacio no trae relleno
+   horizontal y el texto queda pegado al borde. Se le da el mismo relleno que
+   un .card-body para que se vea igual que el resto de las tarjetas. */
+.card > .dp-vacio{padding:28px 18px 20px;}
 
 /* ---------- Comparar ---------- */
 /* Tablas directo dentro de la tarjeta (sin encabezado): que el thead gris
