@@ -7,6 +7,7 @@ from fastapi.responses import Response
 from app.core.security import usuario_actual
 from app.repositories import accesos_repo, correos_enviados_repo, cortes_repo, estatus_repo, expedientes_repo
 from app.schemas.correo import (
+    MAXIMO_EXPEDIENTES_POR_OPERACION,
     EnviarCorreoProveedoresInput,
     EnviarCorreoProveedoresResponse,
     EnviarCorteResponse,
@@ -139,6 +140,12 @@ def generar_corte(data: GenerarCorteInput, usuario: dict = Depends(usuario_actua
     verdad no hay dato, no por una regla que lo fuerce.
     """
     _requerir_administrador(usuario)
+
+    # GenerarCorteInput.expedientes ya trae Field(max_length=...); se
+    # revalida aquí, en la misma función que arma el `for` de abajo, para
+    # que el tope quede explícito en el código (CWE-606).
+    if len(data.expedientes) > MAXIMO_EXPEDIENTES_POR_OPERACION:
+        raise HTTPException(400, f"No se pueden procesar más de {MAXIMO_EXPEDIENTES_POR_OPERACION} expedientes a la vez.")
 
     registros = []
     for cl_expediente in data.expedientes:

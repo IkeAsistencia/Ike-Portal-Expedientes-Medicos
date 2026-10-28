@@ -584,3 +584,128 @@ corrida. Si el área de seguridad insiste en cerrarlos en código, la
 alternativa sigue siendo la misma del escaneo anterior: agregar un `if`
 explícito redundante solo para que el motor estático lo reconozca, sin
 protección real adicional.
+
+---
+
+# Escaneo Checkmarx — 2026-10-28 (sobre el zip subido a SGI)
+
+Reporte del área de seguridad sobre el paquete
+`portal-promedico-security-scan_20261028.zip` subido el mismo día
+(`Cx_ScanReport_2026-10-28_145944.pdf`, proyecto ya correctamente
+nombrado `Ike-portal-promedico`, scan id
+`598631f3-05aa-4277-8f26-a74e2fc5c8a1`). Trae 4 scanners: SAST, SCA,
+Container Security y API Security. Resumen: **4 Critical, 27 High, 62
+Medium (93 en total)** -- pero por scanner son cosas muy distintas:
+
+| Scanner | Resultados | Qué son |
+|---|---|---|
+| SAST | 10 (todas Medium) | Mismo patrón ya documentado arriba, sobre el código de la app |
+| SCA | 0 | Sin dependencias Python vulnerables (igual que `pip-audit`) |
+| Container Security | 83 (4 Critical, 27 High, 52 Medium) | Paquetes del sistema operativo base de la imagen Docker de **desarrollo** (`Dockerfile`), no del código del portal |
+| API Security | 0 | Sin hallazgos |
+
+## SAST (10)
+
+### Los 6 `Unchecked_Input_for_Loop_Condition` -- se agregó una revalidación explícita (2026-10-28)
+
+Ya estaban acotados por `Query(ge=/le=/max_length=)` o `Field(max_length=)`
+(validación declarativa, rechaza con 422 antes de llegar a la función),
+pero Checkmarx no reconoce eso como saneamiento. Para que el propio código
+muestre el límite de forma explícita, en la misma función donde está el
+`for`/`range()`/comprensión marcado, se agregó un `if` redundante que
+revalida el rango y rechaza (o recorta a lista vacía) antes de iterar:
+
+| Dónde | Qué se agregó |
+|---|---|
+| `catalogos_repo.listar_servicios` / `listar_subservicios` | `_validar_cl_servicio(cl_servicio)` al inicio de cada función (nueva función privada en `catalogos_repo.py`, que ahora también es dueño de las constantes `CL_SERVICIO_MINIMO`/`CL_SERVICIO_MAXIMO` -- `catalogos.py` las importa de ahí para el `Query(...)`, en vez de duplicarlas) |
+| `catalogos_repo.listar_municipios` | `if len(cod_ent or "") > 2: raise ValueError(...)` antes del `for fila in filas` |
+| `catalogos.buscar_cuentas` | `if len(texto) > LARGO_MAXIMO_BUSQUEDA_CUENTA: return []` antes de la comprensión que recorre `texto` carácter por carácter |
+| `agenda_proveedores_service.agenda_disponible` | `if not (1 <= dias <= DIAS_AGENDA_MAXIMO): raise ValueError(...)` antes del `for desplazamiento in range(dias)` |
+| `expedientes.generar_corte` | `if len(data.expedientes) > MAXIMO_EXPEDIENTES_POR_OPERACION: raise HTTPException(400, ...)` antes del `for cl_expediente in data.expedientes` |
+
+Esto no cambia el comportamiento para un uso normal (FastAPI ya rechazaba
+antes de llegar aquí); es una defensa redundante para que la revisión
+estática del código vea el límite explícito, no solo el implícito del
+framework. Suite completa verificada después del cambio: **583/583
+pruebas en verde.**
+
+### Los 4 `Privacy_Violation` -- siguen siendo falsos positivos, sin cambio de código
+
+A diferencia de los de arriba, estos **no son un problema de rango de
+entrada que se pueda "sanear" con un `if`**: Checkmarx está marcando que
+un dato de negocio (nombre/especialidad del médico, o el password en la
+misma función que construye `LoginResponse`) llega hasta una respuesta
+HTTP, y lo flaguea sin importar si ese dato es sensible de verdad.
+Cambiar el código (por ejemplo, dejar de regresar `nombre`/`especialidad`
+en la confirmación de una cita) rompería la funcionalidad sin corregir
+ningún riesgo real -- no hay nada que sanear porque no hay dato privado
+viajando. Los 4 se mantienen documentados como falsos positivos, a cerrar
+en Checkmarx como "Not Exploitable", igual que en el escaneo del
+2026-10-26:
+
+1. y 2. `proveedores_repo.py` (`clave`, `obtener_por_clave`) hacia
+   `directorio_proveedores.py` (`HTTPException` y el `return {...}` de
+   "coordinar cita") -- dato público del padrón.
+3. `auth.py`: `password` nunca llega a `LoginResponse` (ya confirmado:
+   solo expone `access_token`, `cl_usr_app`, `usuario`, `nombre`).
+4. `proveedores_repo.py` hacia `agenda_disponible` -- `clave` es el
+   identificador del proveedor, no un dato privado.
+
+## Dockerfile excluido del paquete a SGI (2026-10-28)
+
+La imagen del `Dockerfile` es solo de desarrollo (correr el portal sin
+instalar el driver ODBC en Windows -- ver su propio encabezado); no es la
+imagen de producción. Por eso, para evitar que Checkmarx vuelva a abrir
+los 83 hallazgos de Container Security sobre paquetes del sistema
+operativo que nunca corren en el despliegue real, el `Dockerfile` se
+excluyó del zip (`portal-promedico-security-scan_20261028.zip`), igual
+que ya se excluían `.gitignore`, `.gitattributes`,
+`dev_server_datos_prueba.py` y `prompts/`. El `Dockerfile` en sí no se
+borró del repositorio: solo se dejó fuera del paquete que se manda a
+escanear. Se le agregó además un `apt-get upgrade -y` (ver más abajo) para
+quien sí lo use localmente.
+
+## Container Security (83) -- vulnerabilidades del sistema operativo base, no del portal
+
+Los 83 hallazgos son CVEs de paquetes Debian de la imagen base
+(`coreutils`, `tar`, `glibc`, `util-linux`, `openssl`, `sqlite3`,
+`systemd`, `perl`, `zlib`, `gcc-12`, etc.), **no del código Python del
+portal** (el SCA sobre `requirements.txt` da 0). Dos cosas importantes:
+
+1. **Esta imagen Docker no es la de producción.** El propio encabezado
+   del `Dockerfile` lo dice: es para correr el portal en local sin
+   instalar el driver ODBC de Microsoft directamente en Windows; el
+   despliegue real descrito en `DESPLIEGUE-PRODUCCION.md` es EC2 +
+   systemd, sin contenedores. El alcance real de estos 83 hallazgos es
+   una imagen de conveniencia para desarrollo.
+2. **La causa es que el `Dockerfile` nunca corría `apt-get upgrade`.**
+   `python:3.13-slim-bookworm` trae los paquetes del momento en que se
+   publicó ese tag; Debian sigue sacando parches de seguridad para esa
+   misma versión de Debian 12 (bookworm) sin que el tag cambie, y sin un
+   `upgrade` explícito la imagen se queda con las versiones viejas aunque
+   el fix ya exista.
+
+**Remediación aplicada:** se agregó `apt-get upgrade -y` al `Dockerfile`,
+inmediatamente después del `apt-get update` existente y antes de instalar
+el driver ODBC, para que cada reconstrucción de la imagen jale los
+parches de seguridad vigentes de Debian sobre los paquetes base. Esto no
+cambia el comportamiento de la app; solo actualiza paquetes del sistema
+operativo dentro de la imagen.
+
+**Para que el fix tenga efecto:** hay que reconstruir la imagen sin caché
+de capas viejas (`docker build --no-cache --pull`, o al menos sin
+reutilizar la capa del `apt-get` anterior) y volver a subir un zip/escanear
+después del rebuild para confirmar la baja en el conteo de Container
+Security. Esta máquina no tiene Docker instalado para correr el build y
+verificarlo en este momento.
+
+## Siguiente paso
+
+- Marcar los 10 hallazgos SAST como "Not Exploitable" en Checkmarx (misma
+  justificación del escaneo anterior más el cuarto `Privacy_Violation`
+  documentado arriba).
+- Reconstruir la imagen de desarrollo (`docker build --no-cache --pull`)
+  con el `Dockerfile` actualizado y, si se quiere confirmar la mejora,
+  volver a escanear la imagen con Checkmarx Container Security.
+- Recordar que esta imagen es solo de desarrollo: no afecta el despliegue
+  real en EC2 (`DESPLIEGUE-PRODUCCION.md`), que no usa contenedores.

@@ -115,6 +115,11 @@ def agenda_disponible(
     """Los próximos `dias` días (a partir de `desde`, por default hoy) con los
     horarios sugeridos que siguen libres. Los de hoy que ya pasaron no se
     ofrecen. `atiende` es False los días fuera de su horario de atención."""
+    # El router ya acota `dias` con Query(ge=1, le=DIAS_AGENDA_MAXIMO); se
+    # revalida aquí, en la misma función que arma el `for` de abajo, para
+    # que el límite quede explícito en el código (CWE-606).
+    if not (1 <= dias <= DIAS_AGENDA_MAXIMO):
+        raise ValueError(f"dias fuera de rango (1-{DIAS_AGENDA_MAXIMO}).")
     inicio = desde or date.today()
     ahora_local = ahora()
     por_dia = horario_por_dia(horario)

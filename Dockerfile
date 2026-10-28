@@ -21,7 +21,14 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo "$TZ" > /etc/timezone
 # imagen). libgssapi-krb5-2 es un requisito no declarado del paquete
 # (el driver lo enlaza en tiempo de ejecución) -- confirmado en la guía de
 # instalación oficial.
+# apt-get upgrade (no solo update) jala los parches de seguridad de Debian
+# para los paquetes base de la imagen (coreutils, tar, glibc, openssl,
+# etc.) -- sin esto, la imagen se queda con las versiones del momento en
+# que se publicó el tag python:3.13-slim-bookworm, aunque Debian ya haya
+# sacado el fix. Es lo que marca Checkmarx (Container Security) en cada
+# escaneo si no se repite este paso al reconstruir la imagen.
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends curl gnupg ca-certificates \
     && curl -sSL -O https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb \
     && dpkg -i packages-microsoft-prod.deb \

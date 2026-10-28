@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.security import usuario_actual
 from app.repositories import catalogos_repo
+from app.repositories.catalogos_repo import CL_SERVICIO_MAXIMO, CL_SERVICIO_MINIMO
 from app.schemas.catalogo import (
     CatalogoItem,
     CatalogoItemTexto,
@@ -14,13 +15,6 @@ router = APIRouter(
     tags=["Catálogos"],
     dependencies=[Depends(usuario_actual)],  # requiere login, ver /auth/login
 )
-
-# clServicio es una clave del catálogo del sistema central (el portal trabaja con la 4,
-# "Servicios Médicos"). Se acota el rango para que no llegue cualquier
-# número: sin tope, el valor pasa directo al SP y lo que regrese se recorre
-# completo del lado de la API (CWE-606, iteraciones sin límite).
-CL_SERVICIO_MINIMO = 1
-CL_SERVICIO_MAXIMO = 9999
 
 # El typeahead de cuentas recorre el texto carácter por carácter para
 # validarlo; sin tope, un texto de varios MB se vuelve ese mismo número de
@@ -69,6 +63,11 @@ def buscar_cuentas(
         description="Se busca a partir del 3er carácter",
     ),
 ):
+    # Revalidación explícita del tope ya exigido por Query(max_length=...)
+    # arriba, para que quede visible justo antes del recorrido carácter por
+    # carácter de abajo (CWE-606).
+    if len(texto) > LARGO_MAXIMO_BUSQUEDA_CUENTA:
+        return []
     # Validación: solo alfabético + espacios (igual que el prototipo)
     if not all(ch.isalpha() or ch.isspace() for ch in texto):
         return []

@@ -3,6 +3,22 @@ from app.db.connection import as_tvp_rows, call_procedure, get_connection
 from app.repositories import cuentas_config_repo
 from app.schemas.catalogo import CatalogoItem, CatalogoItemTexto, EntidadFederativa
 
+# clServicio es una clave del catálogo del sistema central (el portal trabaja con la 4,
+# "Servicios Médicos"). Se acota el rango para que no llegue cualquier
+# número: sin tope, el valor pasa directo al SP y lo que regrese se recorre
+# completo del lado de la API (CWE-606, iteraciones sin límite). Viven aquí
+# (no en el router) para poder revalidar justo antes del `for` que arma la
+# lista, en la misma función -- FastAPI ya rechaza un valor fuera de rango
+# con 422 vía Query(ge=, le=), pero esa validación declarativa no la
+# reconoce un análisis estático como Checkmarx.
+CL_SERVICIO_MINIMO = 1
+CL_SERVICIO_MAXIMO = 9999
+
+
+def _validar_cl_servicio(cl_servicio: int) -> None:
+    if not (CL_SERVICIO_MINIMO <= cl_servicio <= CL_SERVICIO_MAXIMO):
+        raise ValueError(f"cl_servicio fuera de rango ({CL_SERVICIO_MINIMO}-{CL_SERVICIO_MAXIMO}).")
+
 
 # Únicos subservicios que trabaja dbo.ST_CP_ObtenerExpedientesSinProveedorMedico
 # (sql/01_..._Medico.sql) -- el resto del catálogo de clServicio=4 (Ambulancia,
@@ -15,6 +31,7 @@ SUBSERVICIOS_PERMITIDOS = frozenset({226, 376, 377, 383, 403, 404, 420, 432})
 
 
 def listar_servicios(cl_servicio: int = 4) -> list[CatalogoItem]:
+    _validar_cl_servicio(cl_servicio)
     rows = call_procedure("dbo.ST_CP_ObtenerCatalogoServicio", {"clServicio": cl_servicio})
     return [CatalogoItem(clave=r["clServicio"], descripcion=r["dsServicio"]) for r in rows]
 
@@ -27,6 +44,7 @@ def listar_subservicios(cl_servicio: int = 4) -> list[CatalogoItem]:
     encaja con el filtro Cuenta de la pantalla Expedientes (permite
     varias a la vez).
     """
+    _validar_cl_servicio(cl_servicio)
     rows = call_procedure("dbo.ST_CP_ObtenerServicioMedico", {"clServicio": cl_servicio})
     return [
         CatalogoItem(clave=r["clSubServicio"], descripcion=r["dsSubServicio"])
@@ -134,6 +152,12 @@ def listar_municipios(cod_ent: str) -> list[CatalogoItemTexto]:
     busca sin distinguir mayúsculas/minúsculas por si acaso, ya que no hay
     una definición de este SP en sql/*.sql para confirmar la casing exacta.
     """
+    # CodEnt son 2 dígitos (dbo.cEntFed) -- el router ya lo exige vía
+    # Query(max_length=2), se revalida aquí (misma función que arma el
+    # `for` de abajo) para que quede explícito en el código, no solo en la
+    # validación declarativa de FastAPI.
+    if len(cod_ent or "") > 2:
+        raise ValueError("cod_ent fuera de rango (máximo 2 caracteres).")
     filas = call_procedure("dbo.sp_GetMun", {"CodEnt": cod_ent, "clExpediente": 0})
     resultado = []
     for fila in filas:
