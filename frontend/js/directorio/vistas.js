@@ -758,7 +758,7 @@ export function filtrosResultados(v) {
       <h2 class="dp-subtitulo">Tipo de proveedor</h2>
       <div class="dp-lista-opciones">
         ${v.origenOptions.map(o => `
-          <button class="dp-opcion dp-opcion-compacta${o.elegido ? " dp-sel" : ""}" data-accion="origen" data-valor="${o.valor}">${e(o.texto)}</button>`).join("")}
+          <button class="dp-opcion dp-opcion-compacta dp-opcion-origen-${o.valor}${o.elegido ? " dp-sel" : ""}" data-accion="origen" data-valor="${o.valor}">${e(o.texto)}</button>`).join("")}
       </div>
     </div>
     <div class="dp-seccion dp-seccion-linea">

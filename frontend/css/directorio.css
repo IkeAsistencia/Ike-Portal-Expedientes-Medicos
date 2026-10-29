@@ -41,6 +41,13 @@
 .dp-opcion:disabled{opacity:.45;cursor:not-allowed;}
 .dp-opcion:disabled:hover{background:var(--white);}
 
+/* Chips de "Tipo de proveedor": mismo color que el semáforo de la tarjeta
+   (ver .dp-origen-punto y clasePorOrigen en js/directorio/vistas.js) --
+   verde = Dentro de la red, morado = Red de apoyo, ámbar = Fuera de la red. */
+.dp-opcion-origen-catalogo.dp-sel{background:var(--green-bg);border-color:var(--green);color:var(--navy);}
+.dp-opcion-origen-apoyo.dp-sel{background:var(--purple-bg);border-color:var(--purple);color:var(--navy);}
+.dp-opcion-origen-portal.dp-sel{background:var(--amber-bg);border-color:var(--amber);color:var(--navy);}
+
 /* ---------- Barra propia del directorio ---------- */
 /* Se queda pegada arriba al hacer scroll, como el header del original. El
    scroll vive en .content, que tiene 20px de padding: con top:-20px se pega
