@@ -294,6 +294,7 @@ def _cargar_excel(client, headers, filas: list[dict]):
     columnas = list(COLUMNAS) + [COLUMNA_CLAVE_CENTRAL]
     wb = Workbook()
     ws = wb.active
+    ws.title = "Padrón de proveedores"
     for col_idx, (encabezado, _clave, _ancho, _alias) in enumerate(columnas, start=1):
         ws.cell(row=1, column=col_idx, value=encabezado)
     for fila_idx, fila in enumerate(filas, start=2):
@@ -370,7 +371,7 @@ def test_cuando_el_medico_del_portal_llega_en_la_carga_conserva_su_clave_y_pasa_
     }])
     assert r.json() == {
         "ok": True, "total": 1, "nuevos": 0, "actualizados": 0, "absorbidos": 1,
-        "especialidades_no_reconocidas": [],
+        "especialidades_agregadas_al_catalogo": [],
     }
 
     directorio = client.get("/directorio-proveedores", headers=admin).json()

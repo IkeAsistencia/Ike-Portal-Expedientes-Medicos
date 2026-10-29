@@ -5,6 +5,20 @@ la configuración y los datos de este padrón viven SOLO en este portal
 (SQLite local), nunca en SQL Server. El archivo se solicita al área
 correspondiente con el layout exacto que arma `generar_plantilla_excel()`.
 
+El archivo real (2026-10-28) trae DOS hojas, que se leen por separado y se
+reconocen por cómo EMPIEZA su nombre (lo que venga después se ignora, p. ej.
+"Padrón de proveedores 2026" cuenta igual que "Padrón de proveedores"):
+  - "Padrón de proveedores": el padrón completo, origen 'catalogo'.
+  - "Proveedores red de apoyo": subconjunto con menos columnas (sin cédula,
+    RFC ni consultorio, y sin correo/horario/costo/convenio/teleconsulta/
+    coordenadas -- ninguna de esas es obligatoria de por sí, ver
+    `_registro_de_la_fila`), origen 'apoyo'. Se identifican aparte del
+    padrón porque el área los entrega en una hoja distinta (instrucción del
+    usuario, 2026-10-28) -- en el Directorio se ven con su propia etiqueta y
+    color, no mezclados con "Dentro de la red".
+Ambas hojas usan el mismo layout de columnas (ver COLUMNAS); basta con que
+estén presentes las que cada hoja sí trae.
+
 Layout vigente (2026-10-20), el que validó el área y que trae el archivo
 real de 662 proveedores:
   - Los encabezados se toman TAL CUAL del archivo validado, asterisco
@@ -27,6 +41,7 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from app.repositories.especialidades_repo import normalizar as _normalizar_texto
+from app.repositories.proveedores_repo import ORIGEN_APOYO, ORIGEN_CATALOGO
 
 COLOR_NAVY = "0B2942"
 COLOR_WHITE = "FFFFFF"
@@ -70,6 +85,11 @@ COLUMNA_CLAVE_CENTRAL = (
 )
 
 FILA_ENCABEZADO = 1
+
+# Con qué debe EMPEZAR el nombre de cada hoja reconocida (sin mayúsculas ni
+# acentos, ver _normalizar_texto) -- lo que venga después se ignora.
+_PREFIJO_HOJA_PADRON = _normalizar_texto("Padrón de proveedores")
+_PREFIJO_HOJA_APOYO = _normalizar_texto("Proveedores red de apoyo")
 
 _FILA_EJEMPLO = {
     "nombre": "Dra. Laura Méndez Ruiz", "especialidad": "CARDIOLOGIA",
@@ -245,39 +265,69 @@ def _registro_de_la_fila(fila: tuple, indices: dict[str, int]) -> dict:
     return registro
 
 
+def _hojas_del_catalogo(wb) -> list[tuple[str, object]]:
+    """
+    Las hojas reconocidas del archivo, con el origen que le toca a cada una
+    (ver _PREFIJO_HOJA_PADRON / _PREFIJO_HOJA_APOYO). Si el archivo trae solo
+    una de las dos, se carga igual con esa; si no reconoce ninguna, se lo
+    deja a leer_catalogo_excel para que lo reporte con las hojas que sí trae.
+    """
+    hojas = []
+    for nombre in wb.sheetnames:
+        llave = _normalizar_texto(nombre)
+        if llave.startswith(_PREFIJO_HOJA_PADRON):
+            hojas.append((ORIGEN_CATALOGO, wb[nombre]))
+        elif llave.startswith(_PREFIJO_HOJA_APOYO):
+            hojas.append((ORIGEN_APOYO, wb[nombre]))
+    return hojas
+
+
 def leer_catalogo_excel(contenido: bytes) -> list[dict]:
     """
     Convierte el Excel subido en una lista de dicts (uno por proveedor),
-    listos para `proveedores_repo.cargar_padron`.
+    listos para `proveedores_repo.cargar_padron` -- cada uno con su "origen"
+    ('catalogo' o 'apoyo') según de cuál de las dos hojas salió.
 
-    Solo lanza ErrorCatalogoExcel si el archivo no se puede leer de plano
-    (no es Excel, está vacío o no se le reconoció ninguna columna). Los
-    datos faltantes NO detienen la carga: entran vacíos.
+    Solo lanza ErrorCatalogoExcel si el archivo no se puede leer de plano (no
+    es Excel, no trae ninguna hoja reconocida, o ninguna de las reconocidas
+    tiene un encabezado utilizable). Un dato faltante dentro de un renglón NO
+    detiene la carga: entra vacío.
     """
     try:
         wb = load_workbook(BytesIO(contenido), data_only=True, read_only=True)
     except Exception as e:
         raise ErrorCatalogoExcel("El archivo no es un Excel (.xlsx) válido.") from e
 
-    ws = wb.active
-    filas = list(ws.iter_rows(values_only=True))
-    if not filas:
-        raise ErrorCatalogoExcel("El archivo está vacío.")
-
-    indices = _indices_por_clave(filas[0])
-    if not indices:
+    hojas = _hojas_del_catalogo(wb)
+    if not hojas:
         raise ErrorCatalogoExcel(
-            "No se reconoció ninguna columna del encabezado -- descarga la plantilla y "
-            "úsala sin cambiarle los nombres a las columnas."
+            'El archivo no trae ninguna hoja reconocida -- se esperaba una que empiece con '
+            '"Padrón de proveedores" o "Proveedores red de apoyo". '
+            f"Hojas encontradas: {', '.join(wb.sheetnames) or 'ninguna'}."
         )
 
     registros = []
-    for fila in filas[1:]:
-        if all(c is None or str(c).strip() == "" for c in fila):
-            continue  # renglón vacío (común al final de la plantilla) -- se ignora
-        registros.append(_registro_de_la_fila(fila, indices))
+    for origen, ws in hojas:
+        filas = list(ws.iter_rows(values_only=True))
+        if not filas:
+            continue  # hoja reconocida pero vacía -- se ignora, no tumba la carga completa
+
+        indices = _indices_por_clave(filas[0])
+        if not indices:
+            continue  # encabezado irreconocible en esta hoja -- idem
+
+        for fila in filas[1:]:
+            if all(c is None or str(c).strip() == "" for c in fila):
+                continue  # renglón vacío (común al final de la plantilla) -- se ignora
+            registro = _registro_de_la_fila(fila, indices)
+            registro["origen"] = origen
+            registros.append(registro)
 
     if not registros:
-        raise ErrorCatalogoExcel("El archivo no trae ningún renglón con datos.")
+        raise ErrorCatalogoExcel(
+            "No se reconoció ninguna columna del encabezado en ninguna hoja, o el archivo no "
+            "trae ningún renglón con datos -- descarga la plantilla y úsala sin cambiarle los "
+            "nombres a las columnas."
+        )
 
     return registros

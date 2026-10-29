@@ -182,9 +182,12 @@ CREATE TABLE IF NOT EXISTS correos_enviados (
 );
 
 -- Padrón ÚNICO de proveedores del Directorio de Proveedores: aquí conviven
--- los dos orígenes, y por eso las citas pueden apuntar siempre al mismo
+-- los tres orígenes, y por eso las citas pueden apuntar siempre al mismo
 -- renglón sin importar de dónde llegó el médico.
---   origen='catalogo' -> llegó en la carga de Excel ("Dentro de la red").
+--   origen='catalogo' -> llegó en la hoja "Padrón de proveedores" del Excel
+--                        ("Dentro de la red").
+--   origen='apoyo'    -> llegó en la hoja "Proveedores red de apoyo" del
+--                        mismo Excel ("Red de apoyo", identificado aparte).
 --   origen='portal'   -> se dio de alta en el portal ("Fuera de la red").
 --
 -- clave: identificador que GENERA ESTE PORTAL (PRV-000001). Es el que usan

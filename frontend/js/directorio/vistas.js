@@ -27,7 +27,16 @@ import {
   raw, visible, valoresUnicosCatalogo, zonasDelPadron, resumenDelPadron,
   entidadesAltaCache, entidadesAltaFallaron, municipiosAltaCache, municipiosAltaCargados,
   especialidadesKpiCache, todasLasEspecialidades,
+  ETIQUETA_DENTRO_DE_LA_RED, ETIQUETA_RED_DE_APOYO, ETIQUETA_FUERA_DE_LA_RED,
 } from "./datos.js";
+
+/* Opciones del filtro "Tipo de proveedor" (chips de filtrosResultados), en
+   el mismo orden que se ven en el padrón: catálogo, apoyo, portal. */
+const ORIGEN_OPTIONS = [
+  { valor: "catalogo", texto: ETIQUETA_DENTRO_DE_LA_RED },
+  { valor: "apoyo", texto: ETIQUETA_RED_DE_APOYO },
+  { valor: "portal", texto: ETIQUETA_FUERA_DE_LA_RED },
+];
 
 /* Fechas locales (no UTC: a la medianoche toISOString() ya diría "mañana"). */
 const DIAS_CITA_MAXIMO = 365;   // igual que DIAS_CITA_MAXIMO en agenda_proveedores_service.py
@@ -76,9 +85,11 @@ export function calcularSugerencias(s) {
 }
 
 /* El KPI que lleva cada tarjeta de especialidad: cuántos proveedores del
-   padrón hay dentro de la red (Excel oficial, con convenio) y cuántos están
-   fuera de la red (aprobados en el portal, sin ese proceso formal todavía).
-   El servidor los manda como dentro_de_red / fuera_de_red. Los conteos son
+   padrón hay dentro de la red (hoja "Padrón de proveedores", con convenio),
+   cuántos en la red de apoyo (hoja "Proveedores red de apoyo", también con
+   convenio pero identificada aparte) y cuántos están fuera de la red
+   (aprobados en el portal, sin ese proceso formal todavía). El servidor los
+   manda como dentro_de_red / red_de_apoyo / fuera_de_red. Los conteos son
    reales -- salen de amarrar cada proveedor a una especialidad del catálogo,
    ver app/repositories/especialidades_repo.py.
 
@@ -87,9 +98,10 @@ export function calcularSugerencias(s) {
    entra "Buscar fuera de la red"). */
 function kpiEspecialidad(x) {
   const dentro = Number(x.dentro_de_red) || 0;
+  const apoyo = Number(x.red_de_apoyo) || 0;
   const fuera = Number(x.fuera_de_red) || 0;
-  if (dentro + fuera === 0) return "Sin proveedores";
-  return dentro + " dentro de la red · " + fuera + " fuera de la red";
+  if (dentro + apoyo + fuera === 0) return "Sin proveedores";
+  return dentro + " dentro de la red · " + apoyo + " red de apoyo · " + fuera + " fuera de la red";
 }
 
 function tarjetaEspecialidad(x, i) {
@@ -101,7 +113,7 @@ function tarjetaEspecialidad(x, i) {
     // se vería como un error ("15" dos veces, sin "06" ni "10").
     num: String(i + 1).padStart(2, "0"),
     meta: kpiEspecialidad(x),
-    vacia: (Number(x.dentro_de_red) || 0) + (Number(x.fuera_de_red) || 0) === 0,
+    vacia: (Number(x.dentro_de_red) || 0) + (Number(x.red_de_apoyo) || 0) + (Number(x.fuera_de_red) || 0) === 0,
   };
 }
 
@@ -140,14 +152,14 @@ export function calcular(s) {
   const maxCov = Math.max(1, ...coverageRaw.map(c => c.total));
   const municipiosCubiertos = zonasTodas.reduce((a, x) => a + x.municipios.length, 0);
   const {
-    total: totalPadron, dentroDeRed, fueraDeRed, especialidadesConProveedor,
+    total: totalPadron, dentroDeRed, redDeApoyo, fueraDeRed, especialidadesConProveedor,
   } = resumenDelPadron();
   // Catálogo real de especialidades, ya partido por el servidor en lo que
   // cabe en pantalla (16 = 4 renglones de 4) y lo que va al combo.
   const catalogoEsp = especialidadesKpiCache();
   const specTotals = todasLasEspecialidades().map(x => ({
     name: x.descripcion,
-    total: (Number(x.dentro_de_red) || 0) + (Number(x.fuera_de_red) || 0),
+    total: (Number(x.dentro_de_red) || 0) + (Number(x.red_de_apoyo) || 0) + (Number(x.fuera_de_red) || 0),
   }));
   const pending = s.requests.filter(r => r.status === "En revisión").length;
 
@@ -252,8 +264,14 @@ export function calcular(s) {
 
     // Resultados
     priceOptions: PRICE_OPTIONS.map(p => ({ label: p.label, max: p.max, elegido: f.maxPrice === p.max })),
+    origenOptions: ORIGEN_OPTIONS.map(o => ({ ...o, elegido: (f.origenes || []).includes(o.valor) })),
     fTele: f.tele, fSeguro: f.seguro, orden: f.orden,
-    filterSummary: [f.maxPrice < 9999 ? "≤ $" + f.maxPrice : null, f.tele ? "teleconsulta" : null, f.seguro ? "con convenio" : null].filter(Boolean).join(" · ") || "Sin filtros activos",
+    filterSummary: [
+      f.maxPrice < 9999 ? "≤ $" + f.maxPrice : null,
+      f.tele ? "teleconsulta" : null,
+      f.seguro ? "con convenio" : null,
+      ...(f.origenes || []).map(o => ORIGEN_OPTIONS.find(x => x.valor === o)?.texto).filter(Boolean),
+    ].filter(Boolean).join(" · ") || "Sin filtros activos",
     countLabel: listed.length + " de " + info.list.length + " especialistas",
     resultsTitle: info.label, resultsSubtitle: info.sub,
     hasResults: listed.length > 0,
@@ -329,7 +347,7 @@ export function calcular(s) {
     // "Zonas cubiertas" salían de una cifra generada, y había un KPI de
     // "Importados de Google" que nunca importó nada).
     kpis: [
-      { label: "Proveedores en el padrón", value: String(totalPadron), note: dentroDeRed + " dentro de la red · " + fueraDeRed + " fuera de la red", icono: "personas", clase: "kpi-total" },
+      { label: "Proveedores en el padrón", value: String(totalPadron), note: dentroDeRed + " dentro de la red · " + redDeApoyo + " red de apoyo · " + fueraDeRed + " fuera de la red", icono: "personas", clase: "kpi-total" },
       { label: "Municipios con cobertura", value: String(municipiosCubiertos), note: coverageRaw.length + (coverageRaw.length === 1 ? " estado" : " estados"), icono: "ubicacion", clase: "kpi-cita" },
       { label: "Solicitudes en revisión", value: String(pending), note: s.requests.length + " solicitudes totales", icono: "expediente", clase: "kpi-proceso" },
       { label: "Especialidades con proveedor", value: String(especialidadesConProveedor) + " de " + (catalogoEsp.total || 0), note: "Del catálogo de especialidades", icono: "expediente", clase: "kpi-seguimiento" }
@@ -486,10 +504,14 @@ function enlaceVerificar(url, valor, que, texto) {
     title="Copia el ${e(que)} y abre el sitio oficial en otra pestaña">${e(texto)} ↗</a>`;
 }
 /* Color del distintivo según de dónde salió el proveedor: "Dentro de la red"
-   (Excel oficial, con convenio) en verde, "Fuera de la red" (aprobado en el
+   (hoja "Padrón de proveedores" del Excel oficial, con convenio) en verde,
+   "Red de apoyo" (hoja "Proveedores red de apoyo", también con convenio
+   pero identificada aparte) en morado, "Fuera de la red" (aprobado en el
    portal, sin ese proceso formal todavía) en ámbar, para que se note de un
-   vistazo cuál tiene convenio. */
-const clasePorOrigen = (origen) => (origen === "portal" ? "pendiente" : "seguimiento");
+   vistazo cuál tiene convenio y de qué hoja viene. */
+const clasePorOrigen = (origen) => (
+  origen === "portal" ? "pendiente" : origen === "apoyo" ? "programado" : "seguimiento"
+);
 
 /* "Volver": al directorio para el Proveedor; a Solicitudes para el
    Administrador, que no tiene la búsqueda del directorio. */
@@ -733,6 +755,13 @@ export function filtrosResultados(v) {
       </div>
     </div>
     <div class="dp-seccion dp-seccion-linea">
+      <h2 class="dp-subtitulo">Tipo de proveedor</h2>
+      <div class="dp-lista-opciones">
+        ${v.origenOptions.map(o => `
+          <button class="dp-opcion dp-opcion-compacta${o.elegido ? " dp-sel" : ""}" data-accion="origen" data-valor="${o.valor}">${e(o.texto)}</button>`).join("")}
+      </div>
+    </div>
+    <div class="dp-seccion dp-seccion-linea">
       <h2 class="dp-subtitulo">Filtros</h2>
       ${casilla("tele", v.fTele, "Teleconsulta")}
       ${casilla("seguro", v.fSeguro, "Con convenio / seguro")}
@@ -767,7 +796,7 @@ export function listaResultados(v) {
     <article class="dp-medico">
       <div class="dp-medico-principal">
         <div class="dp-medico-nombre">
-          <span class="dp-origen-punto ${d.origen === "portal" ? "portal" : "catalogo"}" title="${e(d.source)}"></span>
+          <span class="dp-origen-punto ${d.origen === "portal" ? "portal" : d.origen === "apoyo" ? "apoyo" : "catalogo"}" title="${e(d.source)}"></span>
           <span class="badge ${clasePorOrigen(d.origen)}">${e(d.source)}</span>
           <h3>${e(d.name)}</h3>
           ${d.tele ? `<span class="badge espera">Teleconsulta</span>` : ""}

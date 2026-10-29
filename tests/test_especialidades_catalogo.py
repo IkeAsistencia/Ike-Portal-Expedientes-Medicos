@@ -79,6 +79,7 @@ def _xlsx(filas):
 
     wb = Workbook()
     ws = wb.active
+    ws.title = "Padrón de proveedores"
     for col, (encabezado, _clave, _ancho, _alias) in enumerate(COLUMNAS, start=1):
         ws.cell(row=1, column=col, value=encabezado)
     for i, fila in enumerate(filas, start=2):
@@ -97,6 +98,31 @@ def _cargar(client, headers, filas):
     )
 
 
+def _xlsx_apoyo(filas):
+    """Un Excel con la hoja "Proveedores red de apoyo" (origen='apoyo')."""
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Proveedores red de apoyo"
+    for col, (encabezado, _clave, _ancho, _alias) in enumerate(COLUMNAS, start=1):
+        ws.cell(row=1, column=col, value=encabezado)
+    for i, fila in enumerate(filas, start=2):
+        for col, (_encabezado, clave, _ancho, _alias) in enumerate(COLUMNAS, start=1):
+            ws.cell(row=i, column=col, value=fila.get(clave))
+    buffer = BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+def _cargar_apoyo(client, headers, filas):
+    return client.post(
+        "/proveedores-catalogo/cargar",
+        headers=headers,
+        files={"archivo": ("catalogo.xlsx", _xlsx_apoyo(filas), XLSX_MIME)},
+    )
+
+
 def _medico(nombre, especialidad, **extra):
     return {
         "nombre": nombre, "especialidad": especialidad, "cedula": str(abs(hash(nombre)) % 10**7),
@@ -106,10 +132,13 @@ def _medico(nombre, especialidad, **extra):
 
 # ---------- La semilla ----------
 
-def test_el_catalogo_trae_las_38_especialidades_del_archivo(client):
+def test_el_catalogo_trae_las_especialidades_de_la_semilla(client):
+    """38 del catálogo central + las agregadas del Excel real del padrón
+    (2026-10-28, cl_especialidad >= 1000, ver especialidades_repo.SEMILLA)."""
     r = client.get("/directorio-proveedores/especialidades", headers=_admin(client))
     assert r.status_code == 200, r.text
-    assert r.json()["total"] == len(especialidades_repo.SEMILLA) == 38
+    assert r.json()["total"] == len(especialidades_repo.SEMILLA)
+    assert sum(1 for fila in especialidades_repo.SEMILLA if fila[0] < 1000) == 38
 
 
 def test_la_semilla_es_idempotente(client):
@@ -128,11 +157,11 @@ def test_la_semilla_es_idempotente(client):
 
 # ---------- El reparto entre tarjetas y combo ----------
 
-def test_caben_16_tarjetas_en_4_renglones_de_4(client):
+def test_caben_20_tarjetas_en_5_renglones_de_4(client):
     cuerpo = client.get("/directorio-proveedores/especialidades", headers=_admin(client)).json()
-    assert cuerpo["maximo_tarjetas"] == 16
-    assert len(cuerpo["tarjetas"]) == 16, "4 renglones de 4"
-    assert len(cuerpo["combo"]) == 38 - 16
+    assert cuerpo["maximo_tarjetas"] == 20
+    assert len(cuerpo["tarjetas"]) == 20, "5 renglones de 4"
+    assert len(cuerpo["combo"]) == cuerpo["total"] - 20
 
 
 def test_las_tarjetas_van_en_el_orden_del_ordenkpi(client):
@@ -153,15 +182,22 @@ def test_ninguna_especialidad_aparece_en_tarjeta_y_en_combo(client):
 
 
 def test_las_que_no_traen_ordenkpi_van_al_final_del_combo(client):
-    """CIRUGIA GENERAL y CIRUGIA ONCOLOGICA vienen con ordenKPI en NULL:
-    nunca salen en tarjeta y se dejan hasta el final (decisión del usuario)."""
+    """CIRUGIA GENERAL, CIRUGIA ONCOLOGICA y las agregadas del Excel real
+    (todas sin ordenKPI, ver SEMILLA) nunca salen en tarjeta y se dejan hasta
+    el final, ordenadas por clave (decisión del usuario)."""
     cuerpo = client.get("/directorio-proveedores/especialidades", headers=_admin(client)).json()
 
     assert all(x["orden_kpi"] is not None for x in cuerpo["tarjetas"])
 
+    esperado = [
+        fila[1] for fila in sorted(
+            (f for f in especialidades_repo.SEMILLA if f[3] is None),
+            key=lambda f: f[0],
+        )
+    ]
     sin_orden = [x["descripcion"] for x in cuerpo["combo"] if x["orden_kpi"] is None]
-    assert sin_orden == ["CIRUGIA GENERAL", "CIRUGIA ONCOLOGICA"]
-    assert [x["descripcion"] for x in cuerpo["combo"][-2:]] == sin_orden
+    assert sin_orden == esperado
+    assert [x["descripcion"] for x in cuerpo["combo"][-len(esperado):]] == esperado
 
 
 def test_el_ordenkpi_repetido_no_cambia_de_lugar_entre_consultas(client):
@@ -235,6 +271,26 @@ def test_el_kpi_separa_dentro_y_fuera_de_la_red(client):
     assert cardio["total_proveedores"] == 2
 
 
+def test_el_kpi_separa_tambien_la_red_de_apoyo(client):
+    """La hoja "Proveedores red de apoyo" cuenta aparte de "dentro de la
+    red" (decisión del usuario, 2026-10-28)."""
+    admin = _admin(client)
+    _cargar(client, admin, [_medico("Dra. Del padrón", "Cardiología")])
+    _cargar_apoyo(client, admin, [
+        _medico("Dr. De apoyo uno", "Cardiología", municipio="Zapopan"),
+        _medico("Dr. De apoyo dos", "Cardiología", municipio="Tonalá"),
+    ])
+
+    cardio = next(
+        x for x in client.get("/directorio-proveedores/especialidades", headers=admin).json()["tarjetas"]
+        if x["descripcion"] == "CARDIOLOGIA"
+    )
+    assert cardio["dentro_de_red"] == 1
+    assert cardio["red_de_apoyo"] == 2
+    assert cardio["fuera_de_red"] == 0
+    assert cardio["total_proveedores"] == 3
+
+
 # ---------- Nombres que no empatan con el catálogo ----------
 
 def test_el_nombre_del_padron_se_relaciona_sin_acentos_ni_mayusculas(client):
@@ -270,9 +326,11 @@ def test_los_nombres_viejos_del_portal_siguen_contando(client):
     assert por_nombre["ODONTOLOGIA INTEGRAL"]["dentro_de_red"] == 1
 
 
-def test_la_carga_reporta_las_especialidades_que_no_reconoce(client):
+def test_la_carga_reporta_las_especialidades_que_agrega_al_catalogo(client):
     """No se rechaza el archivo (decisión del usuario): el proveedor entra,
-    pero hay que avisar que no va a sumar a ninguna tarjeta."""
+    y si su especialidad no estaba en el catálogo se da de alta sola
+    (decisión del usuario, 2026-10-28) -- se avisa para que se note que es
+    nueva."""
     headers = _admin(client)
     r = _cargar(client, headers, [
         _medico("Dra. Buena", "Cardiología"),
@@ -282,19 +340,53 @@ def test_la_carga_reporta_las_especialidades_que_no_reconoce(client):
     assert r.status_code == 200, r.text
     cuerpo = r.json()
     assert cuerpo["nuevos"] == 3, "los 3 se cargan igual"
-    assert cuerpo["especialidades_no_reconocidas"] == ["Medicina Cuántica"], "sin repetir"
+    assert cuerpo["especialidades_agregadas_al_catalogo"] == ["Medicina Cuántica"], "sin repetir"
 
 
-def test_un_proveedor_con_especialidad_desconocida_no_suma_a_ninguna_tarjeta(client):
+def test_una_especialidad_desconocida_se_agrega_al_catalogo_y_cuenta_en_el_combo(client):
+    headers = _admin(client)
+    _cargar(client, headers, [
+        _medico("Dr. Raro", "Medicina Cuántica"),
+        _medico("Dra. Otra", "Medicina Cuántica", municipio="Zapopan"),
+    ])
+
+    cuerpo = client.get("/directorio-proveedores/especialidades", headers=headers).json()
+    nueva = next(x for x in cuerpo["combo"] if x["descripcion"] == "Medicina Cuántica")
+    assert nueva["orden_kpi"] is None, "entra al combo, no desplaza ninguna tarjeta"
+    assert nueva["total_proveedores"] == 2
+    assert nueva["cl_especialidad"] >= 2000, "clave aprendida en runtime (ver especialidades_repo.agregar)"
+
+    # Y sí quedó amarrada en el padrón: ya no hay quien se quede sin especialidad.
+    padron = client.get("/directorio-proveedores", headers=headers).json()
+    assert all(p["cl_especialidad"] is not None for p in padron)
+
+
+def test_la_misma_especialidad_nueva_no_se_duplica_entre_renglones(client):
+    """Dos proveedores con el mismo nombre nuevo de especialidad deben
+    terminar con el MISMO cl_especialidad, no uno cada uno."""
+    headers = _admin(client)
+    _cargar(client, headers, [
+        _medico("Dr. Uno", "Medicina Cuántica"),
+        _medico("Dra. Dos", "Medicina Cuántica", municipio="Zapopan"),
+    ])
+    padron = client.get("/directorio-proveedores", headers=headers).json()
+    claves = {p["cl_especialidad"] for p in padron}
+    assert len(claves) == 1
+
+
+def test_una_especialidad_nueva_sobrevive_al_reinicio_del_portal(client):
+    """sembrar() no debe desactivar lo que agregar() dio de alta en runtime
+    (cl_especialidad >= 2000): si lo hiciera, cada arranque del portal
+    tumbaría el KPI de los proveedores recién cargados."""
     headers = _admin(client)
     _cargar(client, headers, [_medico("Dr. Raro", "Medicina Cuántica")])
 
+    from app.db.local_store import init_local_db
+    init_local_db()
+
     cuerpo = client.get("/directorio-proveedores/especialidades", headers=headers).json()
-    assert sum(x["total_proveedores"] for x in cuerpo["tarjetas"] + cuerpo["combo"]) == 0
-    # Pero sí está en el padrón, solo que sin especialidad del catálogo.
-    padron = client.get("/directorio-proveedores", headers=headers).json()
-    assert len(padron) == 1
-    assert padron[0]["cl_especialidad"] is None
+    nueva = next(x for x in cuerpo["combo"] if x["descripcion"] == "Medicina Cuántica")
+    assert nueva["total_proveedores"] == 1
 
 
 def test_la_especialidad_queda_amarrada_en_el_padron(client):

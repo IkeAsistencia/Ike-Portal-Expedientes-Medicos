@@ -27,6 +27,13 @@ const PLANTILLA = `
       que ya se le hayan generado. Un médico dado de alta aquí pasa a
       «Dentro de la red» en cuanto llega en una de estas cargas.
     </p>
+    <p class="hint">
+      El archivo puede traer una hoja, la otra o las dos: «Padrón de
+      proveedores» (quedan «Dentro de la red») y «Proveedores red de apoyo»
+      (quedan marcados aparte, como «Red de apoyo»). Se reconocen por cómo
+      empieza el nombre de la hoja, así que no importa si trae algo más
+      después.
+    </p>
       <div class="actions-row" style="justify-content:flex-start;">
         <button class="btn btn-secondary" id="cp-descargar-plantilla">Descargar plantilla Excel</button>
       </div>
@@ -75,8 +82,9 @@ async function cargarResumen() {
       return;
     }
     $("cp-resumen").textContent =
-      `Padrón actual: ${data.total} proveedor(es) -- ${data.dentro_de_la_red} dentro de la red y ` +
-      `${data.fuera_de_la_red} fuera de la red. Última carga el ${formatDateTime(ultima.fecha)} ` +
+      `Padrón actual: ${data.total} proveedor(es) -- ${data.dentro_de_la_red} dentro de la red, ` +
+      `${data.red_de_apoyo} de la red de apoyo y ${data.fuera_de_la_red} fuera de la red. ` +
+      `Última carga el ${formatDateTime(ultima.fecha)} ` +
       `(${ultima.rfc}): ${ultima.nuevos} nuevo(s), ${ultima.actualizados} actualizado(s)` +
       (ultima.absorbidos ? `, ${ultima.absorbidos} que ya estaban dados de alta en el portal` : "") + ".";
   } catch (err) {
@@ -100,16 +108,15 @@ async function cargarArchivo() {
       `Catálogo cargado: ${data.nuevos} nuevo(s), ${data.actualizados} actualizado(s)${absorbidos}.`,
       "success"
     );
-    // Los proveedores se cargaron, pero su especialidad no empata con el
-    // catálogo: no van a sumar a ninguna tarjeta de KPI del Directorio. Se
-    // avisa aparte para que no se lea como "falta gente" cuando en realidad
-    // es un nombre mal escrito en el Excel.
-    const desconocidas = data.especialidades_no_reconocidas || [];
-    if (desconocidas.length) {
+    // Una especialidad que el catálogo no tenía se da de alta sola (ver
+    // especialidades_repo.agregar): el proveedor ya cuenta en su tarjeta o
+    // combo. Se avisa aparte para que se note que es nueva -- puede ser la
+    // correcta o un error de captura que convenga corregir en el Excel.
+    const nuevas = data.especialidades_agregadas_al_catalogo || [];
+    if (nuevas.length) {
       toast(
-        `Especialidad fuera del catálogo: ${desconocidas.join(", ")}. ` +
-        "Esos proveedores se cargaron, pero no aparecen en las tarjetas del Directorio hasta corregir el nombre.",
-        "error"
+        `Especialidad nueva, agregada al catálogo: ${nuevas.join(", ")}.`,
+        "success"
       );
     }
     input.value = "";

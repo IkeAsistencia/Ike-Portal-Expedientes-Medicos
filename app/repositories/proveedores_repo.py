@@ -1,8 +1,12 @@
 """
 Padrón de proveedores del Directorio de Proveedores (tabla `proveedores`).
 
-Los dos orígenes viven en la MISMA tabla:
-  - 'catalogo': llegó en la carga de Excel ("Dentro de la red").
+Los tres orígenes viven en la MISMA tabla:
+  - 'catalogo': llegó en la carga de Excel, hoja "Padrón de proveedores"
+    ("Dentro de la red").
+  - 'apoyo':    llegó en la carga de Excel, hoja "Proveedores red de apoyo"
+    ("Red de apoyo" -- también con convenio, pero se identifica aparte
+    porque el área los entrega en una hoja distinta y con menos datos).
   - 'portal':   se dio de alta en el portal ("Fuera de la red").
 
 Cada proveedor trae una `clave` que genera este portal (PRV-000001). Esa
@@ -24,6 +28,7 @@ from app.db.local_store import ahora_local, get_local_connection
 from app.repositories import especialidades_repo
 
 ORIGEN_CATALOGO = "catalogo"
+ORIGEN_APOYO = "apoyo"
 ORIGEN_PORTAL = "portal"
 
 PREFIJO_CLAVE = "PRV-"
@@ -172,8 +177,9 @@ def _actualizar(conn, fila, registro: dict, llave_fuerte: str, origen: str) -> N
     """
     Refresca los datos conservando la clave (y por lo tanto las citas). Si el
     renglón se había dado de alta en el portal y ahora llega en la carga,
-    pasa a origen='catalogo': el médico ya quedó "Dentro de la red" y deja de
-    aparecer como alta del portal, pero sigue siendo el MISMO proveedor.
+    pasa al origen de la hoja que lo trajo ('catalogo' o 'apoyo'): el médico
+    ya quedó dentro de la red y deja de aparecer como alta del portal, pero
+    sigue siendo el MISMO proveedor.
     """
     asignaciones = {c: registro.get(c) for c in _CAMPOS_DATOS}
     asignaciones["teleconsulta"] = 1 if asignaciones.get("teleconsulta") else 0
@@ -205,20 +211,32 @@ def cargar_padron(registros: list[dict], rfc_usuario: str) -> dict:
       - el que venía de un alta del portal, se absorbe (misma clave, ahora
         origen='catalogo').
     Todo en una sola transacción.
+
+    Una especialidad que el catálogo todavía no tiene se da de alta sola
+    (ver especialidades_repo.agregar, instrucción del usuario 2026-10-28):
+    ya ningún renglón se queda sin `cl_especialidad` por un nombre que el
+    catálogo no traía todavía.
     """
     nuevos = actualizados = absorbidos = 0
     with get_local_connection() as conn:
         # El mapa del catálogo se arma UNA vez, con esta misma conexión: abrir
         # otra por renglón chocaría con el candado de escritura de la carga.
+        # Se va completando aquí mismo con lo que agregar() dé de alta, para
+        # no repetir la especialidad si varios renglones la traen igual.
         mapa_especialidades = especialidades_repo.mapa_por_nombre(conn)
         altas_del_portal = _altas_del_portal_por_nombre(conn)
         for registro in registros:
-            registro = {
-                **registro,
-                "cl_especialidad": mapa_especialidades.get(
-                    especialidades_repo.normalizar(registro.get("especialidad"))
-                ),
-            }
+            # De qué hoja del Excel salió ('catalogo' o 'apoyo', ver
+            # proveedores_excel_service.leer_catalogo_excel) -- a falta de
+            # dato se asume 'catalogo' (quien llame a esta función sin
+            # marcarlo, ver alta_desde_portal, nunca es la hoja de apoyo).
+            origen_registro = registro.get("origen") or ORIGEN_CATALOGO
+            especialidad_normalizada = especialidades_repo.normalizar(registro.get("especialidad"))
+            cl_especialidad = mapa_especialidades.get(especialidad_normalizada)
+            if cl_especialidad is None and especialidad_normalizada:
+                cl_especialidad = especialidades_repo.agregar(conn, registro.get("especialidad"))
+                mapa_especialidades[especialidad_normalizada] = cl_especialidad
+            registro = {**registro, "cl_especialidad": cl_especialidad}
             candidatas = llaves_candidatas(registro)
             if not candidatas:
                 continue
@@ -234,14 +252,14 @@ def cargar_padron(registros: list[dict], rfc_usuario: str) -> dict:
                 # absorban al mismo proveedor del portal.
                 fila = altas_del_portal.pop(senas, None)
             if fila is None:
-                _insertar(conn, registro, candidatas[0], ORIGEN_CATALOGO, None)
+                _insertar(conn, registro, candidatas[0], origen_registro, None)
                 nuevos += 1
                 continue
             if fila["origen"] == ORIGEN_PORTAL:
                 absorbidos += 1
             else:
                 actualizados += 1
-            _actualizar(conn, fila, registro, candidatas[0], ORIGEN_CATALOGO)
+            _actualizar(conn, fila, registro, candidatas[0], origen_registro)
 
         conn.execute(
             "INSERT INTO proveedores_cargas (rfc, total_filas, nuevos, actualizados, absorbidos, fecha) "

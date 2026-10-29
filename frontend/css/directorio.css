@@ -169,13 +169,16 @@
 .dp-medico-principal{flex:4 1 200px;min-width:0;}
 .dp-medico-nombre{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;}
 .dp-medico-nombre h3{font-size:15px;font-weight:600;color:var(--navy);margin:0 4px 0 0;}
-/* Distintivo tipo semáforo: si el proveedor ya está contratado o no.
-   Verde = "Dentro de la red" (llegó en la carga de Excel); ámbar = "Fuera
-   de la red" (se dio de alta en esta misma pantalla y ya fue aprobado,
-   pero todavía no viene del padrón del sistema central). Mismos colores
-   que el badge de al lado, ver clasePorOrigen en js/directorio/vistas.js. */
+/* Distintivo tipo semáforo: de qué hoja/proceso viene el proveedor.
+   Verde = "Dentro de la red" (hoja "Padrón de proveedores"); morado = "Red
+   de apoyo" (hoja "Proveedores red de apoyo", también con convenio pero
+   identificada aparte); ámbar = "Fuera de la red" (se dio de alta en esta
+   misma pantalla y ya fue aprobado, pero todavía no viene del padrón del
+   sistema central). Mismos colores que el badge de al lado, ver
+   clasePorOrigen en js/directorio/vistas.js. */
 .dp-origen-punto{width:9px;height:9px;border-radius:50%;flex-shrink:0;display:inline-block;}
 .dp-origen-punto.catalogo{background:var(--green);}
+.dp-origen-punto.apoyo{background:var(--purple);}
 .dp-origen-punto.portal{background:var(--amber);}
 
 /* Aviso que encabeza los candidatos de "Buscar fuera de la red": deja

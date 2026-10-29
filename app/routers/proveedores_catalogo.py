@@ -50,6 +50,7 @@ def resumen():
     return {
         "total": proveedores_repo.contar_padron(),
         "dentro_de_la_red": por_origen.get(proveedores_repo.ORIGEN_CATALOGO, 0),
+        "red_de_apoyo": por_origen.get(proveedores_repo.ORIGEN_APOYO, 0),
         "fuera_de_la_red": por_origen.get(proveedores_repo.ORIGEN_PORTAL, 0),
         "ultima_carga": proveedores_repo.obtener_ultima_carga(),
     }
@@ -71,11 +72,14 @@ async def cargar(archivo: UploadFile = File(...), usuario: dict = Depends(usuari
     except ErrorCatalogoExcel as e:
         raise HTTPException(400, str(e))
 
-    # Especialidades que no empatan con el catálogo: el renglón se carga
-    # igual (decisión del usuario, 2026-10-20), pero hay que avisarlo -- un
-    # proveedor sin especialidad del catálogo no suma a ninguna tarjeta de
-    # KPI, y eso se vería como "falta gente" en vez de "está mal escrito".
-    no_reconocidas = especialidades_repo.especialidades_no_reconocidas(
+    # Especialidades que el catálogo todavía no tiene: se calculan ANTES de
+    # cargar (cargar_padron ya las da de alta sola, ver
+    # especialidades_repo.agregar, instrucción del usuario 2026-10-28) nada
+    # más para poder avisarlas -- el renglón se carga igual y ya suma a su
+    # propia tarjeta/combo, pero vale la pena que quien subió el archivo sepa
+    # qué especialidades son nuevas (puede ser la correcta o un error de
+    # captura que convenga corregir en el Excel antes de la próxima carga).
+    agregadas_al_catalogo = especialidades_repo.especialidades_no_reconocidas(
         r.get("especialidad") for r in registros
     )
 
@@ -84,4 +88,4 @@ async def cargar(archivo: UploadFile = File(...), usuario: dict = Depends(usuari
     # estaban conservándoles su clave (ver proveedores_repo.cargar_padron),
     # así las citas ya agendadas no quedan huérfanas.
     resultado = proveedores_repo.cargar_padron(registros, rfc_usuario)
-    return {"ok": True, **resultado, "especialidades_no_reconocidas": no_reconocidas}
+    return {"ok": True, **resultado, "especialidades_agregadas_al_catalogo": agregadas_al_catalogo}

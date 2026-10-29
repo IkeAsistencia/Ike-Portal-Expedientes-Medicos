@@ -88,6 +88,7 @@ def _xlsx_de_filas(filas: list[dict]) -> bytes:
 
     wb = Workbook()
     ws = wb.active
+    ws.title = "Padrón de proveedores"
     # La clave del proveedor ya no está en COLUMNAS (salió del layout), pero
     # varias pruebas la mandan para comprobar que se sigue leyendo.
     columnas = list(COLUMNAS) + [COLUMNA_CLAVE_CENTRAL]
@@ -187,7 +188,7 @@ def test_cargar_padron_lo_deja_disponible_en_el_resumen(client):
     assert r.json() == {
         "ok": True, "total": 2, "nuevos": 2, "actualizados": 0, "absorbidos": 0,
         # "Cardiología" sí está en el catálogo de especialidades.
-        "especialidades_no_reconocidas": [],
+        "especialidades_agregadas_al_catalogo": [],
     }
 
     resumen = client.get("/proveedores-catalogo", headers=headers).json()
@@ -233,7 +234,7 @@ def test_segunda_carga_agrega_los_nuevos_y_conserva_la_clave_de_los_que_ya_estab
     ])
     assert r.json() == {
         "ok": True, "total": 2, "nuevos": 1, "actualizados": 1, "absorbidos": 0,
-        "especialidades_no_reconocidas": [],
+        "especialidades_agregadas_al_catalogo": [],
     }
 
     padron = {p["nombre"]: p for p in client.get("/directorio-proveedores", headers=headers).json()}
@@ -296,6 +297,7 @@ def test_rechaza_archivo_con_encabezado_irreconocible(client):
 
     wb = Workbook()
     ws = wb.active
+    ws.title = "Padrón de proveedores"
     ws.cell(row=1, column=1, value="Columna inventada")
     ws.cell(row=2, column=1, value="algo")
     buffer = BytesIO()

@@ -158,11 +158,15 @@ export function municipiosAltaCargados(codEnt) {
    -- null mientras no se ha pedido todavía, [] si ya se pidió y vino vacío. */
 let catalogoReal = null;
 
-/* Las dos etiquetas de origen del padrón: un proveedor que llegó en el Excel
-   oficial tiene convenio con IKE ("Dentro de la red"); uno aprobado en el
-   portal, sin ese proceso formal, cuenta como "Fuera de la red" hasta que
-   llegue en una carga de Excel (ver mapearProveedor abajo). */
+/* Las tres etiquetas de origen del padrón: un proveedor que llegó en la hoja
+   "Padrón de proveedores" del Excel oficial tiene convenio con IKE ("Dentro
+   de la red"); uno que llegó en la hoja "Proveedores red de apoyo" también
+   tiene convenio, pero se identifica aparte ("Red de apoyo", su propio
+   color); uno aprobado en el portal, sin ese proceso formal, cuenta como
+   "Fuera de la red" hasta que llegue en una carga de Excel (ver
+   mapearProveedor abajo). */
 export const ETIQUETA_DENTRO_DE_LA_RED = "Dentro de la red";
+export const ETIQUETA_RED_DE_APOYO = "Red de apoyo";
 export const ETIQUETA_FUERA_DE_LA_RED = "Fuera de la red";
 
 /* Domicilio DONDE DA LA CONSULTA, en el orden que se pidió:
@@ -175,6 +179,7 @@ function domicilioConsulta(row) {
 function mapearProveedor(row) {
   const costo = leerCosto(row.costo_consulta);
   const esPortal = row.origen === "portal";
+  const esApoyo = row.origen === "apoyo";
   return {
     // La clave la genera el portal (PRV-000001) y es la misma para los dos
     // orígenes: con ella se agenda la cita y no cambia aunque el médico
@@ -214,8 +219,8 @@ function mapearProveedor(row) {
     codigoPostal: row.codigo_postal || "",
     latitud: row.latitud ?? null,
     longitud: row.longitud ?? null,
-    source: esPortal ? ETIQUETA_FUERA_DE_LA_RED : ETIQUETA_DENTRO_DE_LA_RED,
-    origen: esPortal ? "portal" : "catalogo",
+    source: esPortal ? ETIQUETA_FUERA_DE_LA_RED : esApoyo ? ETIQUETA_RED_DE_APOYO : ETIQUETA_DENTRO_DE_LA_RED,
+    origen: esPortal ? "portal" : esApoyo ? "apoyo" : "catalogo",
   };
 }
 
@@ -226,15 +231,18 @@ export function resumenDelPadron() {
   const lista = catalogoReal || [];
   const especialidades = new Set();
   let dentro = 0;
+  let apoyo = 0;
   let fuera = 0;
   lista.forEach(d => {
     if (d.origen === "portal") fuera += 1;
+    else if (d.origen === "apoyo") apoyo += 1;
     else dentro += 1;
     if (d.clEspecialidad) especialidades.add(d.clEspecialidad);
   });
   return {
     total: lista.length,
     dentroDeRed: dentro,
+    redDeApoyo: apoyo,
     fueraDeRed: fuera,
     especialidadesConProveedor: especialidades.size,
   };
@@ -490,12 +498,16 @@ export function raw(s) {
 export function visible(s) {
   const f = s.filters;
   const sinLimite = f.maxPrice >= 9999;
+  const origenes = f.origenes || [];
   const list = raw(s).list.filter(d =>
     // Con "Sin límite" entran todos; con un tope, solo los que tienen costo
     // conocido y dentro de él (un costo desconocido no se puede prometer).
     (sinLimite || (d.priceNum !== null && d.priceNum <= f.maxPrice)) &&
     (!f.tele || d.tele) &&
-    (!f.seguro || d.convenio !== "Sin convenio")
+    (!f.seguro || d.convenio !== "Sin convenio") &&
+    // Tipo de proveedor (Dentro de la red / Red de apoyo / Fuera de la
+    // red): sin nada elegido entran todos.
+    (origenes.length === 0 || origenes.includes(d.origen))
   );
   const sorters = {
     nombre: (a, b) => a.name.localeCompare(b.name),

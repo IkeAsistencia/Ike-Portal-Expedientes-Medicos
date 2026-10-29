@@ -57,11 +57,14 @@ class CitaInput(BaseModel):
 @router.get("")
 def listar():
     """
-    El padrón completo, con los dos orígenes en la misma lista y cada uno
+    El padrón completo, con los tres orígenes en la misma lista y cada uno
     marcado para que la pantalla los distinga (ver mapearProveedor en
     frontend/js/directorio/datos.js):
-      - origen='catalogo' -> llegó en la carga de Excel ("Dentro de la red":
-        tiene convenio con IKE).
+      - origen='catalogo' -> llegó en la hoja "Padrón de proveedores" del
+        Excel ("Dentro de la red": tiene convenio con IKE).
+      - origen='apoyo'    -> llegó en la hoja "Proveedores red de apoyo" del
+        mismo Excel ("Red de apoyo": también con convenio, identificado
+        aparte).
       - origen='portal'   -> se dio de alta aquí ("Fuera de la red": aprobado
         en el portal, sin el proceso formal de convenio).
     Todos traen `clave` (PRV-000001), que es con lo que se agenda una cita:
@@ -78,14 +81,14 @@ def listar_especialidades():
     Directorio (ver app/repositories/especialidades_repo.py).
 
     Viene en el orden de `orden_kpi`, ya partido para la pantalla:
-      - `tarjetas`: las primeras 16 (4 renglones de 4).
+      - `tarjetas`: las primeras `maximo_tarjetas` (ver especialidades_repo.MAXIMO_TARJETAS_KPI).
       - `combo`:    el resto, incluidas las que no traen orden asignado.
     Las dos listas traen el mismo contenido por especialidad, así que elegir
     una del combo funciona igual que picarle a una tarjeta.
 
-    `dentro_de_red` / `fuera_de_red` son conteos REALES del padrón, amarrados
-    por proveedores.cl_especialidad: una especialidad en 0 significa que no
-    hay a quién mandar, no que falte el dato.
+    `dentro_de_red` / `red_de_apoyo` / `fuera_de_red` son conteos REALES del
+    padrón, amarrados por proveedores.cl_especialidad: una especialidad en 0
+    significa que no hay a quién mandar, no que falte el dato.
     """
     todas = especialidades_repo.kpis()
     corte = especialidades_repo.MAXIMO_TARJETAS_KPI

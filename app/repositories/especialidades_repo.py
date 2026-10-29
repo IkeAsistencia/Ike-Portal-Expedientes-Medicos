@@ -2,10 +2,32 @@
 Catálogo de especialidades médicas (tabla `especialidades_catalogo`).
 
 De dónde sale: CatEspecialidadesMedicas.txt, el volcado del catálogo del
-sistema central que entregó el usuario (2026-10-20). Las 38 filas viven aquí
-abajo en SEMILLA, no se leen del .txt en tiempo de ejecución: así el portal
-levanta igual aunque el archivo no esté, y cualquier cambio al catálogo queda
-versionado en git junto al código que lo usa.
+sistema central que entregó el usuario (2026-10-20) -- las primeras 38 filas
+de SEMILLA, con su `cl_especialidad` oficial. No se leen del .txt en tiempo
+de ejecución: así el portal levanta igual aunque el archivo no esté, y
+cualquier cambio al catálogo queda versionado en git junto al código que lo
+usa.
+
+A esas 38 se le agregaron (2026-10-28) las especialidades que trae la
+columna "Especialidad" del Excel real del padrón ("Lay out red médica.xlsx",
+hojas "Padrón de proveedores" y "Proveedores red de apoyo") y que no
+empataban con ninguna de las 38 ni con sus equivalentes (ver
+_EQUIVALENTES) -- SIN eso, esos proveedores se cargaban pero no sumaban a
+ninguna tarjeta de KPI (quedaban "fuera del catálogo"). Van en una sección
+aparte de SEMILLA, con `cl_especialidad` >= 1000.
+
+Desde esa misma fecha, una carga de Excel que traiga una especialidad que
+TODAVÍA no esté en el catálogo ya no la deja fuera: `agregar()` la da de
+alta sola, con una clave >= 2000 (ver `cargar_padron`). Tres rangos de
+`cl_especialidad`, para no chocar nunca entre ellos ni con uno que el
+sistema central use más adelante:
+  - < 1000:  catálogo oficial del sistema central (SEMILLA).
+  - 1000-1999: agregadas a mano en SEMILLA al revisar un archivo real --
+    quedan versionadas en git y `sembrar()` las administra igual que a las
+    oficiales (se desactivan si algún día se les quita de SEMILLA).
+  - >= 2000: aprendidas EN RUNTIME por una carga (`agregar()`). Viven solo en
+    la base, `sembrar()` no las toca (ni las resiembra ni las desactiva):
+    perderlas requeriría borrar el renglón a mano.
 
 Para qué sirve:
   - Las tarjetas de KPI del Directorio de Proveedores (`ordenKPI` decide
@@ -69,12 +91,48 @@ SEMILLA = [
     (77, "VETERINARIO", 1, 36),
     (91, "REHABILITACION Y ORTOPEDIA", 1, 37),
     (94, "ACOMPAÑANTE", 1, 38),
+
+    # ---- Agregadas del Excel real del padrón (2026-10-28), no vienen del
+    # catálogo central -- ver nota de arriba. Sin prioridad ni orden_kpi
+    # (van al combo, no desplazan ninguna tarjeta ya asignada).
+    (1000, "ANESTESIOLOGIA", None, None),
+    # Estas 3 sí llevan orden_kpi (decisión del usuario, 2026-10-28): son las
+    # especialidades más frecuentes del Excel real que quedaban sin tarjeta
+    # (NEFROLOGIA 58 proveedores, GERIATRIA 46, ANGIOLOGIA 48). El 18 empata
+    # con NEUROFISIOLOGIA (cl 28): el desempate por clave las deja justo en
+    # las posiciones 18-20 de MAXIMO_TARJETAS_KPI, sin mover a ninguna de las
+    # 16 que ya tenían tarjeta.
+    (1001, "ANGIOLOGIA", None, 18),
+    (1002, "ARTROSCOPIA", None, None),
+    (1003, "AUDIOLOGIA", None, None),
+    (1004, "BARIATRIA", None, None),
+    (1005, "CIRUGIA DE TORAX", None, None),
+    (1006, "CIRUGIA GASTROENTEROLOGICA", None, None),
+    (1007, "CIRUGIA INTERNA", None, None),
+    (1008, "CIRUGIA MAXILO FACIAL", None, None),
+    (1010, "CIRUGIA PEDIATRICA", None, None),
+    (1011, "CIRUGIA PLASTICA", None, None),
+    (1012, "COLOPROCTOLOGIA", None, None),
+    (1013, "GERIATRIA", None, 18),
+    (1014, "GERONTOLOGIA", None, None),
+    (1015, "HEMATOLOGIA", None, None),
+    (1016, "INFECTOLOGIA", None, None),
+    (1017, "LAPAROSCOPIA Y ENDOSCOPIA", None, None),
+    (1018, "NEFROLOGIA", None, 18),
+    (1019, "NEONATOLOGIA", None, None),
+    (1020, "ODONTOPEDIATRIA", None, None),
+    (1021, "OPTOMETRISTA Y OPTICA", None, None),
+    (1022, "PATOLOGIA", None, None),
+    (1023, "PODOLOGIA", None, None),
+    (1024, "PSICOTERAPIA", None, None),
+    (1025, "REUMATOLOGIA", None, None),
 ]
 
-# Cuántas tarjetas de KPI caben en la pantalla: 4 renglones de 4
-# (instrucción del usuario, 2026-10-20). Las que no entran se ofrecen en el
-# combo, con la misma funcionalidad.
-MAXIMO_TARJETAS_KPI = 16
+# Cuántas tarjetas de KPI caben en la pantalla: 5 renglones de 4 (ampliado de
+# 4x4 el 2026-10-28 para darle tarjeta a NEFROLOGIA/GERIATRIA/ANGIOLOGIA sin
+# sacar a ninguna de las 16 que ya tenían -- ver SEMILLA). Las que no entran
+# se ofrecen en el combo, con la misma funcionalidad.
+MAXIMO_TARJETAS_KPI = 20
 
 # Nombres con los que el padrón ya tenía datos ANTES de existir este
 # catálogo: eran los del combo fijo del portal, más cortos que los del
@@ -82,13 +140,23 @@ MAXIMO_TARJETAS_KPI = 16
 # "Traumatología" no contaría para "TRAUMATOLOGIA Y ORTOPEDIA" y su tarjeta
 # diría 0 aunque sí haya a quién mostrar.
 #
-# Es una lista cerrada a propósito: solo cubre las variantes que de verdad
-# generó el portal. Cualquier otro nombre que no empate se REPORTA en la
-# carga (ver especialidades_no_reconocidas) en vez de adivinarle.
+# Es una lista cerrada a propósito: solo cubre variantes YA CONFIRMADAS de
+# una especialidad que ya existe. Cualquier otro nombre que no empate se da
+# de alta como especialidad NUEVA en la carga (ver agregar() y
+# proveedores_repo.cargar_padron) en vez de adivinarle un alias.
 _EQUIVALENTES = {
     "TRAUMATOLOGIA": "TRAUMATOLOGIA Y ORTOPEDIA",
     "GINECOLOGIA": "GINECOLOGIA Y OBSTETRICIA",
     "ODONTOLOGIA": "ODONTOLOGIA INTEGRAL",
+    # Mismo criterio, agregados al revisar el Excel real del padrón
+    # (2026-10-28): el nombre corto que trae el archivo es un subconjunto
+    # exacto de palabras del nombre oficial, así que es la misma
+    # especialidad sin la calificación final.
+    "ALERGOLOGIA E INMUNOLOGIA": "ALERGOLOGIA E INMUNOLOGIA CLINICA",
+    "ONCOLOGIA": "ONCOLOGIA MEDICA",
+    # Confirmado por el usuario (2026-10-28): error de dedo en el Excel por
+    # "CIRUGIA ONCOLOGICA" (cl 11).
+    "CIRUGIA ONCOLICA": "CIRUGIA ONCOLOGICA",
 }
 
 
@@ -104,6 +172,11 @@ def normalizar(texto) -> str:
     return " ".join(sin_acentos.split())
 
 
+# A partir de aquí las claves que se inventa agregar() en tiempo de carga
+# (ver nota del encabezado del módulo).
+_INICIO_RUNTIME = 2000
+
+
 def sembrar(conn) -> None:
     """
     Deja el catálogo igual a SEMILLA. Corre en cada arranque (ver
@@ -115,6 +188,11 @@ def sembrar(conn) -> None:
     catálogo central, los proveedores que la tengan asignada seguirían
     apuntando a algo existente. Se marca como inactiva, que es lo que la
     saca de las tarjetas y del combo.
+
+    Las aprendidas en runtime por una carga (ver agregar(), cl_especialidad
+    >= 2000) NO se tocan aquí: no viven en SEMILLA, así que si se incluyeran
+    en el "no vengan en SEMILLA" de arriba, cada reinicio del portal las
+    desactivaría.
     """
     claves = {fila[0] for fila in SEMILLA}
     conn.executemany(
@@ -134,9 +212,30 @@ def sembrar(conn) -> None:
         marcadores = ", ".join("?" for _ in claves)
         conn.execute(
             f"UPDATE especialidades_catalogo SET activo = 0 "
-            f"WHERE cl_especialidad NOT IN ({marcadores})",
+            f"WHERE cl_especialidad NOT IN ({marcadores}) AND cl_especialidad < {_INICIO_RUNTIME}",
             tuple(claves),
         )
+
+
+def agregar(conn, descripcion: str) -> int:
+    """
+    Da de alta una especialidad que no estaba en el catálogo, con una clave
+    nueva (>= _INICIO_RUNTIME) y sin prioridad ni orden_kpi (entra al combo,
+    no desplaza ninguna tarjeta ya asignada). Pensada para `cargar_padron`:
+    un renglón del Excel con una especialidad desconocida ya no se queda
+    sin `cl_especialidad` -- se le da de alta al catálogo en el momento.
+    """
+    siguiente = conn.execute(
+        "SELECT COALESCE(MAX(cl_especialidad), ?) + 1 FROM especialidades_catalogo "
+        "WHERE cl_especialidad >= ?",
+        (_INICIO_RUNTIME - 1, _INICIO_RUNTIME),
+    ).fetchone()[0]
+    conn.execute(
+        "INSERT INTO especialidades_catalogo (cl_especialidad, descripcion, prioridad, orden_kpi, activo) "
+        "VALUES (?, ?, NULL, NULL, 1)",
+        (siguiente, str(descripcion).strip()),
+    )
+    return siguiente
 
 
 # El orden de los KPI, en SQL: primero las que traen `orden_kpi`, al final
@@ -213,8 +312,10 @@ def kpis() -> list[dict]:
     """
     El catálogo con el conteo REAL del padrón para cada especialidad, que es
     lo que pintan las tarjetas: cuántos proveedores hay dentro de la red
-    (origen='catalogo', ya contratados) y cuántos fuera (origen='portal',
-    dados de alta aquí) -- formato que pidió el usuario (2026-10-20).
+    (origen='catalogo'), cuántos en la red de apoyo (origen='apoyo') y
+    cuántos fuera (origen='portal', dados de alta aquí) -- formato que pidió
+    el usuario (2026-10-20, ampliado 2026-10-28 para distinguir la red de
+    apoyo).
 
     El conteo se amarra por proveedores.cl_especialidad, no por el texto: un
     renglón cuyo nombre no empató con el catálogo no suma en ningún lado (y
@@ -229,6 +330,7 @@ def kpis() -> list[dict]:
                 c.prioridad,
                 c.orden_kpi,
                 COALESCE(SUM(CASE WHEN p.origen = 'catalogo' THEN 1 ELSE 0 END), 0) AS dentro_de_red,
+                COALESCE(SUM(CASE WHEN p.origen = 'apoyo'    THEN 1 ELSE 0 END), 0) AS red_de_apoyo,
                 COALESCE(SUM(CASE WHEN p.origen = 'portal'   THEN 1 ELSE 0 END), 0) AS fuera_de_red,
                 COUNT(p.id) AS total_proveedores,
                 COUNT(DISTINCT CASE

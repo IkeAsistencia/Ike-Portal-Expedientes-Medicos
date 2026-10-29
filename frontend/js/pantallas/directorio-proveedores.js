@@ -78,8 +78,9 @@ function estadoInicial() {
     specialtyId: null,
     query: "", searchTerm: null, recent: [],
     // Solo los filtros que se resuelven con datos reales del padrón (ver
-    // visible() en datos.js).
-    filters: { maxPrice: 9999, tele: false, seguro: false, orden: "nombre" },
+    // visible() en datos.js). `origenes` vacío = sin filtrar por tipo
+    // (Dentro de la red / Red de apoyo / Fuera de la red).
+    filters: { maxPrice: 9999, tele: false, seguro: false, orden: "nombre", origenes: [] },
     compare: [],
     detail: null, bookingStep: "idle", bookingDay: null, bookingSlot: null,
     // La cita también se puede capturar en CUALQUIER fecha y hora: la fecha y
@@ -405,7 +406,7 @@ function aplicarCoordinacion() {
   irA({
     // Filtros y comparador en blanco: que lo de una visita anterior no esconda médicos.
     detail: null, searchTerm: null, compare: [],
-    filters: { maxPrice: 9999, tele: false, seguro: false, orden: "nombre" },
+    filters: { maxPrice: 9999, tele: false, seguro: false, orden: "nombre", origenes: [] },
     screen: r.screen,
     specialty: r.especialidad ? r.especialidad.descripcion : null,
     specialtyId: r.especialidad ? Number(r.especialidad.cl_especialidad) : null,
@@ -949,7 +950,17 @@ const ACCIONES = {
 
   // Resultados
   "precio": (el) => { ponerFiltros({ maxPrice: Number(el.dataset.valor) }); pintar(); },
-  "limpiar-filtros": () => { ponerFiltros({ maxPrice: 9999, tele: false, seguro: false }); pintar(); },
+  // Tipo de proveedor (Dentro de la red / Red de apoyo / Fuera de la red):
+  // multi-selección -- picarle de nuevo a la misma lo quita, no es excluyente.
+  "origen": (el) => {
+    const o = el.dataset.valor;
+    const actuales = estado.filters.origenes || [];
+    ponerFiltros({
+      origenes: actuales.includes(o) ? actuales.filter(x => x !== o) : actuales.concat(o),
+    });
+    pintar();
+  },
+  "limpiar-filtros": () => { ponerFiltros({ maxPrice: 9999, tele: false, seguro: false, origenes: [] }); pintar(); },
   "ficha": (el) => {
     const x = medicoVisible(el.dataset.id);
     if (x) irA({

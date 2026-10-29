@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 from openpyxl import Workbook, load_workbook
 
-from app.repositories.proveedores_repo import llaves_candidatas
+from app.repositories.proveedores_repo import ORIGEN_APOYO, ORIGEN_CATALOGO, llaves_candidatas
 from app.services.proveedores_excel_service import (
     COLUMNA_CLAVE_CENTRAL,
     COLUMNAS,
@@ -46,14 +46,35 @@ ENCABEZADO_VALIDADO = [
 ]
 
 
-def _excel(encabezados: list[str], filas: list[list]) -> bytes:
+def _excel(encabezados: list[str], filas: list[list], hoja: str = "Padrón de proveedores") -> bytes:
+    """Un Excel de una sola hoja, nombrada como la hoja del padrón por
+    default -- para que las pruebas de encabezado/columnas no se vean
+    afectadas por el reconocimiento de hoja (ver tests de más abajo, que sí
+    prueban eso)."""
     wb = Workbook()
     ws = wb.active
+    ws.title = hoja
     for col, texto in enumerate(encabezados, start=1):
         ws.cell(row=1, column=col, value=texto)
     for i, fila in enumerate(filas, start=2):
         for col, valor in enumerate(fila, start=1):
             ws.cell(row=i, column=col, value=valor)
+    buffer = BytesIO()
+    wb.save(buffer)
+    return buffer.getvalue()
+
+
+def _excel_hojas(hojas: dict[str, tuple[list[str], list[list]]]) -> bytes:
+    """Un Excel con varias hojas: {nombre_hoja: (encabezados, filas)}."""
+    wb = Workbook()
+    wb.remove(wb.active)
+    for nombre, (encabezados, filas) in hojas.items():
+        ws = wb.create_sheet(nombre)
+        for col, texto in enumerate(encabezados, start=1):
+            ws.cell(row=1, column=col, value=texto)
+        for i, fila in enumerate(filas, start=2):
+            for col, valor in enumerate(fila, start=1):
+                ws.cell(row=i, column=col, value=valor)
     buffer = BytesIO()
     wb.save(buffer)
     return buffer.getvalue()
@@ -158,6 +179,72 @@ def test_las_columnas_pueden_venir_en_otro_orden():
 def test_un_encabezado_irreconocible_si_se_rechaza():
     with pytest.raises(ErrorCatalogoExcel, match="No se reconoció"):
         leer_catalogo_excel(_excel(["Una", "Otra"], [["x", "y"]]))
+
+
+# ---------- Las dos hojas ----------
+# El archivo real (2026-10-28) trae "Padrón de proveedores" (origen
+# 'catalogo') y "Proveedores red de apoyo" (origen 'apoyo', con menos
+# columnas: sin cédula, RFC ni consultorio, y sin correo/horario/costo/
+# convenio/teleconsulta/coordenadas).
+
+ENCABEZADO_APOYO = ENCABEZADO_VALIDADO[:11]  # hasta "Teléfono Consultorio" inclusive
+
+
+def test_se_leen_las_dos_hojas_con_su_origen():
+    datos = leer_catalogo_excel(_excel_hojas({
+        "Padrón de proveedores": (ENCABEZADO_VALIDADO, [
+            ["Dr. Padrón", "CARDIOLOGIA"] + [None] * 16,
+        ]),
+        "Proveedores red de apoyo": (ENCABEZADO_APOYO, [
+            ["Dr. Apoyo", "CARDIOLOGIA"] + [None] * 9,
+        ]),
+    }))
+    por_nombre = {r["nombre"]: r["origen"] for r in datos}
+    assert por_nombre == {"Dr. Padrón": ORIGEN_CATALOGO, "Dr. Apoyo": ORIGEN_APOYO}
+
+
+def test_el_nombre_de_hoja_acepta_texto_despues_del_prefijo():
+    """"Padrón de proveedores 2026" cuenta igual que "Padrón de proveedores"."""
+    datos = leer_catalogo_excel(_excel(
+        ENCABEZADO_VALIDADO, [["Dr. Prueba", "CARDIOLOGIA"] + [None] * 16],
+        hoja="Padrón de proveedores 2026",
+    ))
+    assert datos[0]["origen"] == ORIGEN_CATALOGO
+
+
+def test_el_archivo_puede_traer_solo_una_de_las_dos_hojas():
+    datos = leer_catalogo_excel(_excel(
+        ENCABEZADO_APOYO, [["Dr. Apoyo", "CARDIOLOGIA"] + [None] * 9],
+        hoja="Proveedores red de apoyo",
+    ))
+    assert len(datos) == 1
+    assert datos[0]["origen"] == ORIGEN_APOYO
+
+
+def test_la_hoja_de_apoyo_no_exige_las_columnas_que_no_trae():
+    """cédula, RFC, consultorio, correo, horario, costo, convenio,
+    teleconsulta y coordenadas no están en esta hoja -- entran vacíos, no
+    tumban la carga (instrucción del usuario, 2026-10-28)."""
+    datos = leer_catalogo_excel(_excel(
+        ENCABEZADO_APOYO, [["Dr. Apoyo", "CARDIOLOGIA", None, None, "Jalisco",
+                             "Guadalajara", "Av. Vallarta 1", "Americana", "44100",
+                             None, "33 1234 5678"]],
+        hoja="Proveedores red de apoyo",
+    ))
+    r = datos[0]
+    assert r["cedula"] is None
+    assert r["rfc"] is None
+    assert r["consultorio"] is None
+    assert r["email"] is None
+    assert r["horario"] is None
+    assert r["telefono"] == "33 1234 5678"
+
+
+def test_ninguna_hoja_reconocida_se_rechaza():
+    with pytest.raises(ErrorCatalogoExcel, match="ninguna hoja reconocida"):
+        leer_catalogo_excel(_excel_hojas({
+            "Hoja1": (["Una", "Otra"], [["x", "y"]]),
+        }))
 
 
 # ---------- Nada se exige ----------

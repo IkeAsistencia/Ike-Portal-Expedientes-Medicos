@@ -151,6 +151,7 @@ def _cargar_proveedores(client, headers, filas):
 
     wb = Workbook()
     ws = wb.active
+    ws.title = "Padrón de proveedores"
     for col_idx, (encabezado, _clave, _ancho, _alias) in enumerate(COLUMNAS, start=1):
         ws.cell(row=1, column=col_idx, value=encabezado)
     for fila_idx, fila in enumerate(filas, start=2):
