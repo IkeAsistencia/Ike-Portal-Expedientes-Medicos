@@ -38,7 +38,7 @@ const PLANTILLA = `
             <th>Expediente(s)</th>
             <th>Destinatario</th>
             <th style="width:160px;">Enviado por</th>
-            <th style="width:100px;">Real / Prueba</th>
+            <th style="width:170px;">Resultado</th>
           </tr>
         </thead>
         <tbody id="hc-tbody"></tbody>
@@ -49,6 +49,18 @@ const PLANTILLA = `
 const $ = (id) => document.getElementById(id);
 
 const ETIQUETA_TIPO = { nuevo: "Nuevo", recordatorio: "Recordatorio" };
+
+// Cuando no salió correo, los expedientes igual pasaron a "En Espera de
+// Respuesta" (ver app/services/envio_correo_service.py).
+const SIN_CORREO = {
+  limite: "Sin correo: límite diario",
+  sin_proveedores: "Sin correo: sin proveedor en la entidad",
+};
+
+function resultado(r) {
+  if (r.motivo_sin_correo) return SIN_CORREO[r.motivo_sin_correo] || "Sin correo";
+  return r.simulado ? "Prueba (sin SMTP)" : "Real";
+}
 
 function renderFilas(registros) {
   $("hcCount").textContent = registros.length;
@@ -61,9 +73,9 @@ function renderFilas(registros) {
       <td>${formatDateTime(r.fecha)}</td>
       <td>${ETIQUETA_TIPO[r.tipo] || escapeHtml(r.tipo)}</td>
       <td>${r.expedientes.join(", ")}</td>
-      <td>${escapeHtml(r.destinatario)}</td>
+      <td>${escapeHtml(r.destinatario) || "—"}</td>
       <td>${escapeHtml(r.nombre_envio)}</td>
-      <td>${r.simulado ? "Prueba (sin SMTP)" : "Real"}</td>
+      <td>${resultado(r)}</td>
     </tr>
   `).join("");
 }

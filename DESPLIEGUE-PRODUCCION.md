@@ -112,11 +112,14 @@ dos usuarios distintos y conviene que así sea.
 | Requerimiento | Detalle | Si falta |
 |---|---|---|
 | Host, puerto, usuario, contraseña y remitente | Del SMTP corporativo | Degrada: los correos quedan en "modo simulado" (se registran en el log y no salen) |
-| **Buzón del proveedor** | De dónde se obtiene el correo al que hay que escribirle | **Bloquea la función de alertas**: hoy la consulta solo trae el correo del paciente, no el del proveedor |
+| **Correo y entidad de cada proveedor** | Se capturan en Usuarios y Accesos al dar de alta el perfil Proveedor | A las entidades sin proveedor no les llega correo (Cabina ve el aviso; los expedientes igual pasan a "En Espera de Respuesta") |
+| **Tope de envíos de la cuenta** | 100 al día (`SMTP_LIMITE_DIARIO`). Falta confirmar si el servidor cuenta por mensaje o por destinatario (`SMTP_CUENTA_POR_DESTINATARIO`) | Si el tope real es menor que el configurado, el servidor de correo rechazaría los envíos de más |
 
-Este segundo punto sigue pendiente de definición desde antes y conviene
-resolverlo antes de salir: el envío funciona de punta a punta, pero sin el
-buzón correcto las alertas no llegan a quien deben.
+"Enviar correo a proveedores" manda **un solo correo** con toda la
+selección, en copia oculta, a los proveedores de las entidades que aparecen
+en ella. El portal lleva el contador del día, pide confirmación al acercarse
+al tope y, al llegar, ya no deja salir correos (ver
+`app/services/envio_correo_service.py`).
 
 ### 3.4 Places API de Google Maps
 
@@ -352,6 +355,8 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 | `CUENTAS_PERMITIDAS` | La lista confirmada (pendiente, sección 4) | Se ven de más o de menos |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE`, `SMTP_USAR_TLS` | Del SMTP corporativo | Sin ellos, los correos solo se registran en el log |
 | `SMTP_DESTINATARIO_PRUEBA` | **Vacío en producción** | Si queda con valor, los correos se desvían a ese buzón |
+| `SMTP_LIMITE_DIARIO`, `SMTP_AVISO_LIMITE` | `100` y `80`, o lo que autorice quien administra la cuenta de correo | Con un tope mayor al real, el servidor de correo rechazaría los envíos de más |
+| `SMTP_CUENTA_POR_DESTINATARIO` | `true` hasta confirmar cómo cuenta el servidor | Con `false` y un servidor que cuenta por destinatario, el portal se pasaría del tope sin darse cuenta |
 | `GOOGLE_MAPS_API_KEY` | Llave de Google Cloud con la Places API habilitada y facturación activa (opcional, sección 3.4). Solo la usa el servidor | Sin ella se apaga la búsqueda fuera de la red |
 | `GOOGLE_MAPS_BROWSER_API_KEY` | Llave **distinta**, restringida por dominio y solo con Maps JavaScript API (sección 3.4.1) | Los resultados se muestran en lista en vez de mapa |
 | `PROXIES_CONFIABLES` | `2` con CloudFront + ALB; `1` si solo hay ALB | Un número mal puesto rompe el conteo de intentos de login |

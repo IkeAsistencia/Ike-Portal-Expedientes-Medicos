@@ -15,6 +15,8 @@ import {
 } from "../core/reglas-expedientes.js";
 import { ICONOS } from "../componentes/iconos.js";
 import { kpiHtml } from "../componentes/kpi.js";
+import { actualizarCuotaCorreos, cuotaCorreosHtml } from "../componentes/cuota-correos.js";
+import { enviarCorreoAProveedores } from "../componentes/enviar-correo-proveedores.js";
 import { limitarADigitos } from "../componentes/campo-numerico.js";
 import { crearMultiselectCuentas } from "../componentes/multiselect-cuentas.js";
 import { filtrosExpedientesHtml, leerParametrosBusqueda } from "../componentes/filtros-expedientes.js";
@@ -47,7 +49,8 @@ const PLANTILLA = `
   <div class="card tono-verdeazul">
     <div class="card-header">
       <h2>Resultados de la búsqueda</h2>
-      <div style="display:flex;gap:8px;">
+      <div class="acciones-correo">
+        ${cuotaCorreosHtml("cuota-correos-expedientes")}
         <button class="btn btn-secondary" id="btn-generar-corte">Generar corte</button>
         <button class="btn btn-primary" id="btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
       </div>
@@ -573,6 +576,9 @@ async function ejecutarBusqueda(params, { silencioso }) {
 export function iniciarPolling() {
   if (pollingId) return; // ya está corriendo
   pollingId = setInterval(() => {
+    // Otro usuario de Cabina pudo haber enviado correos: el contador se
+    // mantiene al día igual que la tabla.
+    if (!esPerfilProveedor()) actualizarCuotaCorreos();
     if (!ultimaBusquedaParams) return; // todavía no se ha hecho ninguna búsqueda
     ejecutarBusqueda(ultimaBusquedaParams, { silencioso: true });
   }, INTERVALO_POLLING_MS);
@@ -594,19 +600,15 @@ async function enviarCorreoProveedores() {
   const btn = $("btn-enviar-correo-proveedores");
   btn.disabled = true;
   try {
-    const data = await api("/expedientes/enviar-correo-proveedores", {
-      method: "POST",
-      body: { expedientes: Array.from(seleccionados) },
-    });
-    toast(`Correo enviado para ${data.enviados} expediente(s).`, "success");
+    const data = await enviarCorreoAProveedores(Array.from(seleccionados));
+    if (!data) return;
     seleccionados.clear();
     $("chk-todos").checked = false;
     // El envío marca automáticamente esos expedientes como "En Espera de
-    // Respuesta" -- el evento lo refleja aquí (ver montar) y en Expedientes PA.
+    // Respuesta" (aunque no haya salido correo por el tope) -- el evento lo
+    // refleja aquí (ver montar) y en Expedientes PA.
     data.expedientes.forEach(exp => notificarCambioEstatus(exp, "En Espera de Respuesta"));
     refrescarVista();
-  } catch (err) {
-    toast(err.message, "error");
   } finally {
     btn.disabled = false;
   }
@@ -714,6 +716,8 @@ export function aplicarPermisos() {
   // Generar corte quedó exclusivo del perfil Administrador (decisión del
   // jefe): Cabina y Proveedor ya no lo ven.
   $("btn-generar-corte").classList.toggle("hidden-perfil", proveedor || cabina);
+  // Contador de correos del día: lo ven quienes envían (Cabina y Administrador).
+  $("cuota-correos-expedientes").classList.toggle("hidden-perfil", proveedor);
 
   // Semáforo: Proveedor solo ve la leyenda de "Escalado a proveedor"; los
   // tiempos de "sin escalar" (primer y segundo contacto) son de Cabina.
@@ -730,6 +734,7 @@ export function aplicarPermisos() {
 
 export function alEntrar() {
   $("f-expediente").focus();
+  if (!esPerfilProveedor()) actualizarCuotaCorreos();
   if (expedientesActuales.length > 0) {
     // Refresca la tabla con lo que ya tengamos en memoria (por si algo cambió,
     // como un estatus, mientras estabas en otra pantalla) sin pedirle nada al servidor.

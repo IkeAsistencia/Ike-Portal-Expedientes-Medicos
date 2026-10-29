@@ -87,10 +87,12 @@ body{
 #toast-container{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:1000;}
 .toast{
   background:var(--navy);color:#fff;padding:10px 16px;border-radius:4px;font-size:13px;
-  box-shadow:var(--shadow-md);min-width:220px;
+  box-shadow:var(--shadow-md);min-width:220px;max-width:min(460px, calc(100vw - 40px));
 }
 .toast.error{background:var(--red);}
 .toast.success{background:var(--green);}
+/* Se hizo lo que se pidió, pero con una salvedad (ej. no salió el correo por el tope diario). */
+.toast.aviso{background:var(--amber);}
 
 /* ---------- ALERTA FLOTANTE (esquina superior derecha) ----------
    Distinta del toast: es para avisos puntuales que además llevan sonido

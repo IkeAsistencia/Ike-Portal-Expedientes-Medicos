@@ -6,13 +6,17 @@ simulado": registra en el log qué se habría enviado, en vez de mandarlo
 de verdad. En cuanto se tengan esos datos, basta con llenar el .env —
 no hay que tocar el código para activar el envío real.
 
-⚠️ PENDIENTE DE CONFIRMAR: ¿de dónde sale el correo del proveedor al que
-hay que escribirle? El query de Expedientes solo trae el correo del
-USUARIO/paciente (E.Email), no el del proveedor asignado. Mientras se
-confirma, ambas funciones de este módulo mandan el correo al remitente
-configurado (SMTP_REMITENTE) como marcador de posición, para que el
-flujo completo (validar selección -> armar plantilla -> "enviar") se
-pueda probar de punta a punta.
+A quién se le manda:
+  - "Enviar correo a proveedores": a los usuarios con perfil Proveedor de
+    las entidades que aparecen en la selección (su correo y entidad se
+    capturan en Usuarios y Accesos) -- ver app/services/envio_correo_service.py.
+  - El corte: a la dirección que escribe el Administrador.
+  - SMTP_DESTINATARIO_PRUEBA, si tiene valor, manda TODO a ese buzón (para
+    probar sin escribirle a nadie real).
+
+Este módulo solo arma y manda el mensaje. El tope diario de correos y el
+freno de reenvío viven en app/services/cuota_correos_service.py y
+app/services/envio_correo_service.py.
 """
 
 import html
@@ -57,86 +61,84 @@ def _adjuntar_logo(msg: MIMEMultipart) -> None:
     msg.attach(imagen)
 
 
-def _enviar_smtp(destinatario: str, asunto: str, html: str) -> None:
+class ErrorEnvioCorreo(Exception):
+    """El servidor de correo no aceptó el mensaje (o no respondió a tiempo)."""
+
+
+@dataclass
+class Adjunto:
+    nombre: str
+    contenido: bytes
+
+
+def _destino_real(destinatarios: list[str]) -> list[str]:
+    """SMTP_DESTINATARIO_PRUEBA: mientras se prueba, TODO llega a ese buzón en
+    vez de a los destinatarios reales (ver config.py). En producción va vacío."""
+    prueba = get_settings().smtp_destinatario_prueba
+    return [prueba] if prueba else destinatarios
+
+
+def _armar_mensaje(asunto: str, html: str, para: str, adjunto: Optional[Adjunto]) -> MIMEMultipart:
     settings = get_settings()
-    msg = MIMEMultipart("related")
-    msg["Subject"] = asunto
-    msg["From"] = settings.smtp_remitente
-    msg["To"] = destinatario
-
-    alterno = MIMEMultipart("alternative")
-    alterno.attach(MIMEText("Tu cliente de correo no muestra HTML. Entra al portal para ver el detalle.", "plain"))
-    alterno.attach(MIMEText(html, "html"))
-    msg.attach(alterno)
-    _adjuntar_logo(msg)
-
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
-        if settings.smtp_usar_tls:
-            server.starttls()
-        if settings.smtp_user and settings.smtp_password:
-            server.login(settings.smtp_user, settings.smtp_password)
-        server.sendmail(settings.smtp_remitente, [destinatario], msg.as_string())
-
-
-def _enviar_o_simular(destinatario: str, asunto: str, html: str) -> bool:
-    settings = get_settings()
-    if not settings.smtp_configurado:
-        # sanear_para_log: nada de lo que se interpola aquí puede meter un
-        # salto de línea y forjar renglones falsos en el log (CWE-117).
-        logger.info(
-            "[MODO SIMULADO — falta configurar SMTP_HOST/SMTP_REMITENTE en .env] "
-            "Para: %s | Asunto: %s | Cuerpo: %s",
-            sanear_para_log(destinatario), sanear_para_log(asunto), sanear_para_log(html),
-        )
-        return False
-    _enviar_smtp(destinatario, asunto, html)
-    return True
-
-
-def _enviar_smtp_con_adjunto(
-    destinatario: str, asunto: str, html: str, adjunto_nombre: str, adjunto_bytes: bytes
-) -> None:
-    settings = get_settings()
-    msg = MIMEMultipart("mixed")
-    msg["Subject"] = asunto
-    msg["From"] = settings.smtp_remitente
-    msg["To"] = destinatario
-
     cuerpo = MIMEMultipart("related")
     alterno = MIMEMultipart("alternative")
     alterno.attach(MIMEText("Tu cliente de correo no muestra HTML. Entra al portal para ver el detalle.", "plain"))
     alterno.attach(MIMEText(html, "html"))
     cuerpo.attach(alterno)
     _adjuntar_logo(cuerpo)
-    msg.attach(cuerpo)
 
-    adjunto = MIMEApplication(
-        adjunto_bytes, _subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-    adjunto.add_header("Content-Disposition", "attachment", filename=adjunto_nombre)
-    msg.attach(adjunto)
+    if adjunto is None:
+        msg = cuerpo
+    else:
+        msg = MIMEMultipart("mixed")
+        msg.attach(cuerpo)
+        parte = MIMEApplication(adjunto.contenido, _subtype="vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        parte.add_header("Content-Disposition", "attachment", filename=adjunto.nombre)
+        msg.attach(parte)
 
-    with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
-        if settings.smtp_usar_tls:
-            server.starttls()
-        if settings.smtp_user and settings.smtp_password:
-            server.login(settings.smtp_user, settings.smtp_password)
-        server.sendmail(settings.smtp_remitente, [destinatario], msg.as_string())
+    msg["Subject"] = asunto
+    msg["From"] = settings.smtp_remitente
+    msg["To"] = para
+    return msg
 
 
-def _enviar_o_simular_con_adjunto(
-    destinatario: str, asunto: str, html: str, adjunto_nombre: str, adjunto_bytes: bytes
+def _enviar(
+    destinatarios: list[str], asunto: str, html: str, *, ocultos: bool = False, adjunto: Optional[Adjunto] = None
 ) -> bool:
+    """
+    Manda UN solo mensaje a todos los `destinatarios`. Con `ocultos=True` van
+    en copia oculta (ninguno ve el correo de los demás). Regresa True si salió
+    por SMTP, False si quedó simulado (sin SMTP configurado). Lanza
+    ErrorEnvioCorreo si el servidor de correo lo rechaza o no responde.
+    """
     settings = get_settings()
+    reales = _destino_real(destinatarios)
     if not settings.smtp_configurado:
+        # sanear_para_log: nada de lo que se interpola aquí puede meter un
+        # salto de línea y forjar renglones falsos en el log (CWE-117).
         logger.info(
             "[MODO SIMULADO — falta configurar SMTP_HOST/SMTP_REMITENTE en .env] "
-            "Para: %s | Asunto: %s | Adjunto: %s (%d bytes) | Cuerpo: %s",
-            sanear_para_log(destinatario), sanear_para_log(asunto),
-            sanear_para_log(adjunto_nombre), len(adjunto_bytes), sanear_para_log(html),
+            "Para: %s | Asunto: %s | Adjunto: %s | Cuerpo: %s",
+            sanear_para_log(", ".join(reales)), sanear_para_log(asunto),
+            sanear_para_log(f"{adjunto.nombre} ({len(adjunto.contenido)} bytes)" if adjunto else "ninguno"),
+            sanear_para_log(html),
         )
         return False
-    _enviar_smtp_con_adjunto(destinatario, asunto, html, adjunto_nombre, adjunto_bytes)
+
+    # En copia oculta el encabezado "Para" no lleva a nadie: los destinatarios
+    # solo van en el sobre del mensaje (el argumento de sendmail).
+    para = ", ".join(reales) if not ocultos or settings.smtp_destinatario_prueba else "undisclosed-recipients:;"
+    msg = _armar_mensaje(asunto, html, para, adjunto)
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=settings.smtp_timeout_segundos) as server:
+            if settings.smtp_usar_tls:
+                server.starttls()
+            if settings.smtp_user and settings.smtp_password:
+                server.login(settings.smtp_user, settings.smtp_password)
+            server.sendmail(settings.smtp_remitente, reales, msg.as_string())
+    except (smtplib.SMTPException, OSError) as e:
+        logger.error("No se pudo mandar el correo '%s': %s", sanear_para_log(asunto), sanear_para_log(e))
+        raise ErrorEnvioCorreo(str(e)) from e
     return True
 
 
@@ -292,7 +294,7 @@ def _html_varios_expedientes(expedientes: list[dict], usuario_nombre: str, es_re
 
 
 def enviar_correo_proveedores(
-    expedientes: list[dict], usuario_nombre: str, es_recordatorio: bool = False
+    expedientes: list[dict], usuario_nombre: str, destinatarios: list[str], es_recordatorio: bool = False
 ) -> ResultadoEnvio:
     """
     Botón "Enviar correo a proveedores" (pantallas Expedientes y Expedientes
@@ -300,14 +302,15 @@ def enviar_correo_proveedores(
     llaves que el schema Expediente). Un solo expediente usa la plantilla de
     tarjeta; varios, la de tabla -- mismo encabezado/pie en ambas.
 
+    Sale UN solo correo, igual para todos, con la lista completa, a los
+    `destinatarios` (los proveedores de las entidades que aparecen en la
+    selección, ver envio_correo_service.py) en copia oculta.
+
     `es_recordatorio=True` cuando la selección ya estaba en "En Espera de
     Respuesta" (Cabina le está recordando al proveedor, no asignándole un
     caso nuevo) -- ver ESTATUS_PERMITIDOS_ENVIO_CORREO en estatus_service.py.
     Solo cambia el texto, nunca se mezcla con expedientes recién abiertos.
     """
-    settings = get_settings()
-    destinatario = settings.smtp_destinatario_prueba or settings.smtp_remitente or "proveedor@pendiente-confirmar.com"
-
     if len(expedientes) == 1:
         prefijo = "Recordatorio: expediente" if es_recordatorio else "Expediente"
         asunto = f"{prefijo} {expedientes[0]['expediente']} pendiente de atención"
@@ -317,8 +320,8 @@ def enviar_correo_proveedores(
         asunto = f"{prefijo} {len(expedientes)} expedientes pendientes de atención".strip()
         cuerpo_html = _html_varios_expedientes(expedientes, usuario_nombre, es_recordatorio=es_recordatorio)
 
-    enviado = _enviar_o_simular(destinatario, asunto, cuerpo_html)
-    return ResultadoEnvio(enviados=len(expedientes), destinatarios=[destinatario], simulado=not enviado)
+    enviado = _enviar(destinatarios, asunto, cuerpo_html, ocultos=True)
+    return ResultadoEnvio(enviados=len(expedientes), destinatarios=destinatarios, simulado=not enviado)
 
 
 MENSAJES_REGRESO_POR_ESTATUS = {
@@ -343,6 +346,9 @@ def enviar_notificacion_regreso(
     Caso" -- ya sea para que lo corrija ("En Espera de Respuesta") o porque
     la cita fue aceptada y debe subir el comprobante de pago ("Seguimiento
     de Cita").
+
+    PAUSADO (ver estatus_service.py). Si se reactiva, debe pasar por el tope
+    diario (cuota_correos_service.py) igual que los demás envíos.
     """
     settings = get_settings()
     destinatario = settings.smtp_destinatario_prueba or settings.smtp_remitente or "proveedor@pendiente-confirmar.com"
@@ -358,7 +364,7 @@ def enviar_notificacion_regreso(
     <p><b>Comentario:</b></p>
     <p>{html.escape(comentario)}</p>
     """
-    enviado = _enviar_o_simular(destinatario, f"Expediente {cl_expediente} {etiqueta_asunto}", cuerpo_html)
+    enviado = _enviar([destinatario], f"Expediente {cl_expediente} {etiqueta_asunto}", cuerpo_html)
     return ResultadoEnvio(enviados=1, destinatarios=[destinatario], simulado=not enviado)
 
 
@@ -407,19 +413,20 @@ def enviar_corte_proveedores(
     archivo_nombre: str,
     archivo_bytes: bytes,
     usuario_nombre: str,
+    destinatario: str,
     fecha_generado: Optional[str] = None,
 ) -> ResultadoEnvio:
     """
     Botón "Generar corte" (pantallas Expedientes/Expedientes PA). A diferencia
     de enviar_correo_proveedores(), este correo NO cambia el estatus de nada --
     es un corte/evidencia de los expedientes ya enviados, con el Excel adjunto.
+    No es para proveedores: va a la única dirección que el Administrador
+    escribe en "Enviar a".
     """
-    settings = get_settings()
-    destinatario = settings.smtp_destinatario_prueba or settings.smtp_remitente or "proveedor@pendiente-confirmar.com"
     etiqueta = "Pago Anticipado" if tipo_expediente == "anticipado" else "Expedientes"
     asunto = f"Corte de {etiqueta} — {cantidad} expediente(s)"
     cuerpo_html = _html_corte(cantidad, etiqueta, archivo_nombre, usuario_nombre, fecha_generado)
-    enviado = _enviar_o_simular_con_adjunto(destinatario, asunto, cuerpo_html, archivo_nombre, archivo_bytes)
+    enviado = _enviar([destinatario], asunto, cuerpo_html, adjunto=Adjunto(archivo_nombre, archivo_bytes))
     return ResultadoEnvio(enviados=cantidad, destinatarios=[destinatario], simulado=not enviado)
 
 
@@ -428,6 +435,9 @@ def enviar_alerta_sin_respuesta(expedientes: list[dict], color: str, umbral_hora
     Usado por el cron (jobs/validar_estatus_proveedor.py).
     `color`: "naranja" (>=8h) o "rojo" (>24h). Resalta la fecha de
     apertura de cada expediente con ese color, según lo solicitado.
+
+    PAUSADO (ver el job). Si se reactiva, debe pasar por el tope diario
+    (cuota_correos_service.py) igual que los demás envíos.
     """
     settings = get_settings()
     destinatario = settings.smtp_destinatario_prueba or settings.smtp_remitente or "proveedor@pendiente-confirmar.com"
@@ -449,5 +459,5 @@ def enviar_alerta_sin_respuesta(expedientes: list[dict], color: str, umbral_hora
     </table>
     """
     asunto = f"[{'URGENTE' if color == 'rojo' else 'Alerta'}] Expedientes sin respuesta del proveedor"
-    enviado = _enviar_o_simular(destinatario, asunto, cuerpo_html)
+    enviado = _enviar([destinatario], asunto, cuerpo_html)
     return ResultadoEnvio(enviados=len(expedientes), destinatarios=[destinatario], simulado=not enviado)

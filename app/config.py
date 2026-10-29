@@ -98,6 +98,24 @@ class Settings(BaseSettings):
     # -- útil para probar en un ambiente de desarrollo sin mandarle correos
     # a nadie más. Vacío = se manda a smtp_remitente, como antes.
     smtp_destinatario_prueba: Optional[str] = None
+    # Si el servidor de correo no responde, la petición no se queda colgada.
+    smtp_timeout_segundos: float = 15.0
+
+    # --- Tope diario de correos (ver app/services/cuota_correos_service.py) ---
+    # La cuenta de correo que nos dieron permite 100 envíos al día. El tope es
+    # de TODO el portal (Cabina y Administrador comparten el mismo), y el día
+    # se corta a medianoche, hora del centro de México.
+    smtp_limite_diario: int = 100
+    # A partir de cuántos correos usados se le pide confirmación a quien envía.
+    smtp_aviso_limite: int = 80
+    # Cómo cuenta un correo contra el tope: True = cada destinatario cuenta 1
+    # (un correo a 8 proveedores gasta 8); False = cada mensaje cuenta 1, sin
+    # importar a cuántos vaya. Pendiente de confirmar con quien administra la
+    # cuenta de correo; mientras tanto se usa el criterio más seguro (True).
+    smtp_cuenta_por_destinatario: bool = True
+    # Freno de reenvío: horas que deben pasar para volver a mandarle correo a
+    # proveedores sobre el mismo expediente.
+    correo_reenvio_horas: int = 8
 
     # --- Sesión / JWT emitido por esta app tras el login ---
     # Genera uno propio por ambiente, ej: python -c "import secrets; print(secrets.token_hex(32))"

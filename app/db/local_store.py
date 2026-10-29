@@ -171,6 +171,9 @@ CREATE TABLE IF NOT EXISTS expediente_pago_anticipado (
 -- se mandó, a quién, cuándo y quién le dio clic (ej. si un proveedor dice
 -- que nunca se le notificó). "simulado"=1 cuando no había SMTP configurado
 -- (no se mandó un correo real, solo quedó registrado en el log de la app).
+-- "motivo_sin_correo" (ver migración): el envío se registró pero NO salió
+-- correo -- 'limite' (se llegó al tope diario) o 'sin_proveedores' (ninguna
+-- entidad de la selección tiene proveedor dado de alta). NULL = sí salió.
 CREATE TABLE IF NOT EXISTS correos_enviados (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     tipo          TEXT NOT NULL,     -- 'nuevo' | 'recordatorio'
@@ -180,6 +183,21 @@ CREATE TABLE IF NOT EXISTS correos_enviados (
     simulado      INTEGER NOT NULL DEFAULT 0,
     fecha         TEXT NOT NULL DEFAULT (datetime('now','localtime'))
 );
+
+-- Cada correo que SALE del portal (a proveedores o el corte), para llevar el
+-- tope diario (ver app/services/cuota_correos_service.py). "dia" es la fecha
+-- en hora del centro de México, que es la que define cuándo se reinicia el
+-- tope. "unidades" es cuánto cuenta ese correo contra el tope (1 por
+-- destinatario o 1 por mensaje, según SMTP_CUENTA_POR_DESTINATARIO).
+CREATE TABLE IF NOT EXISTS correos_salientes (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    dia       TEXT NOT NULL,
+    origen    TEXT NOT NULL,         -- 'proveedores' | 'corte'
+    unidades  INTEGER NOT NULL,
+    simulado  INTEGER NOT NULL DEFAULT 0,
+    fecha     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ix_correos_salientes_dia ON correos_salientes (dia);
 
 -- Padrón ÚNICO de proveedores del Directorio de Proveedores: aquí conviven
 -- los tres orígenes, y por eso las citas pueden apuntar siempre al mismo
@@ -354,6 +372,10 @@ def _migrar_columnas_faltantes(conn: sqlite3.Connection) -> None:
     columnas_estatus = {row["name"] for row in conn.execute("PRAGMA table_info(estatus_expediente)")}
     if "rfc_cambio" not in columnas_estatus:
         conn.execute("ALTER TABLE estatus_expediente ADD COLUMN rfc_cambio TEXT")
+
+    columnas_correos = {row["name"] for row in conn.execute("PRAGMA table_info(correos_enviados)")}
+    if "motivo_sin_correo" not in columnas_correos:
+        conn.execute("ALTER TABLE correos_enviados ADD COLUMN motivo_sin_correo TEXT")
 
     columnas_comentarios = {row["name"] for row in conn.execute("PRAGMA table_info(comentarios_seguimiento)")}
     if "origen" not in columnas_comentarios:

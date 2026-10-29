@@ -50,3 +50,5 @@ class CuentaConfigInput:
 @strawberry.input
 class EnviarCorreoProveedoresInput:
     expedientes: list[int]
+    # Ver EnviarCorreoProveedoresInput en app/schemas/correo.py.
+    confirmar_limite: bool = False

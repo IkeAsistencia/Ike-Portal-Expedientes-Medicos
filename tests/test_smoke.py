@@ -626,8 +626,13 @@ def test_enviar_correo_proveedores_ok(client):
 
 def test_enviar_correo_proveedores_deja_historial(client):
     """Queda registro de quién mandó el correo, a quién y de qué expedientes."""
+    import app.repositories.accesos_repo as accesos_repo_module
     import app.repositories.correos_enviados_repo as correos_enviados_repo_module
 
+    # 1001 es de Campeche: sin un proveedor ahí, no hay a quién mandarle.
+    accesos_repo_module.alta_acceso(
+        "PROVCAM001", "Proveedor Campeche", accesos_repo_module.PERFIL_PROVEEDOR, "Campeche", "campeche@example.com"
+    )
     headers = _auth_headers(client)
     r = client.post(
         "/expedientes/enviar-correo-proveedores", json={"expedientes": [1001]}, headers=headers
@@ -639,7 +644,7 @@ def test_enviar_correo_proveedores_deja_historial(client):
     assert historial[0]["tipo"] == "nuevo"
     assert historial[0]["expedientes"] == [1001]
     assert historial[0]["rfc_envio"]
-    assert historial[0]["destinatario"]
+    assert historial[0]["destinatario"] == "campeche@example.com"
 
 
 def test_correos_enviados_solo_administrador(client):
@@ -798,12 +803,14 @@ def test_corte_enviar_marca_simulado_y_no_repite_archivo(client):
     r = client.post("/expedientes/corte", json={"expedientes": [1001]}, headers=headers)
     corte_id = r.json()["corte_id"]
 
-    r = client.post(f"/expedientes/corte/{corte_id}/enviar", headers=headers)
+    r = client.post(
+        f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "cabina@example.com"}, headers=headers
+    )
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["enviados"] == 1
     assert data["simulado"] is True  # no hay SMTP configurado en las pruebas
-    assert data["destinatario"]
+    assert data["destinatario"] == "cabina@example.com"
 
 
 def test_corte_descargar_inexistente_404(client):
@@ -1616,12 +1623,11 @@ def test_modo_simulado_sanea_el_nombre_del_adjunto(client, caplog):
     from app.services import email_service
 
     with caplog.at_level(logging.INFO, logger="email_service"):
-        email_service._enviar_o_simular_con_adjunto(
-            "alguien@ike.com",
+        email_service._enviar(
+            ["alguien@ike.com"],
             "Corte",
             "<p>cuerpo</p>",
-            "corte.xlsx\n2026-10-13 INFO renglon forjado",
-            b"x",
+            adjunto=email_service.Adjunto("corte.xlsx\n2026-10-13 INFO renglon forjado", b"x"),
         )
 
     registros = [r for r in caplog.records if r.name == "email_service"]

@@ -28,7 +28,8 @@ acceso a todas las tablas de aquí es por SQLite parametrizado
 | `alertas_proveedor_enviadas` | Qué alertas del cron (`jobs/validar_estatus_proveedor.py`) ya se mandaron (nivel `naranja` ≥8h / `rojo` ≥24h), para no reenviar la misma. PK compuesta `(cl_expediente, nivel)`. |
 | `comprobantes_pago` | Archivo del comprobante de pago (expedientes Pago Anticipado) — el archivo completo en `BLOB`, máximo 5 MB validado en el router; no hay almacenamiento de archivos aparte. |
 | `cortes_generados` | Cada "corte" en Excel de expedientes enviados a proveedores (botones "Generar corte" / "Confirmar y enviar"). Guarda el binario generado para que descargar y confirmar-y-enviar usen exactamente el mismo archivo, y deja evidencia de qué se generó/envió y cuándo. `expedientes` es un JSON con la lista de `cl_expediente` incluidos. |
-| `correos_enviados` | Historial de "Enviar correo a proveedores": a quién, cuándo, con qué expedientes. `simulado=1` cuando no había SMTP configurado (quedó solo en el log de la app, no se mandó un correo real). |
+| `correos_enviados` | Historial de "Enviar correo a proveedores": a quién, cuándo, con qué expedientes. `simulado=1` cuando no había SMTP configurado (quedó solo en el log de la app, no se mandó un correo real). `motivo_sin_correo` dice por qué no salió correo (tope diario o sin proveedor). |
+| `correos_salientes` | Cada correo que sale del portal (a proveedores o el corte), para el tope diario de correos. |
 
 ### Acceso / cuentas
 
@@ -171,11 +172,25 @@ donde es texto libre sin límite conocido, se marca "Libre".
 |---|---|---|---|---|
 | `id` | INTEGER | — (PK autoincremental) | Sí | Identificador propio del envío. |
 | `tipo` | TEXT | `'nuevo'` o `'recordatorio'` | Sí | Qué clase de correo fue. |
-| `destinatario` | TEXT | Correo electrónico (libre) | Sí | A quién se envió. |
+| `destinatario` | TEXT | Correos separados por coma (libre) | Sí | A quién se envió: los proveedores de las entidades de la selección. Vacío cuando no salió correo. |
 | `expedientes` | TEXT | JSON (lista de enteros) | Sí | Qué expedientes incluía el correo. |
 | `rfc_envio` | TEXT | RFC (libre) | Sí | Quién lo mandó. |
 | `simulado` | INTEGER | 0 ó 1 | Sí (`DEFAULT 0`) | 1 cuando no había SMTP configurado: no se mandó un correo real, solo quedó el registro. |
-| `fecha` | TEXT | `YYYY-MM-DD HH:MM:SS` | Sí (`DEFAULT datetime('now','localtime')`) | Cuándo se mandó/simuló. |
+| `fecha` | TEXT | `YYYY-MM-DD HH:MM:SS` | Sí (`DEFAULT datetime('now','localtime')`) | Cuándo se mandó/simuló. También la usa el freno de reenvío (`CORREO_REENVIO_HORAS`). |
+| `motivo_sin_correo` | TEXT | `'limite'`, `'sin_proveedores'` o NULL | No | Por qué no salió correo aunque los expedientes pasaron a "En Espera de Respuesta": se llegó al tope diario, o ninguna entidad de la selección tiene proveedor. NULL = sí salió. |
+
+### `correos_salientes`
+
+Cada correo que sale del portal (a proveedores o el corte), para llevar el tope diario de la cuenta de correo (`SMTP_LIMITE_DIARIO`, ver `app/services/cuota_correos_service.py`).
+
+| Columna | Tipo | Longitud / Formato | Obligatorio | Para qué se creó |
+|---|---|---|---|---|
+| `id` | INTEGER | — (PK autoincremental) | Sí | Identificador propio. |
+| `dia` | TEXT | `YYYY-MM-DD` (hora del centro de México) | Sí | Día del tope al que cuenta. Indexado. |
+| `origen` | TEXT | `'proveedores'` o `'corte'` | Sí | Qué envío fue. |
+| `unidades` | INTEGER | Entero | Sí | Cuánto cuenta contra el tope: 1 por destinatario o 1 por mensaje (`SMTP_CUENTA_POR_DESTINATARIO`). |
+| `simulado` | INTEGER | 0 ó 1 | Sí (`DEFAULT 0`) | 1 cuando no había SMTP configurado (en local también cuenta, para poder probar el contador). |
+| `fecha` | TEXT | `YYYY-MM-DD HH:MM:SS` | Sí | Cuándo salió. |
 
 ### `proveedores`
 

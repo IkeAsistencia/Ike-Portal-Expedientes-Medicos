@@ -32,6 +32,24 @@
    de la tabla (ej. "Información General" en Seguimiento). */
 .card.fondo-azul > .card-body{background:var(--blue-light);border-radius:0 0 var(--radius) var(--radius);}
 
+/* Botones de correo del encabezado de Resultados, con el contador de correos
+   del día (ver componentes/cuota-correos.js). En pantallas angostas bajan
+   debajo del título en vez de apretarse. */
+.card-header:has(> .acciones-correo){flex-wrap:wrap;}
+.acciones-correo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;}
+.cuota-correos{
+  display:inline-flex;align-items:center;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;
+  white-space:nowrap;background:var(--white);color:var(--navy);border:1px solid var(--gray-mid);
+}
+.cuota-correos:empty{display:none;}
+.cuota-correos.aviso{background:var(--amber-bg);color:var(--amber);border-color:var(--amber);}
+.cuota-correos.agotado{background:var(--red-bg);color:var(--red);border-color:var(--red);}
+
+/* "Enviar a" del modal del corte. */
+.corte-envio{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px;}
+.corte-envio .field{flex:1 1 260px;margin:0;}
+.corte-envio-ayuda{display:block;font-size:12px;color:var(--text-secondary);margin-top:4px;}
+
 .notif-banner{
   display:flex;align-items:center;gap:10px;background:var(--amber-bg);color:var(--amber);
   border:1px solid var(--amber);border-radius:var(--radius);padding:10px 14px;margin-bottom:16px;font-size:13px;
