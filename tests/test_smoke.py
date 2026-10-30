@@ -999,6 +999,32 @@ def test_alta_no_proveedor_guarda_na_en_entidad_y_correo(client):
     assert registro["correo"] == "NA"
 
 
+def test_alta_administrador_exige_rfc_de_11_caracteres(client):
+    headers = _auth_headers_admin(client)
+    r = client.post(
+        "/admin/accesos",
+        json={"rfc": "ADMI000001", "nombre": "Admin Corto", "perfil": 1},
+        headers=headers,
+    )
+    assert r.status_code == 422
+    assert "11 caracteres" in r.text
+
+
+def test_alta_administrador_con_homoclave_ok(client):
+    headers = _auth_headers_admin(client)
+    r = client.post(
+        "/admin/accesos",
+        json={"rfc": "ADMI000001Z", "nombre": "Admin Completo", "perfil": 1},
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+
+    accesos = client.get("/admin/accesos", headers=headers).json()
+    registro = next(a for a in accesos if a["rfc"] == "ADMI000001Z")
+    assert registro["entidad"] == "NA"
+    assert registro["correo"] == "NA"
+
+
 def test_cambiar_entidad_de_proveedor_ok(client):
     headers = _auth_headers_admin(client)
     client.post(

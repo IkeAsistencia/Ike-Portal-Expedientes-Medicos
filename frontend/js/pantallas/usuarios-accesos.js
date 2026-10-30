@@ -3,7 +3,7 @@
 import { api } from "../core/api.js";
 import { escapeHtml } from "../core/formato.js";
 import { toast } from "../core/toast.js";
-import { NOMBRES_PERFIL, PERFIL_PROVEEDOR } from "../core/sesion.js";
+import { NOMBRES_PERFIL, PERFIL_ADMINISTRADOR, PERFIL_PROVEEDOR } from "../core/sesion.js";
 import { cargarCatalogoEntidades, poblarSelectEntidades } from "../core/catalogos.js";
 import { ICONOS } from "../componentes/iconos.js";
 import { crearModal } from "../componentes/modal.js";
@@ -17,7 +17,8 @@ const PLANTILLA = `
       <div class="filters-grid">
         <div class="field">
           <label for="acc-rfc">RFC</label>
-          <input type="text" id="acc-rfc" maxlength="10" placeholder="RFC" autocomplete="off">
+          <input type="text" id="acc-rfc" maxlength="11" placeholder="RFC" autocomplete="off">
+          <div class="hint" id="acc-rfc-hint">10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456).</div>
         </div>
         <div class="field">
           <label for="acc-nombre">Nombre</label>
@@ -201,7 +202,14 @@ async function darDeAlta() {
     toast("Ingresa el RFC y el nombre.", "error");
     return;
   }
-  if (!/^[A-Z]{4}\d{6}$/.test(rfc)) {
+  // El Administrador lleva además el primer caracter de la homoclave (11 en
+  // total): de otro modo el RFC de 10 caracteres no distingue entre dos personas.
+  if (perfil === PERFIL_ADMINISTRADOR) {
+    if (!/^[A-Z]{4}\d{6}[A-Z0-9]$/.test(rfc)) {
+      toast("El RFC del Administrador debe tener 11 caracteres: 4 letras, 6 números y el primer caracter de la homoclave (ej. ABCD123456Z).", "error");
+      return;
+    }
+  } else if (!/^[A-Z]{4}\d{6}$/.test(rfc)) {
     toast("El RFC debe tener 10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456).", "error");
     return;
   }
@@ -341,9 +349,13 @@ export function montar(contenedor) {
   crearModalEntidad();
 
   $("acc-perfil").addEventListener("change", async (e) => {
-    const esProveedor = parseInt(e.target.value, 10) === PERFIL_PROVEEDOR;
+    const perfil = parseInt(e.target.value, 10);
+    const esProveedor = perfil === PERFIL_PROVEEDOR;
     $("acc-entidad-field").classList.toggle("hidden", !esProveedor);
     $("acc-correo-field").classList.toggle("hidden", !esProveedor);
+    $("acc-rfc-hint").textContent = perfil === PERFIL_ADMINISTRADOR
+      ? "11 caracteres: 4 letras, 6 números y el primer caracter de la homoclave (ej. ABCD123456Z)."
+      : "10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456).";
     if (esProveedor) {
       await cargarCatalogoEntidades();
       poblarSelectEntidades($("acc-entidad"), "Selecciona una entidad");

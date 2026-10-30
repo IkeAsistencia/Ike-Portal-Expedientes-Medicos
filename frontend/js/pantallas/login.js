@@ -12,7 +12,7 @@ const PLANTILLA = `
     <form id="login-form">
       <div class="field">
         <label for="login-rfc">RFC</label>
-        <input type="text" id="login-rfc" maxlength="10" autocomplete="username" required>
+        <input type="text" id="login-rfc" maxlength="11" autocomplete="username" required>
         <a class="login-link hidden" id="login-cambiar-rfc" style="margin-top:6px;">Cambiar RFC</a>
       </div>
 
@@ -84,8 +84,8 @@ async function enviarFormulario(e) {
   const errorEl = $("login-error");
   errorEl.textContent = "";
   if (!rfc) return;
-  if (loginPaso === "rfc" && rfc.length > 10) {
-    errorEl.textContent = "El RFC no puede exceder 10 caracteres.";
+  if (loginPaso === "rfc" && rfc.length > 11) {
+    errorEl.textContent = "El RFC no puede exceder 11 caracteres.";
     return;
   }
 

@@ -3,15 +3,29 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
-from app.repositories.accesos_repo import ENTIDADES_MEXICO, PERFIL_PROVEEDOR, SIN_APLICA
+from app.repositories.accesos_repo import (
+    ENTIDADES_MEXICO,
+    PERFIL_ADMINISTRADOR,
+    PERFIL_PROVEEDOR,
+    SIN_APLICA,
+)
 
 MENSAJE_REGLA_PASSWORD = (
     "La contraseña debe tener al menos 8 caracteres, con al menos una mayúscula, "
     "una minúscula, un número y un carácter especial (ej. !@#$%&*)."
 )
 
+# Cabina y Proveedor: RFC de 10 caracteres (4 letras + 6 números). Administrador:
+# se le pide además el primer caracter de la homoclave (11 en total), porque hay
+# más de una persona cuyo RFC de 10 caracteres coincide y así se distinguen.
 PATRON_RFC = re.compile(r"^[A-Za-z]{4}\d{6}$")
+PATRON_RFC_ADMINISTRADOR = re.compile(r"^[A-Za-z]{4}\d{6}[A-Za-z0-9]$")
 MENSAJE_REGLA_RFC = "El RFC debe tener 10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456)."
+MENSAJE_REGLA_RFC_ADMINISTRADOR = (
+    "El RFC del Administrador debe tener 11 caracteres: 4 letras, 6 números y el "
+    "primer caracter de la homoclave (ej. ABCD123456Z)."
+)
+LARGO_MAXIMO_RFC = 11
 
 
 def _cumple_regla_password(password: str) -> bool:
@@ -25,7 +39,7 @@ def _cumple_regla_password(password: str) -> bool:
 
 
 class RfcEstadoInput(BaseModel):
-    rfc: str = Field(..., min_length=1, max_length=10)
+    rfc: str = Field(..., min_length=1, max_length=LARGO_MAXIMO_RFC)
 
 
 class RfcEstadoResponse(BaseModel):
@@ -35,7 +49,7 @@ class RfcEstadoResponse(BaseModel):
 
 
 class CrearPasswordInput(BaseModel):
-    rfc: str = Field(..., min_length=1, max_length=10)
+    rfc: str = Field(..., min_length=1, max_length=LARGO_MAXIMO_RFC)
     # SecretStr para que la contraseña no pueda salir por un repr, un
     # model_dump ni el "input" de un error de validación (CWE-359) -- ver la
     # nota en app/schemas/auth.py.
@@ -50,7 +64,7 @@ class CrearPasswordInput(BaseModel):
 
 
 class RfcLoginInput(BaseModel):
-    rfc: str = Field(..., min_length=1, max_length=10)
+    rfc: str = Field(..., min_length=1, max_length=LARGO_MAXIMO_RFC)
     password: SecretStr = Field(..., min_length=1, max_length=40)
 
 
@@ -70,7 +84,7 @@ def _correo_valido(correo: str) -> bool:
 
 
 class AltaAccesoInput(BaseModel):
-    rfc: str = Field(..., min_length=1, max_length=10)
+    rfc: str = Field(..., min_length=1, max_length=LARGO_MAXIMO_RFC)
     nombre: str = Field(..., min_length=1, max_length=120)
     perfil: int = Field(..., ge=1, le=3)
     entidad: Optional[str] = None  # obligatoria solo si perfil == Proveedor
@@ -78,11 +92,19 @@ class AltaAccesoInput(BaseModel):
 
     @field_validator("rfc")
     @classmethod
-    def _validar_rfc(cls, v: str) -> str:
-        v = v.strip().upper()
-        if not PATRON_RFC.match(v):
+    def _normalizar_rfc(cls, v: str) -> str:
+        return v.strip().upper()
+
+    @model_validator(mode="after")
+    def _validar_rfc_segun_perfil(self):
+        # El Administrador lleva el primer caracter de la homoclave (11) porque
+        # de otro modo el RFC de 10 caracteres no distingue entre dos personas.
+        if self.perfil == PERFIL_ADMINISTRADOR:
+            if not PATRON_RFC_ADMINISTRADOR.match(self.rfc):
+                raise ValueError(MENSAJE_REGLA_RFC_ADMINISTRADOR)
+        elif not PATRON_RFC.match(self.rfc):
             raise ValueError(MENSAJE_REGLA_RFC)
-        return v
+        return self
 
     @model_validator(mode="after")
     def _validar_entidad_y_correo(self):
