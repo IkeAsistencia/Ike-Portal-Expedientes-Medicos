@@ -4,6 +4,12 @@ columnas RFC, NOMBRE y ROL -- para sembrar usuarios productivos (Cabina y
 Administrador) sin tener que darlos de alta uno por uno desde la pantalla
 Usuarios y Accesos.
 
+En producción esto ya NO hace falta correrlo a mano: el servidor lo hace
+solo en su primer arranque si configuras SEED_USUARIOS_RUTA (ver
+DESPLIEGUE-PRODUCCION.md y `_sembrar_usuarios_iniciales` en app/main.py).
+Este script sigue sirviendo para el ambiente local/de pruebas, o para
+cargar altas sueltas fuera de ese primer arranque.
+
 FORMATO ESPERADO DEL EXCEL (una fila por persona, cabecera en la fila 1):
     RFC          NOMBRE                        ROL
     MIMA991129   MIRANDA MARTINEZ ANA KAREN     CABINA
@@ -42,91 +48,29 @@ QUÉ NO HACE:
 
 import argparse
 
-import openpyxl
-
 from app.db.local_store import init_local_db
-from app.repositories import accesos_repo
-from app.schemas.acceso import PATRON_RFC, PATRON_RFC_ADMINISTRADOR
-
-ROLES = {
-    "CABINA": accesos_repo.PERFIL_CABINA,
-    "ADMINISTRADOR": accesos_repo.PERFIL_ADMINISTRADOR,
-    "PROVEEDOR": accesos_repo.PERFIL_PROVEEDOR,
-}
-
-
-def _leer_filas(ruta_archivo: str) -> list[dict]:
-    wb = openpyxl.load_workbook(ruta_archivo, data_only=True)
-    ws = wb.worksheets[0]
-    encabezados = [
-        (c.value or "").strip().upper() if isinstance(c.value, str) else c.value
-        for c in next(ws.iter_rows(min_row=1, max_row=1))
-    ]
-    indice = {nombre: i for i, nombre in enumerate(encabezados) if nombre}
-
-    for col in ("RFC", "NOMBRE", "ROL"):
-        if col not in indice:
-            raise SystemExit(f"Al Excel le falta la columna {col!r} (encabezados encontrados: {encabezados}).")
-
-    filas = []
-    for fila in ws.iter_rows(min_row=2, values_only=True):
-        rfc = fila[indice["RFC"]]
-        if not rfc:
-            continue
-        filas.append({
-            "rfc": str(rfc).strip().upper(),
-            "nombre": str(fila[indice["NOMBRE"]] or "").strip(),
-            "rol": str(fila[indice["ROL"]] or "").strip().upper(),
-            "entidad": str(fila[indice["ENTIDAD"]]).strip() if "ENTIDAD" in indice and fila[indice["ENTIDAD"]] else None,
-            "correo": str(fila[indice["CORREO"]]).strip() if "CORREO" in indice and fila[indice["CORREO"]] else None,
-        })
-    return filas
-
-
-def _validar(fila: dict) -> str | None:
-    """Regresa el motivo de rechazo, o None si la fila está lista para darse de alta."""
-    if fila["rol"] not in ROLES:
-        return f"rol desconocido {fila['rol']!r} (válidos: {', '.join(ROLES)})"
-    if not fila["nombre"]:
-        return "falta el nombre"
-
-    perfil = ROLES[fila["rol"]]
-    if perfil == accesos_repo.PERFIL_ADMINISTRADOR:
-        if not PATRON_RFC_ADMINISTRADOR.match(fila["rfc"]):
-            return "RFC de Administrador inválido: debe tener 11 caracteres (4 letras + 6 números + homoclave)"
-    elif not PATRON_RFC.match(fila["rfc"]):
-        return "RFC inválido: debe tener 10 caracteres (4 letras + 6 números)"
-
-    if perfil == accesos_repo.PERFIL_PROVEEDOR and (not fila["entidad"] or not fila["correo"]):
-        return "faltan ENTIDAD/CORREO, obligatorios para Proveedor"
-    return None
+from app.services.carga_usuarios_service import ErrorCargaUsuarios, sembrar_desde_excel
 
 
 def ejecutar(ruta_archivo: str, aplicar: bool = False) -> dict:
     init_local_db()
-    filas = _leer_filas(ruta_archivo)
-    print(f"Leídas {len(filas)} fila(s) de {ruta_archivo}.")
+    try:
+        resultado = sembrar_desde_excel(ruta_archivo, aplicar=aplicar)
+    except ErrorCargaUsuarios as err:
+        raise SystemExit(str(err))
 
-    listas, rechazadas = [], []
-    for fila in filas:
-        motivo = _validar(fila)
-        (rechazadas if motivo else listas).append((fila, motivo))
-
-    for fila, motivo in rechazadas:
+    print(f"Leídas {resultado['total']} fila(s) de {ruta_archivo}.")
+    for fila, motivo in resultado["rechazadas"]:
         print(f"  RECHAZADA  {fila['rfc']:<12} {fila['nombre']:<40} -- {motivo}")
-
-    for fila, _ in listas:
-        perfil = ROLES[fila["rol"]]
+    for fila, _ in resultado["listas"]:
         accion = "ALTA" if aplicar else "ALTA (simulada)"
         print(f"  {accion:<16} {fila['rfc']:<12} {fila['nombre']:<40} -> {fila['rol']}")
-        if aplicar:
-            accesos_repo.alta_acceso(fila["rfc"], fila["nombre"], perfil, fila["entidad"], fila["correo"])
 
     print()
-    print(f"Total: {len(listas)} lista(s) para alta, {len(rechazadas)} rechazada(s).")
-    if not aplicar and listas:
+    print(f"Total: {len(resultado['listas'])} lista(s) para alta, {len(resultado['rechazadas'])} rechazada(s).")
+    if not aplicar and resultado["listas"]:
         print("Modo simulado: no se escribió nada. Vuelve a correr con --aplicar para darlas de alta.")
-    return {"listas": len(listas), "rechazadas": len(rechazadas)}
+    return {"listas": len(resultado["listas"]), "rechazadas": len(resultado["rechazadas"])}
 
 
 if __name__ == "__main__":

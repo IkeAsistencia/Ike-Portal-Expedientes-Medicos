@@ -8,11 +8,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+import logging
+
 from app.config import get_arranque_settings, get_settings, validar_jwt_secret
 from app.core.secretos_aws import cargar_en_entorno
 from app.db.connection import calentar_pool
 from app.db.local_store import init_local_db
 from app.graphql.schema import graphql_router
+from app.repositories import accesos_repo
+from app.services.carga_usuarios_service import ErrorCargaUsuarios, sembrar_desde_excel
+
+logger = logging.getLogger(__name__)
 from app.routers import (
     admin_accesos,
     auth,
@@ -51,6 +57,36 @@ def _cargar_secretos_de_aws() -> None:
     get_settings.cache_clear()
 
 
+def _sembrar_usuarios_iniciales() -> None:
+    """
+    Da de alta en automático el Excel de SEED_USUARIOS_RUTA (ver
+    app/services/carga_usuarios_service.py), SOLO si la tabla de accesos
+    está vacía -- así es el primer despliegue el que los crea, sin que nadie
+    tenga que correr el script a mano, y los arranques siguientes no la
+    vuelven a tocar aunque la variable se quede puesta.
+
+    No es "obligatorio" como los secretos de AWS: si el archivo no está o
+    viene mal, se registra el error y el servicio sigue arrancando -- esto
+    es una comodidad para no dar de alta a mano, no una dependencia dura.
+    """
+    settings = get_settings()
+    if not settings.seed_usuarios_ruta:
+        return
+    if accesos_repo.listar_accesos():
+        return  # ya hay accesos: no es el primer arranque, no se vuelve a sembrar
+    try:
+        resultado = sembrar_desde_excel(settings.seed_usuarios_ruta, aplicar=True)
+    except ErrorCargaUsuarios as err:
+        logger.error("Siembra inicial de usuarios: %s", err)
+        return
+    logger.info(
+        "Siembra inicial de usuarios: %d alta(s), %d rechazada(s) de %s",
+        len(resultado["listas"]), len(resultado["rechazadas"]), settings.seed_usuarios_ruta,
+    )
+    for fila, motivo in resultado["rechazadas"]:
+        logger.warning("Siembra inicial de usuarios: RFC %s rechazado (%s)", fila["rfc"], motivo)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # PRIMERO los secretos de AWS (si están encendidos): dejan las llaves en
@@ -62,6 +98,7 @@ async def lifespan(_: FastAPI):
     # que arrancar "funcionando" con un secreto público conocido.
     validar_jwt_secret(get_settings())
     init_local_db()
+    _sembrar_usuarios_iniciales()
     # La primera conexión a SQL Server siempre es "fría" (~0.6-0.9s, ver
     # app/db/connection.py); mejor que la pague el arranque del proceso y
     # no el primer usuario real que entre.

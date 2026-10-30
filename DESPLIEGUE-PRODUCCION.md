@@ -304,14 +304,43 @@ TZ=America/Mexico_City
 
 El `cd` no es opcional: sin él no encuentra el `.env` ni el paquete `app`.
 
-### Paso 7 — Primer administrador
+### Paso 7 — Primeros usuarios (Administrador y Cabina)
+
+Si Negocio ya entregó la lista de RFC/Nombre/Rol del equipo (Excel con esas
+tres columnas, ver `scripts/cargar_usuarios_excel.py`), **no hay que dar de
+alta a nadie a mano**: copia ese archivo al servidor (junto con el `.env`,
+fuera del repositorio -- trae RFC y nombres reales) y apunta
+`SEED_USUARIOS_RUTA` a su ruta antes del primer arranque. El servicio lo
+carga solo, una sola vez: revisa si la tabla de accesos está vacía y, si lo
+está, da de alta cada fila (sin contraseña, igual que el alta manual); en los
+arranques siguientes ya no la vuelve a tocar aunque la variable se quede
+puesta.
+
+```bash
+sudo journalctl -u portal-expedientes -n 50 | grep "Siembra inicial"
+# Esperado: "Siembra inicial de usuarios: N alta(s), 0 rechazada(s) de ..."
+```
+
+Si alguna fila sale rechazada, el log dice cuál RFC y por qué (formato de
+RFC inválido, rol desconocido, o Proveedor sin entidad/correo); el resto de
+filas válidas sí se dan de alta.
+
+**El RFC del Administrador lleva 11 caracteres**, no 10: los 4 letras + 6
+números habituales más el primer caracter de la homoclave (ej.
+`ABCD123456Z`), porque el RFC de 10 caracteres no siempre distingue a dos
+administradores. Cabina y Proveedor siguen con 10.
+
+Si todavía no hay ese Excel, se puede dar de alta al primer administrador a
+mano, como antes:
 
 ```bash
 cd /opt/portal-expedientes
-sudo -u portal .venv/bin/python -c "from app.db.local_store import init_local_db; from app.repositories import accesos_repo as a; init_local_db(); a.alta_acceso('RFCDELADMIN', 'Nombre del administrador', a.PERFIL_ADMINISTRADOR)"
+sudo -u portal .venv/bin/python -c "from app.db.local_store import init_local_db; from app.repositories import accesos_repo as a; init_local_db(); a.alta_acceso('RFCDELADMIN11', 'Nombre del administrador', a.PERFIL_ADMINISTRADOR)"
 ```
 
-De ahí en adelante, el administrador da de alta a los demás desde el portal.
+De ahí en adelante, el administrador da de alta a los demás desde el portal
+(o se corre `scripts/cargar_usuarios_excel.py --aplicar` para el resto del
+equipo).
 
 > **Aquí no se corre `scripts/seed_usuarios_prueba.py`.** Ese script es de
 > desarrollo: crea RFC de prueba con una contraseña conocida y publicada en
@@ -353,6 +382,7 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 | `DB_DRIVER` | `ODBC Driver 18 for SQL Server` | No conecta |
 | `DB_TRUST_SERVER_CERTIFICATE` | `false` si el certificado es válido | Con `true` el canal se cifra pero no se valida contra quién |
 | `LOCAL_DB_PATH` | Ruta del SQLite en el volumen persistente | Si apunta a disco efímero, **se pierden accesos y seguimiento** |
+| `SEED_USUARIOS_RUTA` | Ruta al Excel de RFC/Nombre/Rol (sección 5, paso 7). Vacío si no aplica | Sin ella hay que dar de alta a cada quien a mano |
 | `JWT_SECRET_KEY` | Uno propio, que no se repita en ningún otro lado: `python -c "import secrets; print(secrets.token_hex(32))"` | Con una llave reutilizada, una sesión de otro ambiente valdría aquí |
 | `JWT_EXPIRE_MINUTES` | El acordado para producción | Sesiones más largas o más cortas de lo esperado |
 | `CUENTAS_PERMITIDAS` | La lista confirmada (pendiente, sección 4) | Se ven de más o de menos |

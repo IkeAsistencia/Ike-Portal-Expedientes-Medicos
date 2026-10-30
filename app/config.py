@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     # (estatus del expediente, grid de Configuración Cuentas)
     local_db_path: str = "./data/app_local.db"
 
+    # --- Siembra automática de usuarios en el primer arranque ---
+    # Ruta a un Excel (RFC/NOMBRE/ROL, ver scripts/cargar_usuarios_excel.py)
+    # que el servidor carga SOLO si la tabla de accesos está vacía -- así no
+    # hace falta correr nada a mano al desplegar por primera vez, y no se
+    # repite en los arranques siguientes aunque la variable se quede puesta.
+    # El archivo NO viaja en el repositorio (trae RFC y nombre reales del
+    # equipo): se copia a mano al servidor, junto con el .env.
+    seed_usuarios_ruta: Optional[str] = None
+
     # --- Catálogo de cuentas con restricción fija por default (ver sql/README.md) ---
     # (el catálogo de subservicios ya NO usa una lista fija: ahora es
     # dinámico en cascada del combo Servicio, vía dbo.sp_GetSubServicios2)
