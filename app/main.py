@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_arranque_settings, get_settings, validar_jwt_secret
+from app.core.secretos_aws import cargar_en_entorno
 from app.db.connection import calentar_pool
 from app.db.local_store import init_local_db
 from app.graphql.schema import graphql_router
@@ -27,8 +28,36 @@ from app.routers import (
 )
 
 
+def _cargar_secretos_de_aws() -> None:
+    """
+    Deja en el entorno las llaves que viven en AWS Secrets Manager (ver
+    app/core/secretos_aws.py). Con SECRETOS_AWS_MODO=off no hace nada, así
+    que en desarrollo y pruebas no se toca la red ni hace falta boto3.
+
+    Con "obligatorio", si el secreto no se puede leer, ErrorSecretosAws
+    sube y uvicorn aborta el arranque. Es a propósito: el servicio no debe
+    quedar arriba con secretos a medias.
+    """
+    arranque = get_arranque_settings()
+    cargar_en_entorno(
+        modo=arranque.secretos_aws_modo,
+        nombre=arranque.secretos_aws_nombre,
+        region=arranque.secretos_aws_region,
+        clave_texto_plano=arranque.secretos_aws_clave or None,
+    )
+    # Los secretos recién aplicados tienen que verse en get_settings(): sin
+    # limpiar el cache, una instancia ya construida (por ejemplo al importar
+    # app.graphql.schema) seguiría con los valores del .env.
+    get_settings.cache_clear()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    # PRIMERO los secretos de AWS (si están encendidos): dejan las llaves en
+    # el entorno y de ahí las toma get_settings(), que está cacheado. Tiene
+    # que ser antes de la primera llamada a get_settings() -- si no, la
+    # configuración quedaría armada con el .env y el secreto ya no aplicaría.
+    _cargar_secretos_de_aws()
     # Falla rápido y claro si nadie configuró un JWT_SECRET_KEY real -- mejor
     # que arrancar "funcionando" con un secreto público conocido.
     validar_jwt_secret(get_settings())

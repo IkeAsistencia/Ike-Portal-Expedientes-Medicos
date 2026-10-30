@@ -126,6 +126,27 @@ class Settings(BaseSettings):
     # Sin actividad durante este tiempo, la sesión se cierra (ver app/core/security.py).
     sesion_inactividad_minutos: int = 30
 
+    # --- Secretos en AWS Secrets Manager (ver app/core/secretos_aws.py) ---
+    # En AWS la infraestructura no guarda las llaves en el `.env` del
+    # servidor: las administra Secrets Manager. Al arrancar, la app las lee y
+    # las deja en el entorno, y GANAN sobre lo que diga el `.env` (así una
+    # llave vieja olvidada en el servidor no puede tener prioridad sobre el
+    # secreto administrado).
+    #
+    # "off"         -> no toca AWS (default: desarrollo y pruebas).
+    # "obligatorio" -> si el secreto no se puede leer, la app NO arranca.
+    #                  Es el modo para producción: es preferible un servicio
+    #                  caído a uno "funcionando" con Google Maps apagado o con
+    #                  un JWT_SECRET_KEY inseguro.
+    # "opcional"    -> si falla, sigue con el entorno (para la primera puesta
+    #                  en marcha, mientras se ajustan los permisos de IAM).
+    secretos_aws_modo: str = "off"
+    secretos_aws_nombre: str = "encryption-portal-medicos"
+    secretos_aws_region: str = "mx-central-1"
+    # Solo si el secreto se guardó como texto plano (una llave suelta) en vez
+    # de JSON: dice a qué variable corresponde ese valor.
+    secretos_aws_clave: Optional[str] = None
+
     # --- Proxy delante de la app (ver app/core/red.py) ---
     # Cuántos proxies de confianza agregan su IP a X-Forwarded-For antes de
     # llegar a la app. La IP real del usuario es la que quedó en esa posición
@@ -217,6 +238,16 @@ class ArranqueSettings(BaseSettings):
     # autenticación. Apagado por default; enciéndelo solo en desarrollo
     # (GRAPHQL_IDE_HABILITADO=true en tu .env local).
     graphql_ide_habilitado: bool = False
+
+    # Mismos datos que SECRETOS_AWS_* en Settings -- repetidos aquí a
+    # propósito: para leer el secreto hay que construir ALGO antes de tener
+    # los secretos, y Settings exige DB_SERVER/DB_NAME (ver el docstring de
+    # esta clase). Con ArranqueSettings se puede preguntar "¿en qué modo
+    # estoy?" sin necesitar todavía la base.
+    secretos_aws_modo: str = "off"
+    secretos_aws_nombre: str = "encryption-portal-medicos"
+    secretos_aws_region: str = "mx-central-1"
+    secretos_aws_clave: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

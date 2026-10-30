@@ -350,7 +350,7 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 | `DB_DRIVER` | `ODBC Driver 18 for SQL Server` | No conecta |
 | `DB_TRUST_SERVER_CERTIFICATE` | `false` si el certificado es válido | Con `true` el canal se cifra pero no se valida contra quién |
 | `LOCAL_DB_PATH` | Ruta del SQLite en el volumen persistente | Si apunta a disco efímero, **se pierden accesos y seguimiento** |
-| `JWT_SECRET_KEY` | Uno propio, que no se repita en ningún otro lado: `python -c "import secrets; print(secrets.token_hex(32))"` | Con una llave reutilizada, una sesión de otro ambiente valdría aquí |
+| `JWT_SECRET_KEY` | Uno propio, que no se repita en ningún otro lado: `python -c "import secrets; print(secrets.token_hex(32))"`. **En AWS va en Secrets Manager, no aquí** (sección 7.1) | Con una llave reutilizada, una sesión de otro ambiente valdría aquí |
 | `JWT_EXPIRE_MINUTES` | El acordado para producción | Sesiones más largas o más cortas de lo esperado |
 | `CUENTAS_PERMITIDAS` | La lista confirmada (pendiente, sección 4) | Se ven de más o de menos |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE`, `SMTP_USAR_TLS` | Del SMTP corporativo | Sin ellos, los correos solo se registran en el log |
@@ -367,6 +367,86 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 `GOOGLE_MAPS_TIMEOUT_SEGUNDOS` y `GOOGLE_MAPS_MAXIMO_RESULTADOS` tienen un
 valor por omisión razonable; solo hay que tocarlos si el servicio
 responde lento.
+
+---
+
+## 7.1 Secretos en AWS Secrets Manager
+
+En AWS las llaves **no** se dejan en el `.env` del servidor: las administra
+Secrets Manager. La app las lee al arrancar y las deja en el entorno, y
+**ganan sobre lo que diga el `.env`** — así una llave vieja olvidada en la
+instancia no puede tener prioridad sobre el secreto administrado.
+
+| Variable | Valor en producción |
+|---|---|
+| `SECRETOS_AWS_MODO` | **`obligatorio`** (ver abajo) |
+| `SECRETOS_AWS_NOMBRE` | `encryption-portal-medicos` |
+| `SECRETOS_AWS_REGION` | `mx-central-1` |
+| `SECRETOS_AWS_CLAVE` | vacío (solo si el secreto es texto plano) |
+
+### Modos
+
+| Modo | Qué hace | Cuándo usarlo |
+|---|---|---|
+| `off` | No toca AWS. Default. | Desarrollo y pruebas |
+| `obligatorio` | Si el secreto no se lee, **la app no arranca** | **Producción** |
+| `opcional` | Si falla, sigue con el entorno | Primera puesta en marcha |
+
+En producción debe ir `obligatorio`: es preferible un servicio caído y
+visible a uno que arrancó "bien" pero con Google Maps apagado o con un
+`JWT_SECRET_KEY` inseguro. El error sale en `journalctl -u portal-expedientes`
+con el nombre del secreto y la región, nunca con el valor.
+
+### Formato del secreto
+
+Lo recomendado es guardarlo como **JSON**, con el nombre de cada variable en
+mayúsculas:
+
+```json
+{
+  "GOOGLE_MAPS_API_KEY": "...",
+  "GOOGLE_MAPS_BROWSER_API_KEY": "...",
+  "GOOGLE_MAPS_MAP_ID": "...",
+  "JWT_SECRET_KEY": "..."
+}
+```
+
+Se admiten estas variables (y **solo** estas — el resto se ignora con un
+aviso en el log, porque el secreto lo administra otra área y no debe poder
+reescribir `PATH` ni nada del proceso):
+
+`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_BROWSER_API_KEY`, `GOOGLE_MAPS_MAP_ID`,
+`JWT_SECRET_KEY`, `DB_PASSWORD`, `SMTP_USER`, `SMTP_PASSWORD`.
+
+Si el secreto se guardó como **texto plano** (una sola llave suelta), hay que
+decir a cuál variable corresponde con `SECRETOS_AWS_CLAVE`. Sin eso se ignora
+con un aviso: es mejor que adivinar y poner la llave en el lugar equivocado.
+
+### Permisos de IAM
+
+La instancia (rol de EC2, o el task role si algún día se pasa a ECS) necesita
+**solo** `secretsmanager:GetSecretValue` sobre el ARN de ese secreto:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "secretsmanager:GetSecretValue",
+  "Resource": "arn:aws:secretsmanager:mx-central-1:<cuenta>:secret:encryption-portal-medicos-*"
+}
+```
+
+Nada más: ni listar secretos, ni escribirlos. La app solo lee.
+
+### Probar que quedó bien
+
+```bash
+# Debe imprimir los NOMBRES de las variables aplicadas, nunca los valores.
+sudo journalctl -u portal-expedientes -n 50 | grep "Secretos de AWS"
+# Esperado: "Secretos de AWS: aplicadas 4 variable(s): GOOGLE_MAPS_API_KEY, ..."
+```
+
+Si el servicio no arranca y el log dice `No se pudo leer el secreto`, el
+problema es de IAM o de la región, no del código.
 
 Cuidado con `SMTP_DESTINATARIO_PRUEBA`: es una válvula pensada para
 desarrollo, que manda **todos** los correos a un solo buzón. En producción
