@@ -28,11 +28,15 @@ Modos (SECRETOS_AWS_MODO):
   "obligatorio"-> si no se puede leer el secreto, la app NO arranca. Es el
                   modo que debe usarse en producción: arrancar con secretos a
                   medias es peor que no arrancar, porque el portal se vería
-                  "funcionando" con Google Maps apagado o con un
-                  JWT_SECRET_KEY inseguro.
+                  "funcionando" con Google Maps apagado.
   "opcional"   -> si falla, sigue con lo que haya en el entorno. Útil la
                   primera vez que se configura, para no tumbar el servicio
                   mientras se dan los permisos de IAM.
+
+Alcance: SOLO las llaves de Google Maps. Es lo único que el equipo de
+infraestructura administra en `encryption-portal-medicos`; el resto de la
+configuración sensible (JWT_SECRET_KEY, DB_PASSWORD, SMTP_*) sigue en el
+`.env` del servidor.
 """
 
 import json
@@ -51,6 +55,11 @@ MODOS_VALIDOS = (MODO_OFF, MODO_OPCIONAL, MODO_OBLIGATORIO)
 # el JSON de Secrets Manager es el nombre de la variable en MAYÚSCULAS, tal
 # cual la lee pydantic-settings (no distingue mayúsculas/minúsculas).
 #
+# Solo las llaves de Google Maps: es lo único que el equipo de infraestructura
+# administra en `encryption-portal-medicos`. El resto de la configuración
+# sensible (JWT_SECRET_KEY, DB_PASSWORD, SMTP_*) sigue en el `.env` del
+# servidor.
+#
 # Se listan explícitamente a propósito (lista blanca, no "mete todo lo que
 # venga"): el secreto lo administra otra área, y si algún día le agregan una
 # clave llamada `PATH` o `PYTHONPATH`, no queremos que reescriba el entorno
@@ -61,13 +70,6 @@ VARIABLES_PERMITIDAS = frozenset({
     # Llave del navegador (viaja al frontend, restringida por dominio).
     "GOOGLE_MAPS_BROWSER_API_KEY",
     "GOOGLE_MAPS_MAP_ID",
-    # Firma de las sesiones (JWT propio de la app).
-    "JWT_SECRET_KEY",
-    # Contraseña del usuario de aplicación de SQL Server.
-    "DB_PASSWORD",
-    # Credenciales del SMTP.
-    "SMTP_USER",
-    "SMTP_PASSWORD",
 })
 
 
@@ -138,23 +140,30 @@ def _leer_de_aws(nombre: str, region: str) -> str:
     Aísla la llamada a boto3 para que se pueda sustituir en las pruebas sin
     tener AWS ni credenciales. Import perezoso: boto3 solo se necesita en
     producción (o si alguien enciende los secretos a mano).
+
+    Es el snippet que mandó el equipo de infraestructura, tal cual: misma
+    sesión, mismo cliente, mismo `get_secret_value` y mismo `SecretString`.
+    Lo único que se agrega es envolver el ClientError en ErrorSecretosAws
+    para que el modo "obligatorio" pueda abortar el arranque.
     """
     import boto3
-    from botocore.exceptions import ClientError, BotoCoreError
+    from botocore.exceptions import ClientError
 
-    cliente = boto3.session.Session().client(service_name="secretsmanager", region_name=region)
+    session = boto3.session.Session()
+    client = session.client(
+        service_name="secretsmanager",
+        region_name=region,
+    )
     try:
-        respuesta = cliente.get_secret_value(SecretId=nombre)
-    except (ClientError, BotoCoreError) as e:
+        get_secret_value_response = client.get_secret_value(
+            SecretId=nombre,
+        )
+    except ClientError as e:
         # El mensaje de boto3 puede traer el nombre del recurso y el ARN, pero
         # nunca el valor del secreto -- es seguro registrarlo tal cual.
         raise ErrorSecretosAws(f"No se pudo leer el secreto '{nombre}' en {region}: {e}") from e
 
-    # SecretString viene para secretos "de texto"; SecretBinary para los
-    # binarios (no es nuestro caso, pero se maneja para no tronar raro).
-    if "SecretString" in respuesta:
-        return respuesta["SecretString"]
-    return respuesta.get("SecretBinary", b"").decode("utf-8", errors="replace")
+    return get_secret_value_response["SecretString"]
 
 
 def cargar_en_entorno(modo: str, nombre: str, region: str, clave_texto_plano: Optional[str] = None) -> list[str]:

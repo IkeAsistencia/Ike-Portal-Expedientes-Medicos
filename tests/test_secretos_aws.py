@@ -10,7 +10,8 @@ Lo que se cuida aquí:
 - Que el secreto GANE sobre lo que ya hubiera en el entorno (una llave vieja
   en el .env del servidor no puede tener prioridad).
 - Que la lista blanca se respete: el secreto lo administra otra área y no
-  debe poder reescribir variables arbitrarias del proceso.
+  debe poder reescribir variables arbitrarias del proceso. Solo lleva las
+  llaves de Google Maps.
 - Que en modo "obligatorio" un fallo impida arrancar (no arrancar a medias).
 - Que nunca se registre en el log el VALOR de un secreto, solo su nombre.
 """
@@ -49,13 +50,13 @@ def test_modo_off_no_toca_nada(monkeypatch):
 def test_aplica_las_llaves_del_json(monkeypatch):
     _simular_secreto(monkeypatch, json.dumps({
         "GOOGLE_MAPS_API_KEY": "llave-google",
-        "JWT_SECRET_KEY": "llave-jwt",
+        "GOOGLE_MAPS_BROWSER_API_KEY": "llave-navegador",
     }))
     aplicadas = mod.cargar_en_entorno(mod.MODO_OBLIGATORIO, "encryption-portal-medicos", "mx-central-1")
-    assert aplicadas == ["GOOGLE_MAPS_API_KEY", "JWT_SECRET_KEY"]
+    assert aplicadas == ["GOOGLE_MAPS_API_KEY", "GOOGLE_MAPS_BROWSER_API_KEY"]
     import os
     assert os.environ["GOOGLE_MAPS_API_KEY"] == "llave-google"
-    assert os.environ["JWT_SECRET_KEY"] == "llave-jwt"
+    assert os.environ["GOOGLE_MAPS_BROWSER_API_KEY"] == "llave-navegador"
 
 
 def test_el_secreto_gana_sobre_el_entorno_existente(monkeypatch):
@@ -169,3 +170,15 @@ def test_la_lista_blanca_no_incluye_variables_peligrosas():
     mal administrado podría secuestrar el proceso."""
     for peligrosa in ("PATH", "PYTHONPATH", "LD_PRELOAD", "HOME"):
         assert peligrosa not in mod.VARIABLES_PERMITIDAS
+
+
+def test_la_lista_blanca_solo_tiene_llaves_de_google():
+    """El secreto `encryption-portal-medicos` lo administra infraestructura y
+    solo lleva las llaves de Google Maps. Si alguien mete aquí JWT_SECRET_KEY
+    o DB_PASSWORD, el secreto podría pisar la configuración del servidor sin
+    que nadie lo haya acordado."""
+    assert mod.VARIABLES_PERMITIDAS == frozenset({
+        "GOOGLE_MAPS_API_KEY",
+        "GOOGLE_MAPS_BROWSER_API_KEY",
+        "GOOGLE_MAPS_MAP_ID",
+    })

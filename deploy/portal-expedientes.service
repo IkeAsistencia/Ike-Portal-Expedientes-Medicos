@@ -17,7 +17,7 @@ Environment=TZ=America/Mexico_City
 # En AWS las llaves viven en Secrets Manager, no en el .env del servidor (ver
 # DESPLIEGUE-PRODUCCION.md, 7.1). "obligatorio" = si el secreto no se puede
 # leer, la app NO arranca: mejor un servicio caído y visible que uno
-# "funcionando" con Google Maps apagado o con un JWT inseguro.
+# "funcionando" con Google Maps apagado.
 # La región se deja explícita para no depender del default del SDK.
 Environment=SECRETOS_AWS_MODO=obligatorio
 Environment=SECRETOS_AWS_REGION=mx-central-1

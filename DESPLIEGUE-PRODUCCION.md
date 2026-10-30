@@ -350,7 +350,7 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 | `DB_DRIVER` | `ODBC Driver 18 for SQL Server` | No conecta |
 | `DB_TRUST_SERVER_CERTIFICATE` | `false` si el certificado es válido | Con `true` el canal se cifra pero no se valida contra quién |
 | `LOCAL_DB_PATH` | Ruta del SQLite en el volumen persistente | Si apunta a disco efímero, **se pierden accesos y seguimiento** |
-| `JWT_SECRET_KEY` | Uno propio, que no se repita en ningún otro lado: `python -c "import secrets; print(secrets.token_hex(32))"`. **En AWS va en Secrets Manager, no aquí** (sección 7.1) | Con una llave reutilizada, una sesión de otro ambiente valdría aquí |
+| `JWT_SECRET_KEY` | Uno propio, que no se repita en ningún otro lado: `python -c "import secrets; print(secrets.token_hex(32))"` | Con una llave reutilizada, una sesión de otro ambiente valdría aquí |
 | `JWT_EXPIRE_MINUTES` | El acordado para producción | Sesiones más largas o más cortas de lo esperado |
 | `CUENTAS_PERMITIDAS` | La lista confirmada (pendiente, sección 4) | Se ven de más o de menos |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE`, `SMTP_USAR_TLS` | Del SMTP corporativo | Sin ellos, los correos solo se registran en el log |
@@ -393,9 +393,9 @@ instancia no puede tener prioridad sobre el secreto administrado.
 | `opcional` | Si falla, sigue con el entorno | Primera puesta en marcha |
 
 En producción debe ir `obligatorio`: es preferible un servicio caído y
-visible a uno que arrancó "bien" pero con Google Maps apagado o con un
-`JWT_SECRET_KEY` inseguro. El error sale en `journalctl -u portal-expedientes`
-con el nombre del secreto y la región, nunca con el valor.
+visible a uno que arrancó "bien" pero con Google Maps apagado. El error sale
+en `journalctl -u portal-expedientes` con el nombre del secreto y la región,
+nunca con el valor.
 
 ### Formato del secreto
 
@@ -406,8 +406,7 @@ mayúsculas:
 {
   "GOOGLE_MAPS_API_KEY": "...",
   "GOOGLE_MAPS_BROWSER_API_KEY": "...",
-  "GOOGLE_MAPS_MAP_ID": "...",
-  "JWT_SECRET_KEY": "..."
+  "GOOGLE_MAPS_MAP_ID": "..."
 }
 ```
 
@@ -415,8 +414,12 @@ Se admiten estas variables (y **solo** estas — el resto se ignora con un
 aviso en el log, porque el secreto lo administra otra área y no debe poder
 reescribir `PATH` ni nada del proceso):
 
-`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_BROWSER_API_KEY`, `GOOGLE_MAPS_MAP_ID`,
-`JWT_SECRET_KEY`, `DB_PASSWORD`, `SMTP_USER`, `SMTP_PASSWORD`.
+`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_BROWSER_API_KEY`, `GOOGLE_MAPS_MAP_ID`.
+
+El alcance es únicamente **las llaves de Google Maps**: es lo que el equipo de
+infraestructura administra en `encryption-portal-medicos`. El resto de la
+configuración sensible (`JWT_SECRET_KEY`, `DB_PASSWORD`, `SMTP_USER`,
+`SMTP_PASSWORD`) sigue en el `.env` del servidor.
 
 Si el secreto se guardó como **texto plano** (una sola llave suelta), hay que
 decir a cuál variable corresponde con `SECRETOS_AWS_CLAVE`. Sin eso se ignora
@@ -442,7 +445,7 @@ Nada más: ni listar secretos, ni escribirlos. La app solo lee.
 ```bash
 # Debe imprimir los NOMBRES de las variables aplicadas, nunca los valores.
 sudo journalctl -u portal-expedientes -n 50 | grep "Secretos de AWS"
-# Esperado: "Secretos de AWS: aplicadas 4 variable(s): GOOGLE_MAPS_API_KEY, ..."
+# Esperado: "Secretos de AWS: aplicadas 3 variable(s): GOOGLE_MAPS_API_KEY, ..."
 ```
 
 Si el servicio no arranca y el log dice `No se pudo leer el secreto`, el
