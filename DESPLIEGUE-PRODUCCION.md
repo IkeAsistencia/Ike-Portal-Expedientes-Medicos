@@ -399,8 +399,9 @@ nunca con el valor.
 
 ### Formato del secreto
 
-Lo recomendado es guardarlo como **JSON**, con el nombre de cada variable en
-mayúsculas:
+El secreto `encryption-portal-medicos` ya está creado por Infraestructura como
+**JSON**, con estas tres claves exactas (así lo confirmaron; el nombre de cada
+una es el de la variable en mayúsculas):
 
 ```json
 {
@@ -424,6 +425,7 @@ configuración sensible (`JWT_SECRET_KEY`, `DB_PASSWORD`, `SMTP_USER`,
 Si el secreto se guardó como **texto plano** (una sola llave suelta), hay que
 decir a cuál variable corresponde con `SECRETOS_AWS_CLAVE`. Sin eso se ignora
 con un aviso: es mejor que adivinar y poner la llave en el lugar equivocado.
+No es el caso de `encryption-portal-medicos`, que ya está en JSON.
 
 ### Permisos de IAM
 
