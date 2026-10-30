@@ -247,17 +247,17 @@ def _html_varios_expedientes(expedientes: list[dict], usuario_nombre: str, es_re
         f'<td style="padding:9px 10px;color:#0B2942;font-weight:600;">{e["expediente"]}</td>'
         f'<td style="padding:9px 10px;color:#3C4A58;">{html.escape(str(e.get("cuenta") or ""))}</td>'
         f'<td style="padding:9px 10px;color:#3C4A58;">{html.escape(str(e.get("nombre_paciente") or "N/A"))}</td>'
-        f'<td style="padding:9px 10px;color:#3C4A58;">{html.escape(str(e.get("entidad") or ""))}</td>'
         f'<td style="padding:9px 10px;color:#3C4A58;">{html.escape(str(e.get("tipo_servicio") or ""))}</td>'
         f'<td style="padding:9px 10px;color:#3C4A58;">{html.escape(str(e.get("tipo_subservicio") or ""))}</td>'
         f'<td style="padding:9px 10px;color:#3C4A58;">{html.escape(str(e.get("fecha_apertura_servicio") or ""))}</td>'
+        f'<td style="padding:9px 10px;color:#3C4A58;">{html.escape(str(e.get("entidad") or ""))}</td>'
         f'<td style="padding:9px 10px;">{_chip_estado(e.get("estatus") or "Abierto")}</td>'
         f"</tr>"
         for i, e in enumerate(expedientes)
     )
     encabezados = "".join(
         f'<th style="text-align:left;padding:10px 10px;color:#0B2942;font-weight:700;border-bottom:2px solid #E3E8ED;">{col}</th>'
-        for col in ("Expediente", "Cuenta", "Paciente", "Entidad", "Servicio", "Subservicio", "Fecha Apertura", "Estado")
+        for col in ("Expediente", "Cuenta", "Paciente", "Servicio", "Subservicio", "Fecha Apertura", "Entidad", "Estado")
     )
     cantidad = len(expedientes)
     titulo = (
