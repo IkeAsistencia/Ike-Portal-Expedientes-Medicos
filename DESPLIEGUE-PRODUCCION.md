@@ -7,7 +7,7 @@
 | Sistema | Portal Promédico (expedientes médicos y directorio de proveedores) |
 | Repositorio | `IkeAsistencia/Ike-Portal-Expedientes-Medicos` |
 | Destino | AWS — EC2 Linux detrás de CloudFront + WAF + ALB |
-| Última actualización | 21 de octubre de 2026 |
+| Última actualización | 30 de octubre de 2026 |
 
 ---
 
@@ -117,9 +117,12 @@ dos usuarios distintos y conviene que así sea.
 
 "Enviar correo a proveedores" manda **un solo correo** con toda la
 selección, en copia oculta, a los proveedores de las entidades que aparecen
-en ella. El portal lleva el contador del día, pide confirmación al acercarse
-al tope y, al llegar, ya no deja salir correos (ver
-`app/services/envio_correo_service.py`).
+en ella. "Generar corte" (Administrador) también manda correo, con un
+**destinatario a elegir** ("Enviar a") en vez de resolverlo por entidad.
+Ambos flujos comparten el mismo contador diario
+(`app/services/cuota_correos_service.py`): el portal lleva el conteo del
+día, pide confirmación al acercarse al tope y, al llegar, ya no deja salir
+correos (ver `app/services/envio_correo_service.py`).
 
 ### 3.4 Places API de Google Maps
 
@@ -357,6 +360,7 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 | `SMTP_DESTINATARIO_PRUEBA` | **Vacío en producción** | Si queda con valor, los correos se desvían a ese buzón |
 | `SMTP_LIMITE_DIARIO`, `SMTP_AVISO_LIMITE` | `100` y `80`, o lo que autorice quien administra la cuenta de correo | Con un tope mayor al real, el servidor de correo rechazaría los envíos de más |
 | `SMTP_CUENTA_POR_DESTINATARIO` | `true` hasta confirmar cómo cuenta el servidor | Con `false` y un servidor que cuenta por destinatario, el portal se pasaría del tope sin darse cuenta |
+| `CORREO_REENVIO_HORAS` | `8` (default) o lo que acuerde Negocio | Freno de reenvío: antes de cumplirse, no se vuelve a mandar correo a proveedores sobre el mismo expediente |
 | `GOOGLE_MAPS_API_KEY` | Llave de Google Cloud con la Places API habilitada y facturación activa (opcional, sección 3.4). Solo la usa el servidor | Sin ella se apaga la búsqueda fuera de la red |
 | `GOOGLE_MAPS_BROWSER_API_KEY` | Llave **distinta**, restringida por dominio y solo con Maps JavaScript API (sección 3.4.1) | Los resultados se muestran en lista en vez de mapa |
 | `PROXIES_CONFIABLES` | `2` con CloudFront + ALB; `1` si solo hay ALB | Un número mal puesto rompe el conteo de intentos de login |

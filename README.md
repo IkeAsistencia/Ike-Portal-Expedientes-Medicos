@@ -17,8 +17,16 @@ app/
 │   └── local_store.py          # SQLite local (estatus, config. cuentas, alertas de proveedor enviadas)
 ├── services/
 │   ├── email_service.py        # envío de correo (real si hay SMTP en .env, simulado/log si no)
+│   ├── envio_correo_service.py # "Enviar correo a proveedores": destinatarios por entidad, freno de reenvío, tope diario
+│   ├── cuota_correos_service.py# tope diario de correos del portal (SMTP_LIMITE_DIARIO), compartido con el corte
 │   ├── seguimiento_service.py  # reglas de 'Actualizar Bitácora' (rol, longitud, flujo), compartidas por REST y GraphQL
-│   └── estatus_service.py      # reglas del cambio manual de estatus (rol, flujo de regreso), compartidas por REST y GraphQL
+│   ├── estatus_service.py      # reglas del cambio manual de estatus (rol, flujo de regreso), compartidas por REST y GraphQL
+│   ├── semaforo_service.py     # color del semáforo/chip por Tipo de proveedor (Directorio)
+│   ├── google_maps_service.py  # búsqueda "fuera de la red" (Places API) y datos para el mapa (Maps JavaScript API)
+│   ├── clues_service.py        # enriquecimiento de coordenadas del padrón con el Catálogo CLUES de Salud
+│   ├── proveedores_excel_service.py # plantilla y lectura de la carga del padrón (hojas Padrón / Red de apoyo)
+│   ├── agenda_proveedores_service.py, coordinar_cita_service.py, cita_texto_service.py # agenda y citas del Directorio de Proveedores
+│   └── validacion_rfc_cedula_service.py # valida el FORMATO de RFC y cédula profesional (no consulta el RNP)
 ├── schemas/                    # modelos Pydantic (request/response)
 ├── repositories/                # una función por cada operación de datos
 ├── routers/                     # endpoints HTTP (FastAPI routers)
@@ -37,7 +45,9 @@ frontend/                        # portal (HTML + CSS + JS puro, sin build), ser
     ├── app.js                   # arranque, sesión, menú por perfil y navegación (#/pantalla)
     ├── core/                    # api, sesión, router, catálogos, reglas de negocio, formato, toast
     ├── componentes/             # piezas reutilizables: tabla, filtros, multiselect, paginador, KPI, modal
-    └── pantallas/               # un módulo por pantalla (su HTML + su lógica)
+    └── pantallas/               # un módulo por pantalla (su HTML + su lógica): expedientes, seguimiento,
+                                  # configuracion-cuentas, usuarios-accesos, historial-correos, corte,
+                                  # colores-cuentas, directorio-proveedores, directorio-proveedores-carga
 dev_server_datos_prueba.py       # API con datos de ejemplo, para probar el frontend sin SQL Server
 prompts/
 └── prompt-portal-expedientes-desde-cero.md  # el pedido completo del proyecto, redactado desde cero
@@ -382,6 +392,13 @@ python -m scripts.md_a_word WEB-SCRAPING-DOCTORALIA.md
 | POST / GET | `/seguimiento/comprobante` · `/seguimiento/comprobante/{exp}` · `.../archivo` | Comprobante de pago | Base local |
 | GET / POST / DELETE | `/configuracion/cuentas` · `/configuracion/cuentas/limpiar` | Configuración Cuentas (Administrador) | Base local |
 | GET / POST | `/admin/accesos` · `/admin/accesos/entidades` · `/admin/accesos/{rfc}/inactivar` · `/reactivar` · `/resetear-password` · `/entidad` | Usuarios y Accesos (Administrador) | Base local |
+| GET | `/correos-enviados` · `/correos-enviados/cuota` | Historial de Correos y tope diario (Administrador) | Base local |
+| GET | `/directorio-proveedores` · `/directorio-proveedores/especialidades` | Directorio de Proveedores: búsqueda en el padrón y tarjetas por especialidad (Proveedor, Administrador) | Padrón local (`proveedores`) |
+| GET | `/directorio-proveedores/fuera-de-red-google-maps` · `/directorio-proveedores/configuracion-mapa` | Búsqueda "fuera de la red" y configuración del mapa (Proveedor) | Google Places / Maps JavaScript API |
+| GET / POST | `/directorio-proveedores/citas` · `/directorio-proveedores/citas/{folio}/cancelar` · `/directorio-proveedores/citas/expediente/{cl_expediente}` · `/directorio-proveedores/expedientes-para-cita` · `/directorio-proveedores/{clave}/agenda` | Agenda y citas con proveedores (Proveedor agenda; Cabina/Administrador consultan) | Base local |
+| GET / POST | `/proveedores-catalogo` · `/proveedores-catalogo/plantilla` · `/proveedores-catalogo/cargar` | Carga del padrón por Excel, hojas "Padrón" y "Red de apoyo" (Administrador) | Base local |
+| GET / POST / PUT / DELETE | `/solicitudes-alta-medico` · `/solicitudes-alta-medico/{folio}` · `/solicitudes-alta-medico/{folio}/estatus` · `/solicitudes-alta-medico/{folio}/documentos/{tipo}` | Alta de médico "Fuera de la red": captura (Proveedor, Administrador) y revisión (Administrador) | Base local |
+| GET / PUT / DELETE | `/admin/cuentas-etiquetas` · `/admin/cuentas-etiquetas/paleta` | Colores de Cuentas (Administrador) | Base local |
 | GET | `/health` | Monitoreo (sin token) | — |
 
 Además, `jobs/validar_estatus_proveedor.py` corre por fuera del servidor
@@ -400,15 +417,45 @@ proyecto y no reemplaza el REST** (ambos siguen funcionando).
 - Pruebas automatizadas: `tests/test_graphql.py`.
 - El frontend (`frontend/index.html`) sigue usando el REST por ahora.
 
+## Directorio de Proveedores
+
+Pantalla propia (Proveedor y Administrador; Cabina no la usa) para buscar
+médicos por especialidad y agendar citas, independiente del listado de
+Expedientes:
+
+- **Padrón** (`app/services/proveedores_excel_service.py`): se carga por
+  Excel con dos hojas, "Padrón de proveedores" (dentro de la red) y
+  "Proveedores red de apoyo"; la carga es incremental, nunca borra lo que
+  ya existe. Además se puede dar de alta un médico manualmente ("Fuera de
+  la red", `solicitudes-alta-medico`), con RFC y cédula opcionales; el
+  Administrador revisa y aprueba/rechaza cada solicitud.
+- **Búsqueda fuera de la red** (`app/services/google_maps_service.py`):
+  cuando el padrón no tiene ningún resultado en la zona, propone
+  establecimientos reales vía Google Places API, con mapa (Maps JavaScript
+  API, llave aparte restringida por dominio) — ver sección 3.4 de
+  `DESPLIEGUE-PRODUCCION.md`.
+- **Coordenadas**: las trae el Excel del área; `scripts/enriquecer_coordenadas_clues.py`
+  rellena las que falten con el Catálogo CLUES de la Secretaría de Salud,
+  sin pisar nunca las que ya vinieron en la carga.
+- **Agenda y citas**: el Proveedor agenda horarios para un médico del
+  padrón, con folio propio; se puede coordinar directo desde un expediente.
+- **Colores de Cuentas** (`/admin/cuentas-etiquetas`, pantalla
+  `colores-cuentas.js`): color y prefijo configurables por cuenta, solo
+  Administrador — y los chips de "Tipo de proveedor" usan el mismo
+  semáforo de colores (`app/services/semaforo_service.py`).
+
 ## ⚠️ Pendientes / a confirmar
 
 Ver el detalle en `sql/README.md` y `jobs/README.md`. Resumen:
 
-1. **Datos de SMTP y correo real del proveedor** — el envío de correos
-   funciona de punta a punta, pero en "modo simulado" (solo se registra en
-   el log) hasta tener host, remitente y credenciales de un SMTP real, y
-   hasta saber de dónde sacar el correo del proveedor (el query solo trae
-   el del paciente). **Necesario antes de producción.**
+1. **Datos de SMTP real** — el envío de correos funciona de punta a punta,
+   pero queda en "modo simulado" (solo se registra en el log) hasta tener
+   host, remitente y credenciales de un SMTP real. El correo de cada
+   proveedor ya se captura en Usuarios y Accesos (perfil Proveedor) y es
+   el que usa "Enviar correo a proveedores"; falta confirmar el tope real
+   del servidor de correo (`SMTP_LIMITE_DIARIO`,
+   `SMTP_CUENTA_POR_DESTINATARIO`, ver `DESPLIEGUE-PRODUCCION.md`).
+   **Necesario antes de producción.**
 2. **Cuentas permitidas fijas** — confirmar si `CUENTAS_PERMITIDAS` sigue
    siendo una lista fija y cuál es la de producción (el default del código
    y el de `.env.example` no son la misma lista).
