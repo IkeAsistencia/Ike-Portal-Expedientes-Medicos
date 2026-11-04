@@ -114,10 +114,10 @@ def test_agregar_proveedor_exige_entidad_y_correo_y_lo_hace_proveedor(client):
     with pytest.raises(accesos_repo.PerfilInvalido):
         accesos_repo.agregar_perfil(RFC, PERFIL_PROVEEDOR)
 
-    accesos_repo.agregar_perfil(RFC, PERFIL_PROVEEDOR, "Jalisco", "prov@example.com")
+    accesos_repo.agregar_perfil(RFC, PERFIL_PROVEEDOR, "Jalisco", "prov@ikeasistencia.com")
     assert accesos_repo.buscar_acceso(RFC)["perfiles"] == [PERFIL_ADMINISTRADOR, PERFIL_PROVEEDOR]
     # Ya cuenta como Proveedor para el correo masivo y para cambiarle la entidad.
-    assert {p["correo"] for p in accesos_repo.listar_proveedores_con_correo()} == {"prov@example.com"}
+    assert {p["correo"] for p in accesos_repo.listar_proveedores_con_correo()} == {"prov@ikeasistencia.com"}
     assert accesos_repo.actualizar_entidad(RFC, "Campeche") is True
 
 
@@ -164,13 +164,13 @@ def test_endpoints_de_administracion_de_perfiles(client):
 
     r = client.post(
         "/admin/accesos/MIMA991129/perfiles",
-        json={"perfil": PERFIL_PROVEEDOR, "entidad": "Jalisco", "correo": "m@example.com"},
+        json={"perfil": PERFIL_PROVEEDOR, "entidad": "Jalisco", "correo": "m@ikeasistencia.com"},
         headers=admin,
     )
     assert r.status_code == 200, r.text
     assert client.post(
         "/admin/accesos/MIMA991129/perfiles",
-        json={"perfil": PERFIL_PROVEEDOR, "entidad": "Jalisco", "correo": "m@example.com"},
+        json={"perfil": PERFIL_PROVEEDOR, "entidad": "Jalisco", "correo": "m@ikeasistencia.com"},
         headers=admin,
     ).status_code == 409
     assert client.post("/admin/accesos/NADA000000/perfiles", json={"perfil": PERFIL_CABINA}, headers=admin).status_code == 404
@@ -182,6 +182,32 @@ def test_endpoints_de_administracion_de_perfiles(client):
     assert client.delete(f"/admin/accesos/MIMA991129/perfiles/{PERFIL_PROVEEDOR}", headers=admin).status_code == 200
     assert client.delete(f"/admin/accesos/MIMA991129/perfiles/{PERFIL_ADMINISTRADOR}", headers=admin).status_code == 200
     assert client.delete(f"/admin/accesos/MIMA991129/perfiles/{PERFIL_CABINA}", headers=admin).status_code == 400
+
+
+def test_correo_del_proveedor_solo_de_la_empresa(client):
+    _persona_con_dos_perfiles()
+    accesos_repo.alta_acceso("MIMA991129", "Miranda", PERFIL_CABINA)
+    admin = {"Authorization": f"Bearer {_login(client, perfil=PERFIL_ADMINISTRADOR).json()['access_token']}"}
+    aviso = "El correo que acabas de ingresar no pertenece al dominio de @ikeasistencia.com."
+
+    r = client.post(
+        "/admin/accesos",
+        json={"rfc": "PROV000001", "nombre": "Prov", "perfil": PERFIL_PROVEEDOR, "entidad": "Jalisco",
+              "correo": "prov@gmail.com"},
+        headers=admin,
+    )
+    assert r.status_code == 422
+    assert aviso in r.text
+    assert accesos_repo.buscar_acceso("PROV000001") is None
+
+    r = client.post(
+        "/admin/accesos/MIMA991129/perfiles",
+        json={"perfil": PERFIL_PROVEEDOR, "entidad": "Jalisco", "correo": "m@ikeasistencia.com.mx"},
+        headers=admin,
+    )
+    assert r.status_code == 422
+    assert aviso in r.text
+    assert accesos_repo.buscar_acceso("MIMA991129")["perfiles"] == [PERFIL_CABINA]
 
 
 def test_la_migracion_pasa_el_perfil_de_los_accesos_viejos_a_la_lista(client, tmp_path):

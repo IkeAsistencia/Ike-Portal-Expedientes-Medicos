@@ -148,10 +148,10 @@ def capturados(monkeypatch):
 # ---------- A quién le llega ----------
 
 def test_un_solo_correo_con_toda_la_lista_a_los_proveedores_de_esas_entidades(client, capturados):
-    _proveedor("PROVCAM001", "Campeche", "campeche1@example.com")
-    _proveedor("PROVCAM002", "Campeche", "campeche2@example.com")
-    _proveedor("PROVYUC001", "Yucatán", "yucatan@example.com")
-    _proveedor("PROVJAL001", "Jalisco", "jalisco@example.com")  # Jalisco no viene en la selección
+    _proveedor("PROVCAM001", "Campeche", "campeche1@ikeasistencia.com")
+    _proveedor("PROVCAM002", "Campeche", "campeche2@ikeasistencia.com")
+    _proveedor("PROVYUC001", "Yucatán", "yucatan@ikeasistencia.com")
+    _proveedor("PROVJAL001", "Jalisco", "jalisco@ikeasistencia.com")  # Jalisco no viene en la selección
     headers = _cabina(client)
 
     r = _enviar(client, headers, [3001, 3002])
@@ -164,34 +164,48 @@ def test_un_solo_correo_con_toda_la_lista_a_los_proveedores_de_esas_entidades(cl
     assert len(capturados) == 1  # UN correo, no uno por entidad
     assert capturados[0]["expedientes"] == [3001, 3002]  # con la lista completa
     assert capturados[0]["destinatarios"] == [
-        "campeche1@example.com", "campeche2@example.com", "yucatan@example.com"
+        "campeche1@ikeasistencia.com", "campeche2@ikeasistencia.com", "yucatan@ikeasistencia.com"
     ]
 
 
 def test_estado_de_mexico_coincide_con_mexico_de_sql_server(client, capturados):
-    _proveedor("PROVMEX001", "Estado de México", "edomex@example.com")
-    _proveedor("PROVCDM001", "Ciudad de México", "cdmx@example.com")
+    _proveedor("PROVMEX001", "Estado de México", "edomex@ikeasistencia.com")
+    _proveedor("PROVCDM001", "Ciudad de México", "cdmx@ikeasistencia.com")
     headers = _cabina(client)
 
     r = _enviar(client, headers, [3003])
 
     assert r.status_code == 200, r.text
-    assert capturados[0]["destinatarios"] == ["edomex@example.com"]
+    assert capturados[0]["destinatarios"] == ["edomex@ikeasistencia.com"]
 
 
 def test_proveedor_inactivo_no_recibe_correo(client, capturados):
-    _proveedor("PROVCAM001", "Campeche", "activo@example.com")
-    _proveedor("PROVCAM002", "Campeche", "inactivo@example.com")
+    _proveedor("PROVCAM001", "Campeche", "activo@ikeasistencia.com")
+    _proveedor("PROVCAM002", "Campeche", "inactivo@ikeasistencia.com")
     accesos_repo.inactivar_acceso("PROVCAM002")
     headers = _cabina(client)
 
     _enviar(client, headers, [3001])
 
-    assert capturados[0]["destinatarios"] == ["activo@example.com"]
+    assert capturados[0]["destinatarios"] == ["activo@ikeasistencia.com"]
+
+
+def test_correo_guardado_de_otro_dominio_no_recibe_nada(client, capturados):
+    # Guardado directo en la base, como los que existían antes del candado de dominio.
+    _proveedor("PROVCAM001", "Campeche", "campeche@ikeasistencia.com")
+    _proveedor("PROVCAM002", "Campeche", "externo@gmail.com")
+    _proveedor("PROVYUC001", "Yucatán", "falso@ikeasistencia.com.mx")
+    headers = _cabina(client)
+
+    data = _enviar(client, headers, [3001, 3002]).json()
+
+    assert capturados[0]["destinatarios"] == ["campeche@ikeasistencia.com"]
+    assert data["destinatarios"] == 1
+    assert data["entidades_sin_proveedor"] == ["Yucatán"]
 
 
 def test_avisa_que_entidades_no_tienen_proveedor(client):
-    _proveedor("PROVCAM001", "Campeche", "campeche@example.com")
+    _proveedor("PROVCAM001", "Campeche", "campeche@ikeasistencia.com")
     headers = _cabina(client)
 
     data = _enviar(client, headers, [3001, 3002, 3004]).json()
@@ -216,15 +230,15 @@ def test_sin_ningun_proveedor_no_sale_correo_pero_si_cambia_el_estatus(client, c
 
 
 def test_proveedor_no_puede_enviar_correo(client):
-    headers = _sesion(client, "RFCPROTEST", accesos_repo.PERFIL_PROVEEDOR, "Campeche", "p@example.com")
+    headers = _sesion(client, "RFCPROTEST", accesos_repo.PERFIL_PROVEEDOR, "Campeche", "p@ikeasistencia.com")
     assert _enviar(client, headers, [3001]).status_code == 403
 
 
 # ---------- Contador y tope diario ----------
 
 def test_el_contador_cuenta_un_lugar_por_destinatario(client):
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
-    _proveedor("PROVCAM002", "Campeche", "c2@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
+    _proveedor("PROVCAM002", "Campeche", "c2@ikeasistencia.com")
     headers = _cabina(client)
 
     _enviar(client, headers, [3001])
@@ -234,8 +248,8 @@ def test_el_contador_cuenta_un_lugar_por_destinatario(client):
 
 def test_el_contador_puede_contar_un_lugar_por_mensaje(client, monkeypatch):
     _configurar(monkeypatch, SMTP_CUENTA_POR_DESTINATARIO="false")
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
-    _proveedor("PROVCAM002", "Campeche", "c2@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
+    _proveedor("PROVCAM002", "Campeche", "c2@ikeasistencia.com")
     headers = _cabina(client)
 
     _enviar(client, headers, [3001])
@@ -248,7 +262,7 @@ def test_cerca_del_tope_pide_confirmacion_sin_hacer_nada(client, monkeypatch, ca
     from app.services import cuota_correos_service
 
     cuota_correos_service.reservar("corte", 7)
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
     headers = _cabina(client)
 
     data = _enviar(client, headers, [3001]).json()
@@ -271,7 +285,7 @@ def test_en_el_tope_no_sale_correo_pero_los_expedientes_pasan_a_espera(client, m
     from app.services import cuota_correos_service
 
     cuota_correos_service.reservar("corte", 3)
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
     headers = _cabina(client)
 
     data = _enviar(client, headers, [3001]).json()
@@ -296,8 +310,8 @@ def test_si_el_envio_no_cabe_completo_no_sale_a_medias(client, monkeypatch, capt
     from app.services import cuota_correos_service
 
     cuota_correos_service.reservar("corte", 2)
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
-    _proveedor("PROVCAM002", "Campeche", "c2@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
+    _proveedor("PROVCAM002", "Campeche", "c2@ikeasistencia.com")
     headers = _cabina(client)
 
     data = _enviar(client, headers, [3001]).json()
@@ -317,7 +331,7 @@ def test_si_falla_el_servidor_de_correo_no_cambia_nada(client, monkeypatch):
         raise email_service.ErrorEnvioCorreo("timeout")
 
     monkeypatch.setattr(email_service, "_enviar", falla)
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
     headers = _cabina(client)
 
     r = _enviar(client, headers, [3001])
@@ -332,14 +346,14 @@ def test_cuota_la_ven_cabina_y_administrador_pero_no_proveedor(client):
     data = client.get("/correos-enviados/cuota", headers=_cabina(client)).json()
     assert data == {"usados": 0, "limite": 100, "aviso": 80, "restantes": 100, "nivel": "normal", "reenvio_horas": 8}
     assert client.get("/correos-enviados/cuota", headers=_admin(client)).status_code == 200
-    proveedor = _sesion(client, "RFCPROTEST", accesos_repo.PERFIL_PROVEEDOR, "Campeche", "p@example.com")
+    proveedor = _sesion(client, "RFCPROTEST", accesos_repo.PERFIL_PROVEEDOR, "Campeche", "p@ikeasistencia.com")
     assert client.get("/correos-enviados/cuota", headers=proveedor).status_code == 403
 
 
 # ---------- Freno de reenvío ----------
 
 def test_no_se_puede_reenviar_antes_de_8_horas(client):
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
     headers = _cabina(client)
     assert _enviar(client, headers, [3001]).json()["correo_enviado"] is True
 
@@ -351,7 +365,7 @@ def test_no_se_puede_reenviar_antes_de_8_horas(client):
 
 
 def test_si_un_expediente_esta_frenado_no_se_manda_ninguno(client, capturados):
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
     headers = _cabina(client)
     _enviar(client, headers, [3001])
     from app.repositories import estatus_repo
@@ -366,7 +380,7 @@ def test_si_un_expediente_esta_frenado_no_se_manda_ninguno(client, capturados):
 
 
 def test_pasadas_8_horas_ya_se_puede_reenviar(client):
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
     headers = _cabina(client)
     _enviar(client, headers, [3001])
     from app.db.local_store import get_local_connection
@@ -385,7 +399,7 @@ def test_pasadas_8_horas_ya_se_puede_reenviar(client):
 def test_si_no_salio_correo_el_freno_no_aplica(client):
     headers = _cabina(client)
     assert _enviar(client, headers, [3001]).json()["motivo_sin_correo"] == "sin_proveedores"
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
 
     r = _enviar(client, headers, [3001])
 
@@ -409,7 +423,7 @@ def test_corte_exige_una_direccion_valida(client):
     r = client.post(f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "no-es-correo"}, headers=headers)
     assert r.status_code == 422
     r = client.post(
-        f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "a@example.com, b@example.com"}, headers=headers
+        f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "a@ikeasistencia.com, b@ikeasistencia.com"}, headers=headers
     )
     assert r.status_code == 422  # una sola dirección
 
@@ -419,22 +433,38 @@ def test_corte_cuenta_contra_el_tope_y_se_bloquea_al_llegar(client, monkeypatch)
     headers = _admin(client)
     corte_id = _corte(client, headers)
 
-    r = client.post(f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "cabina@example.com"}, headers=headers)
+    r = client.post(f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "cabina@ikeasistencia.com"}, headers=headers)
     assert r.status_code == 200, r.text
     assert _usados(client, headers) == 1
 
-    r = client.post(f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "cabina@example.com"}, headers=headers)
+    r = client.post(f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "cabina@ikeasistencia.com"}, headers=headers)
     assert r.status_code == 409
     assert "límite" in r.json()["detail"]
     # El Excel se puede seguir descargando.
     assert client.get(f"/expedientes/corte/{corte_id}/descargar", headers=headers).status_code == 200
 
 
+def test_corte_solo_se_envia_a_correos_de_la_empresa(client):
+    headers = _admin(client)
+    corte_id = _corte(client, headers)
+
+    for destinatario in ("alguien@gmail.com", "alguien@ikeasistencia.com.mx", "alguien@otroikeasistencia.com"):
+        r = client.post(f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": destinatario}, headers=headers)
+        assert r.status_code == 422, destinatario
+        assert "no pertenece al dominio de @ikeasistencia.com" in r.text
+    assert _usados(client, headers) == 0  # el rechazo no gasta del tope
+
+    r = client.post(
+        f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "Cabina@IkeAsistencia.com"}, headers=headers
+    )
+    assert r.status_code == 200, r.text
+
+
 # ---------- GraphQL usa las mismas reglas ----------
 
 def test_graphql_tambien_pide_confirmacion_cerca_del_tope(client, monkeypatch):
     _configurar(monkeypatch, SMTP_LIMITE_DIARIO=2, SMTP_AVISO_LIMITE=1)
-    _proveedor("PROVCAM001", "Campeche", "c1@example.com")
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
     headers = _cabina(client)
     consulta = (
         "mutation { enviarCorreoProveedores(datos: {expedientes: [3001]%s}) "

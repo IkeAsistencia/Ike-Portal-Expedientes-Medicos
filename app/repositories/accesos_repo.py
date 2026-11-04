@@ -362,16 +362,18 @@ def listar_accesos() -> list[dict]:
 def listar_proveedores_con_correo() -> list[dict]:
     """
     Proveedores ACTIVOS con correo capturado: a quiénes se les puede mandar
-    "Enviar correo a proveedores". Regresa [{nombre, entidad, correo}].
+    "Enviar correo a proveedores". Regresa [{rfc, nombre, entidad, correo}].
     """
     with get_local_connection() as conn:
         rows = conn.execute(
-            "SELECT nombre, entidad, correo FROM usuarios_acceso "
+            "SELECT rfc, nombre, entidad, correo FROM usuarios_acceso "
             "WHERE rfc IN (SELECT rfc FROM usuarios_perfiles WHERE perfil = ?) "
             "AND activo = 1 AND correo IS NOT NULL AND TRIM(correo) NOT IN ('', ?)",
             (PERFIL_PROVEEDOR, SIN_APLICA),
         ).fetchall()
-    return [{"nombre": r["nombre"], "entidad": r["entidad"], "correo": r["correo"].strip()} for r in rows]
+    return [
+        {"rfc": r["rfc"], "nombre": r["nombre"], "entidad": r["entidad"], "correo": r["correo"].strip()} for r in rows
+    ]
 
 
 def inactivar_acceso(rfc: str) -> bool:

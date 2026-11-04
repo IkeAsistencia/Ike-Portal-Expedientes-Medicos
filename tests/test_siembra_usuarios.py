@@ -53,8 +53,11 @@ def test_validar_fila_proveedor_exige_entidad_y_correo():
     fila = {"rfc": "PROV000001", "nombre": "X", "rol": "PROVEEDOR", "entidad": None, "correo": None}
     assert validar_fila(fila) is not None
 
-    fila["entidad"], fila["correo"] = "Jalisco", "x@example.com"
+    fila["entidad"], fila["correo"] = "Jalisco", "x@ikeasistencia.com"
     assert validar_fila(fila) is None
+
+    fila["correo"] = "x@gmail.com"  # solo correos de la empresa
+    assert "ikeasistencia.com" in validar_fila(fila)
 
 
 def test_sembrar_desde_excel_aplica_solo_filas_validas(tmp_path, monkeypatch):

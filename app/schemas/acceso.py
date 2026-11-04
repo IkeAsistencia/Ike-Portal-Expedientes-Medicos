@@ -3,6 +3,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
+from app.core.correo_empresa import MENSAJE_DOMINIO_NO_PERMITIDO, es_correo_de_empresa
 from app.repositories.accesos_repo import (
     ENTIDADES_MEXICO,
     PERFIL_PROVEEDOR,
@@ -145,6 +146,8 @@ class AltaAccesoInput(BaseModel):
                 raise ValueError("Debes asignarle un correo al perfil Proveedor.")
             if not _correo_valido(self.correo.strip()):
                 raise ValueError("El correo no tiene un formato válido.")
+            if not es_correo_de_empresa(self.correo):
+                raise ValueError(MENSAJE_DOMINIO_NO_PERMITIDO)
             self.correo = self.correo.strip()
         else:
             # Cabina/Administrador no usan entidad ni correo -- "NA" en vez de vacío.
@@ -167,6 +170,8 @@ class AgregarPerfilInput(BaseModel):
                 raise ValueError("Debes asignarle una entidad válida al perfil Proveedor.")
             if not self.correo or not _correo_valido(self.correo.strip()):
                 raise ValueError("Debes asignarle un correo válido al perfil Proveedor.")
+            if not es_correo_de_empresa(self.correo):
+                raise ValueError(MENSAJE_DOMINIO_NO_PERMITIDO)
             self.correo = self.correo.strip()
         else:
             self.entidad = None

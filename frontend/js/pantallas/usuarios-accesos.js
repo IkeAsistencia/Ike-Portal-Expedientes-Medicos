@@ -5,6 +5,7 @@
 import { api } from "../core/api.js";
 import { escapeHtml } from "../core/formato.js";
 import { toast } from "../core/toast.js";
+import { esCorreoDeEmpresa, MENSAJE_DOMINIO_NO_PERMITIDO } from "../core/correo-empresa.js";
 import { NOMBRES_PERFIL, PERFIL_ADMINISTRADOR, PERFIL_PROVEEDOR } from "../core/sesion.js";
 import { cargarCatalogoEntidades, poblarSelectEntidades } from "../core/catalogos.js";
 import { ICONOS } from "../componentes/iconos.js";
@@ -42,7 +43,7 @@ const PLANTILLA = `
         </div>
         <div class="field hidden" id="acc-correo-field">
           <label for="acc-correo">Correo (obligatorio para Proveedor)</label>
-          <input type="email" id="acc-correo" placeholder="proveedor@ejemplo.com" autocomplete="off">
+          <input type="email" id="acc-correo" placeholder="proveedor@ikeasistencia.com" autocomplete="off">
         </div>
       </div>
       <div class="filters-actions">
@@ -249,6 +250,10 @@ async function darDeAlta() {
     toast("Debes asignarle un correo al perfil Proveedor.", "error");
     return;
   }
+  if (perfil === PERFIL_PROVEEDOR && !esCorreoDeEmpresa(correo)) {
+    toast(MENSAJE_DOMINIO_NO_PERMITIDO, "error");
+    return;
+  }
   const btn = $("acc-dar-alta-btn");
   btn.disabled = true;
   try {
@@ -391,7 +396,7 @@ function crearModalPerfil() {
       </div>
       <div class="field hidden" id="agregar-perfil-correo-field">
         <label for="agregar-perfil-correo">Correo (obligatorio para Proveedor)</label>
-        <input type="email" id="agregar-perfil-correo" placeholder="proveedor@ejemplo.com" autocomplete="off">
+        <input type="email" id="agregar-perfil-correo" placeholder="proveedor@ikeasistencia.com" autocomplete="off">
       </div>
       <div class="hint">Entra con el mismo RFC y la misma contraseña; en el login elige con qué perfil.</div>`,
     pie: `
@@ -435,6 +440,10 @@ async function guardarPerfil() {
   const correo = $("agregar-perfil-correo").value.trim();
   if (perfil === PERFIL_PROVEEDOR && (!entidad || !correo)) {
     toast("Para el perfil Proveedor captura la entidad y el correo.", "error");
+    return;
+  }
+  if (perfil === PERFIL_PROVEEDOR && !esCorreoDeEmpresa(correo)) {
+    toast(MENSAJE_DOMINIO_NO_PERMITIDO, "error");
     return;
   }
   const btn = $("agregar-perfil-modal-guardar");

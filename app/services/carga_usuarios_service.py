@@ -9,6 +9,7 @@ Formato esperado: ver el encabezado de scripts/cargar_usuarios_excel.py.
 
 import openpyxl
 
+from app.core.correo_empresa import DOMINIO_EMPRESA, es_correo_de_empresa
 from app.repositories import accesos_repo
 from app.schemas.acceso import PATRON_RFC
 
@@ -67,6 +68,8 @@ def validar_fila(fila: dict) -> str | None:
 
     if perfil == accesos_repo.PERFIL_PROVEEDOR and (not fila["entidad"] or not fila["correo"]):
         return "faltan ENTIDAD/CORREO, obligatorios para Proveedor"
+    if perfil == accesos_repo.PERFIL_PROVEEDOR and not es_correo_de_empresa(fila["correo"]):
+        return f"el correo no es del dominio @{DOMINIO_EMPRESA}"
     return None
 
 
