@@ -18,6 +18,8 @@ import {
 } from "../core/reglas-expedientes.js";
 import { ICONOS } from "../componentes/iconos.js";
 import { kpiHtml } from "../componentes/kpi.js";
+import { actualizarCuotaCorreos, cuotaCorreosHtml } from "../componentes/cuota-correos.js";
+import { enviarCorreoAProveedores } from "../componentes/enviar-correo-proveedores.js";
 import { limitarADigitos } from "../componentes/campo-numerico.js";
 import { crearMultiselectCuentas } from "../componentes/multiselect-cuentas.js";
 import { filtrosExpedientesHtml, leerParametrosBusqueda } from "../componentes/filtros-expedientes.js";
@@ -49,7 +51,8 @@ const PLANTILLA = `
   <div class="card tono-verdeazul">
     <div class="card-header">
       <h2>Resultados de la búsqueda</h2>
-      <div style="display:flex;gap:8px;">
+      <div class="acciones-correo">
+        ${cuotaCorreosHtml("pa-cuota-correos")}
         <button class="btn btn-secondary" id="pa-btn-generar-corte">Generar corte</button>
         <button class="btn btn-primary" id="pa-btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
       </div>
@@ -231,19 +234,15 @@ async function enviarCorreoProveedores() {
   const btn = $("pa-btn-enviar-correo-proveedores");
   btn.disabled = true;
   try {
-    const data = await api("/expedientes/enviar-correo-proveedores", {
-      method: "POST",
-      body: { expedientes: Array.from(seleccionados) },
-    });
-    toast(`Correo enviado para ${data.enviados} expediente(s).`, "success");
+    const data = await enviarCorreoAProveedores(Array.from(seleccionados));
+    if (!data) return;
     seleccionados.clear();
     $("pa-chk-todos").checked = false;
     // El envío marca automáticamente esos expedientes como "En Espera de
-    // Respuesta" -- se refleja aquí y también en Expedientes (mismo dato de fondo).
+    // Respuesta" (aunque no haya salido correo por el tope) -- se refleja
+    // aquí y también en Expedientes (mismo dato de fondo).
     data.expedientes.forEach(exp => notificarCambioEstatus(exp, "En Espera de Respuesta"));
     refrescarVista();
-  } catch (err) {
-    toast(err.message, "error");
   } finally {
     btn.disabled = false;
   }
@@ -319,12 +318,14 @@ export function aplicarPermisos() {
   $("pa-f-entidad-field").classList.toggle("hidden-perfil", !proveedor);
   $("pa-btn-enviar-correo-proveedores").classList.toggle("hidden-perfil", proveedor || admin);
   $("pa-btn-generar-corte").classList.toggle("hidden-perfil", proveedor || cabina);
+  $("pa-cuota-correos").classList.toggle("hidden-perfil", proveedor);
   $("pa-kpi-seguimiento-card").classList.toggle("hidden-perfil", !cabina);
   aplicarEtiquetasKPI();
 }
 
 export function alEntrar() {
   $("pa-f-expediente").focus();
+  if (!esPerfilProveedor()) actualizarCuotaCorreos();
   if (expedientesActuales.length > 0) {
     // Ya se había buscado antes: solo refresca la vista con lo que ya
     // tenemos en memoria -- no resetea filtros ni vuelve a preguntarle al servidor.

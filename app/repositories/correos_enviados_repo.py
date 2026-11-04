@@ -12,15 +12,45 @@ from app.repositories import accesos_repo
 
 
 def registrar_envio(
-    tipo: str, destinatario: str, expedientes: list[int], rfc_envio: str, simulado: bool
+    tipo: str,
+    destinatario: str,
+    expedientes: list[int],
+    rfc_envio: str,
+    simulado: bool,
+    motivo_sin_correo: str | None = None,
 ) -> None:
+    """`motivo_sin_correo`: None si el correo sí salió; si no, por qué no
+    ('limite' o 'sin_proveedores'). El registro se guarda igual, porque los
+    expedientes sí pasaron a "En Espera de Respuesta" (y el corte usa este
+    historial para saber quién y cuándo los mandó)."""
     with get_local_connection() as conn:
         conn.execute(
-            "INSERT INTO correos_enviados (tipo, destinatario, expedientes, rfc_envio, simulado, fecha) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (tipo, destinatario, json.dumps(expedientes), rfc_envio, int(simulado), ahora_local()),
+            "INSERT INTO correos_enviados (tipo, destinatario, expedientes, rfc_envio, simulado, fecha, motivo_sin_correo) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (tipo, destinatario, json.dumps(expedientes), rfc_envio, int(simulado), ahora_local(), motivo_sin_correo),
         )
         conn.commit()
+
+
+def ultimo_correo_desde(expedientes: list[int], desde: str) -> dict[int, str]:
+    """
+    Para el freno de reenvío: de estos expedientes, cuáles recibieron un
+    correo que SÍ salió (motivo_sin_correo NULL) a partir de `desde`
+    ("aaaa-mm-dd HH:MM:SS"). Regresa {expediente: fecha del más reciente}.
+    """
+    buscados = set(expedientes)
+    with get_local_connection() as conn:
+        rows = conn.execute(
+            "SELECT expedientes, fecha FROM correos_enviados WHERE fecha >= ? AND motivo_sin_correo IS NULL",
+            (desde,),
+        ).fetchall()
+
+    ultimos: dict[int, str] = {}
+    for row in rows:
+        for cl_expediente in json.loads(row["expedientes"]):
+            if cl_expediente in buscados and row["fecha"] > ultimos.get(cl_expediente, ""):
+                ultimos[cl_expediente] = row["fecha"]
+    return ultimos
 
 
 def listar_por_expediente(cl_expediente: int) -> list[dict]:

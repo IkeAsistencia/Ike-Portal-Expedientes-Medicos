@@ -18,3 +18,9 @@ PyJWT==2.15.0
 strawberry-graphql[fastapi]==0.327.7
 openpyxl==3.1.5
 httpx==0.27.2
+# Secretos en AWS Secrets Manager (ver app/core/secretos_aws.py). boto3 es
+# el SDK oficial; trae botocore, que es donde viven las excepciones
+# (ClientError) que maneja ese módulo. Solo se importa si
+# SECRETOS_AWS_MODO != "off", pero va en requirements de producción para que
+# la imagen ya lo traiga y no dependa de instalar nada a mano en el servidor.
+boto3==1.43.122

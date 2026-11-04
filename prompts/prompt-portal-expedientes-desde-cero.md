@@ -54,9 +54,9 @@ genera cortes en Excel.
 
 | Perfil | Qué hace | Pantallas |
 |---|---|---|
-| **Administrador** | Da de alta y administra accesos; configura cuentas; genera cortes en Excel | Usuarios y Accesos (inicio), Configuración Cuentas, Expedientes (sin entrar al detalle) |
+| **Administrador** | Da de alta y administra accesos; configura cuentas; genera cortes en Excel; administra el padrón de proveedores | Usuarios y Accesos (inicio), Configuración Cuentas, Cuentas Especiales (colores), Historial de Correos, Expedientes (sin entrar al detalle), Directorio de Proveedores (carga del padrón, solicitudes de alta, métricas) |
 | **Cabina Médica** (Coordinador) | Revisa expedientes, los manda a proveedores, revisa respuestas y decide el estado | Expedientes (inicio), Seguimiento |
-| **Proveedor** | Atiende los expedientes que le mandan y registra su seguimiento | Expedientes (solo su bandeja), Seguimiento |
+| **Proveedor** | Atiende los expedientes que le mandan, registra su seguimiento y gestiona su presencia en el Directorio | Expedientes (solo su bandeja), Seguimiento, Directorio de Proveedores (buscar, agendar citas, dar de alta médicos "fuera de la red") |
 
 - Qué pantalla ve cada perfil se decide en **un solo lugar** del frontend
   y el backend valida cada permiso por su cuenta (nunca confiar solo en
@@ -165,7 +165,33 @@ no se puede cambiar.
 ### 5.6 Corte de expedientes (modal, Administrador)
 - Solo con expedientes seleccionados que compartan el mismo estatus
   (validado también en el backend). Genera un Excel, lo guarda, muestra
-  una vista previa, permite descargarlo y "Confirmar y enviar" por correo.
+  una vista previa, permite descargarlo y "Confirmar y enviar" por correo,
+  eligiendo el destinatario ("Enviar a") en vez de resolverlo por entidad.
+  Cuenta contra el mismo tope diario que "Enviar correo a proveedores".
+
+### 5.7 Directorio de Proveedores (Proveedor y Administrador; Cabina no la usa)
+- **Buscar** (Proveedor): tarjetas por especialidad médica, filtro por
+  entidad/municipio y tipo de proveedor (semáforo de colores); resultados
+  del padrón propio del portal. Si no hay ninguno en la zona, botón para
+  **buscar fuera de la red** (Google Places API) con vista de lista y de
+  mapa (Maps JavaScript API; sin la segunda llave, solo lista).
+- **Agendar cita**: horario del médico elegido, con folio propio; se puede
+  coordinar directo desde un expediente en Seguimiento. Cancelar exige
+  motivo y queda en la bitácora del expediente si vino de uno.
+- **Alta de médico "Fuera de la red"** (Proveedor o Administrador captura,
+  solo Administrador aprueba/rechaza): nombre, especialidad y domicilio
+  obligatorios; RFC y cédula profesional opcionales (se valida solo el
+  **formato**, no se consulta el Registro Nacional de Profesionistas).
+  Admite subir cédula y constancia de situación fiscal. Al aprobarse entra
+  al padrón con su propia clave.
+- **Carga del padrón** (Administrador): plantilla de Excel con dos hojas,
+  "Padrón de proveedores" (dentro de la red) y "Proveedores red de apoyo";
+  la carga es **incremental** (agrega y actualiza, nunca borra). Un
+  proceso aparte completa las coordenadas que falten con el Catálogo CLUES
+  de la Secretaría de Salud, sin pisar las que ya vinieron en el Excel.
+- **Cuentas Especiales** (Administrador): color y prefijo configurables
+  por cuenta, de una paleta fija; se usa para distinguir cuentas en las
+  tablas del portal.
 
 ## 6. Integración con sistema central (SISE)
 
@@ -228,6 +254,12 @@ Todas exigen `Authorization: Bearer <token>`, salvo login y salud.
 | `POST /seguimiento/comprobante`, `GET /seguimiento/comprobante/{exp}`, `GET .../archivo` | Comprobante de pago |
 | `GET/POST/DELETE /configuracion/cuentas`, `POST /configuracion/cuentas/limpiar` | Configuración de cuentas |
 | `GET/POST /admin/accesos`, `GET /admin/accesos/entidades`, `POST /admin/accesos/{rfc}/inactivar` · `/reactivar` · `/resetear-password` · `/entidad` | Accesos (Administrador) |
+| `GET /correos-enviados`, `/correos-enviados/cuota` | Historial de Correos y tope diario (Administrador) |
+| `GET /directorio-proveedores`, `/directorio-proveedores/especialidades`, `/directorio-proveedores/fuera-de-red-google-maps`, `/directorio-proveedores/configuracion-mapa` | Buscar en el Directorio (padrón y fuera de la red) |
+| `GET/POST /directorio-proveedores/citas`, `/directorio-proveedores/citas/{folio}/cancelar`, `/directorio-proveedores/{clave}/agenda` | Agenda y citas con proveedores |
+| `GET/POST /proveedores-catalogo`, `/proveedores-catalogo/plantilla`, `/proveedores-catalogo/cargar` | Carga del padrón por Excel (Administrador) |
+| `GET/POST/PUT/DELETE /solicitudes-alta-medico`, `/solicitudes-alta-medico/{folio}`, `/solicitudes-alta-medico/{folio}/estatus` | Alta de médico "Fuera de la red" |
+| `GET/PUT/DELETE /admin/cuentas-etiquetas`, `/admin/cuentas-etiquetas/paleta` | Colores de Cuentas (Administrador) |
 | `GET /health` | Monitoreo, sin autenticación |
 
 ## 9. Seguridad
@@ -254,6 +286,14 @@ Todas exigen `Authorization: Bearer <token>`, salvo login y salud.
   del corte con el Excel adjunto y alertas del job. Si `SMTP_HOST` y
   `SMTP_REMITENTE` están vacíos, el envío queda **simulado** (solo se
   registra en el log) y la app funciona igual.
+- **Tope diario de correos**: la cuenta de correo tiene un límite de envíos
+  al día, compartido por "Enviar correo a proveedores" y "Generar corte".
+  El portal lleva el conteo (reiniciado a medianoche, hora de México), pide
+  confirmación al acercarse al tope y bloquea el envío al llegar.
+  "Enviar correo a proveedores" resuelve destinatarios por entidad; el
+  corte usa un destinatario elegido a mano ("Enviar a"). Un **freno de
+  reenvío** evita mandar correo dos veces sobre el mismo expediente antes
+  de que pasen N horas.
 - **Job de alertas** (`jobs/validar_estatus_proveedor.py`): script que
   corre, revisa y termina; se programa cada hora (Programador de tareas en
   Windows, cron en Linux). Alerta **naranja** de 8 a 24 horas sin
@@ -345,8 +385,10 @@ frontend/
 
 ## 15. Pendientes por confirmar
 
-- Datos del servidor SMTP y del remitente, y de dónde sale el correo real
-  del proveedor.
+- Datos del servidor SMTP real y del remitente (el correo del proveedor ya
+  se captura en Usuarios y Accesos).
+- Cómo cuenta el servidor de correo real el tope diario (por mensaje o por
+  destinatario) — mientras tanto se usa el criterio más seguro.
 - Si la lista fija de cuentas permitidas fue solo para el piloto.
 - Si el `LEFT JOIN` a `dbo.CitaxExpediente` del listado principal se puede
   quitar.

@@ -48,6 +48,15 @@ class Settings(BaseSettings):
     # (estatus del expediente, grid de Configuración Cuentas)
     local_db_path: str = "./data/app_local.db"
 
+    # --- Siembra automática de usuarios en el primer arranque ---
+    # Ruta a un Excel (RFC/NOMBRE/ROL, ver scripts/cargar_usuarios_excel.py)
+    # que el servidor carga SOLO si la tabla de accesos está vacía -- así no
+    # hace falta correr nada a mano al desplegar por primera vez, y no se
+    # repite en los arranques siguientes aunque la variable se quede puesta.
+    # El archivo NO viaja en el repositorio (trae RFC y nombre reales del
+    # equipo): se copia a mano al servidor, junto con el .env.
+    seed_usuarios_ruta: Optional[str] = None
+
     # --- Catálogo de cuentas con restricción fija por default (ver sql/README.md) ---
     # (el catálogo de subservicios ya NO usa una lista fija: ahora es
     # dinámico en cascada del combo Servicio, vía dbo.sp_GetSubServicios2)
@@ -98,6 +107,24 @@ class Settings(BaseSettings):
     # -- útil para probar en un ambiente de desarrollo sin mandarle correos
     # a nadie más. Vacío = se manda a smtp_remitente, como antes.
     smtp_destinatario_prueba: Optional[str] = None
+    # Si el servidor de correo no responde, la petición no se queda colgada.
+    smtp_timeout_segundos: float = 15.0
+
+    # --- Tope diario de correos (ver app/services/cuota_correos_service.py) ---
+    # La cuenta de correo que nos dieron permite 100 envíos al día. El tope es
+    # de TODO el portal (Cabina y Administrador comparten el mismo), y el día
+    # se corta a medianoche, hora del centro de México.
+    smtp_limite_diario: int = 100
+    # A partir de cuántos correos usados se le pide confirmación a quien envía.
+    smtp_aviso_limite: int = 80
+    # Cómo cuenta un correo contra el tope: True = cada destinatario cuenta 1
+    # (un correo a 8 proveedores gasta 8); False = cada mensaje cuenta 1, sin
+    # importar a cuántos vaya. Pendiente de confirmar con quien administra la
+    # cuenta de correo; mientras tanto se usa el criterio más seguro (True).
+    smtp_cuenta_por_destinatario: bool = True
+    # Freno de reenvío: horas que deben pasar para volver a mandarle correo a
+    # proveedores sobre el mismo expediente.
+    correo_reenvio_horas: int = 8
 
     # --- Sesión / JWT emitido por esta app tras el login ---
     # Genera uno propio por ambiente, ej: python -c "import secrets; print(secrets.token_hex(32))"
@@ -107,6 +134,27 @@ class Settings(BaseSettings):
     jwt_expire_minutes: int = 480  # 8 horas
     # Sin actividad durante este tiempo, la sesión se cierra (ver app/core/security.py).
     sesion_inactividad_minutos: int = 30
+
+    # --- Secretos en AWS Secrets Manager (ver app/core/secretos_aws.py) ---
+    # En AWS la infraestructura no guarda las llaves en el `.env` del
+    # servidor: las administra Secrets Manager. Al arrancar, la app las lee y
+    # las deja en el entorno, y GANAN sobre lo que diga el `.env` (así una
+    # llave vieja olvidada en el servidor no puede tener prioridad sobre el
+    # secreto administrado).
+    #
+    # "off"         -> no toca AWS (default: desarrollo y pruebas).
+    # "obligatorio" -> si el secreto no se puede leer, la app NO arranca.
+    #                  Es el modo para producción: es preferible un servicio
+    #                  caído a uno "funcionando" con Google Maps apagado o con
+    #                  un JWT_SECRET_KEY inseguro.
+    # "opcional"    -> si falla, sigue con el entorno (para la primera puesta
+    #                  en marcha, mientras se ajustan los permisos de IAM).
+    secretos_aws_modo: str = "off"
+    secretos_aws_nombre: str = "encryption-portal-medicos"
+    secretos_aws_region: str = "mx-central-1"
+    # Solo si el secreto se guardó como texto plano (una llave suelta) en vez
+    # de JSON: dice a qué variable corresponde ese valor.
+    secretos_aws_clave: Optional[str] = None
 
     # --- Proxy delante de la app (ver app/core/red.py) ---
     # Cuántos proxies de confianza agregan su IP a X-Forwarded-For antes de
@@ -199,6 +247,16 @@ class ArranqueSettings(BaseSettings):
     # autenticación. Apagado por default; enciéndelo solo en desarrollo
     # (GRAPHQL_IDE_HABILITADO=true en tu .env local).
     graphql_ide_habilitado: bool = False
+
+    # Mismos datos que SECRETOS_AWS_* en Settings -- repetidos aquí a
+    # propósito: para leer el secreto hay que construir ALGO antes de tener
+    # los secretos, y Settings exige DB_SERVER/DB_NAME (ver el docstring de
+    # esta clase). Con ArranqueSettings se puede preguntar "¿en qué modo
+    # estoy?" sin necesitar todavía la base.
+    secretos_aws_modo: str = "off"
+    secretos_aws_nombre: str = "encryption-portal-medicos"
+    secretos_aws_region: str = "mx-central-1"
+    secretos_aws_clave: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

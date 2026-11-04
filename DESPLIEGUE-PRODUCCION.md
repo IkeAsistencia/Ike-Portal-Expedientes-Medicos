@@ -7,7 +7,7 @@
 | Sistema | Portal Promédico (expedientes médicos y directorio de proveedores) |
 | Repositorio | `IkeAsistencia/Ike-Portal-Expedientes-Medicos` |
 | Destino | AWS — EC2 Linux detrás de CloudFront + WAF + ALB |
-| Última actualización | 21 de octubre de 2026 |
+| Última actualización | 30 de octubre de 2026 |
 
 ---
 
@@ -112,11 +112,17 @@ dos usuarios distintos y conviene que así sea.
 | Requerimiento | Detalle | Si falta |
 |---|---|---|
 | Host, puerto, usuario, contraseña y remitente | Del SMTP corporativo | Degrada: los correos quedan en "modo simulado" (se registran en el log y no salen) |
-| **Buzón del proveedor** | De dónde se obtiene el correo al que hay que escribirle | **Bloquea la función de alertas**: hoy la consulta solo trae el correo del paciente, no el del proveedor |
+| **Correo y entidad de cada proveedor** | Se capturan en Usuarios y Accesos al dar de alta el perfil Proveedor | A las entidades sin proveedor no les llega correo (Cabina ve el aviso; los expedientes igual pasan a "En Espera de Respuesta") |
+| **Tope de envíos de la cuenta** | 100 al día (`SMTP_LIMITE_DIARIO`). Falta confirmar si el servidor cuenta por mensaje o por destinatario (`SMTP_CUENTA_POR_DESTINATARIO`) | Si el tope real es menor que el configurado, el servidor de correo rechazaría los envíos de más |
 
-Este segundo punto sigue pendiente de definición desde antes y conviene
-resolverlo antes de salir: el envío funciona de punta a punta, pero sin el
-buzón correcto las alertas no llegan a quien deben.
+"Enviar correo a proveedores" manda **un solo correo** con toda la
+selección, en copia oculta, a los proveedores de las entidades que aparecen
+en ella. "Generar corte" (Administrador) también manda correo, con un
+**destinatario a elegir** ("Enviar a") en vez de resolverlo por entidad.
+Ambos flujos comparten el mismo contador diario
+(`app/services/cuota_correos_service.py`): el portal lleva el conteo del
+día, pide confirmación al acercarse al tope y, al llegar, ya no deja salir
+correos (ver `app/services/envio_correo_service.py`).
 
 ### 3.4 Places API de Google Maps
 
@@ -298,14 +304,43 @@ TZ=America/Mexico_City
 
 El `cd` no es opcional: sin él no encuentra el `.env` ni el paquete `app`.
 
-### Paso 7 — Primer administrador
+### Paso 7 — Primeros usuarios (Administrador y Cabina)
+
+Si Negocio ya entregó la lista de RFC/Nombre/Rol del equipo (Excel con esas
+tres columnas, ver `scripts/cargar_usuarios_excel.py`), **no hay que dar de
+alta a nadie a mano**: copia ese archivo al servidor (junto con el `.env`,
+fuera del repositorio -- trae RFC y nombres reales) y apunta
+`SEED_USUARIOS_RUTA` a su ruta antes del primer arranque. El servicio lo
+carga solo, una sola vez: revisa si la tabla de accesos está vacía y, si lo
+está, da de alta cada fila (sin contraseña, igual que el alta manual); en los
+arranques siguientes ya no la vuelve a tocar aunque la variable se quede
+puesta.
+
+```bash
+sudo journalctl -u portal-expedientes -n 50 | grep "Siembra inicial"
+# Esperado: "Siembra inicial de usuarios: N alta(s), 0 rechazada(s) de ..."
+```
+
+Si alguna fila sale rechazada, el log dice cuál RFC y por qué (formato de
+RFC inválido, rol desconocido, o Proveedor sin entidad/correo); el resto de
+filas válidas sí se dan de alta.
+
+**El RFC del Administrador lleva 11 caracteres**, no 10: los 4 letras + 6
+números habituales más el primer caracter de la homoclave (ej.
+`ABCD123456Z`), porque el RFC de 10 caracteres no siempre distingue a dos
+administradores. Cabina y Proveedor siguen con 10.
+
+Si todavía no hay ese Excel, se puede dar de alta al primer administrador a
+mano, como antes:
 
 ```bash
 cd /opt/portal-expedientes
-sudo -u portal .venv/bin/python -c "from app.db.local_store import init_local_db; from app.repositories import accesos_repo as a; init_local_db(); a.alta_acceso('RFCDELADMIN', 'Nombre del administrador', a.PERFIL_ADMINISTRADOR)"
+sudo -u portal .venv/bin/python -c "from app.db.local_store import init_local_db; from app.repositories import accesos_repo as a; init_local_db(); a.alta_acceso('RFCDELADMIN11', 'Nombre del administrador', a.PERFIL_ADMINISTRADOR)"
 ```
 
-De ahí en adelante, el administrador da de alta a los demás desde el portal.
+De ahí en adelante, el administrador da de alta a los demás desde el portal
+(o se corre `scripts/cargar_usuarios_excel.py --aplicar` para el resto del
+equipo).
 
 > **Aquí no se corre `scripts/seed_usuarios_prueba.py`.** Ese script es de
 > desarrollo: crea RFC de prueba con una contraseña conocida y publicada en
@@ -347,11 +382,15 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 | `DB_DRIVER` | `ODBC Driver 18 for SQL Server` | No conecta |
 | `DB_TRUST_SERVER_CERTIFICATE` | `false` si el certificado es válido | Con `true` el canal se cifra pero no se valida contra quién |
 | `LOCAL_DB_PATH` | Ruta del SQLite en el volumen persistente | Si apunta a disco efímero, **se pierden accesos y seguimiento** |
+| `SEED_USUARIOS_RUTA` | Ruta al Excel de RFC/Nombre/Rol (sección 5, paso 7). Vacío si no aplica | Sin ella hay que dar de alta a cada quien a mano |
 | `JWT_SECRET_KEY` | Uno propio, que no se repita en ningún otro lado: `python -c "import secrets; print(secrets.token_hex(32))"` | Con una llave reutilizada, una sesión de otro ambiente valdría aquí |
 | `JWT_EXPIRE_MINUTES` | El acordado para producción | Sesiones más largas o más cortas de lo esperado |
 | `CUENTAS_PERMITIDAS` | La lista confirmada (pendiente, sección 4) | Se ven de más o de menos |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_REMITENTE`, `SMTP_USAR_TLS` | Del SMTP corporativo | Sin ellos, los correos solo se registran en el log |
 | `SMTP_DESTINATARIO_PRUEBA` | **Vacío en producción** | Si queda con valor, los correos se desvían a ese buzón |
+| `SMTP_LIMITE_DIARIO`, `SMTP_AVISO_LIMITE` | `100` y `80`, o lo que autorice quien administra la cuenta de correo | Con un tope mayor al real, el servidor de correo rechazaría los envíos de más |
+| `SMTP_CUENTA_POR_DESTINATARIO` | `true` hasta confirmar cómo cuenta el servidor | Con `false` y un servidor que cuenta por destinatario, el portal se pasaría del tope sin darse cuenta |
+| `CORREO_REENVIO_HORAS` | `8` (default) o lo que acuerde Negocio | Freno de reenvío: antes de cumplirse, no se vuelve a mandar correo a proveedores sobre el mismo expediente |
 | `GOOGLE_MAPS_API_KEY` | Llave de Google Cloud con la Places API habilitada y facturación activa (opcional, sección 3.4). Solo la usa el servidor | Sin ella se apaga la búsqueda fuera de la red |
 | `GOOGLE_MAPS_BROWSER_API_KEY` | Llave **distinta**, restringida por dominio y solo con Maps JavaScript API (sección 3.4.1) | Los resultados se muestran en lista en vez de mapa |
 | `PROXIES_CONFIABLES` | `2` con CloudFront + ALB; `1` si solo hay ALB | Un número mal puesto rompe el conteo de intentos de login |
@@ -362,6 +401,91 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 `GOOGLE_MAPS_TIMEOUT_SEGUNDOS` y `GOOGLE_MAPS_MAXIMO_RESULTADOS` tienen un
 valor por omisión razonable; solo hay que tocarlos si el servicio
 responde lento.
+
+---
+
+## 7.1 Secretos en AWS Secrets Manager
+
+En AWS las llaves **no** se dejan en el `.env` del servidor: las administra
+Secrets Manager. La app las lee al arrancar y las deja en el entorno, y
+**ganan sobre lo que diga el `.env`** — así una llave vieja olvidada en la
+instancia no puede tener prioridad sobre el secreto administrado.
+
+| Variable | Valor en producción |
+|---|---|
+| `SECRETOS_AWS_MODO` | **`obligatorio`** (ver abajo) |
+| `SECRETOS_AWS_NOMBRE` | `encryption-portal-medicos` |
+| `SECRETOS_AWS_REGION` | `mx-central-1` |
+| `SECRETOS_AWS_CLAVE` | vacío (solo si el secreto es texto plano) |
+
+### Modos
+
+| Modo | Qué hace | Cuándo usarlo |
+|---|---|---|
+| `off` | No toca AWS. Default. | Desarrollo y pruebas |
+| `obligatorio` | Si el secreto no se lee, **la app no arranca** | **Producción** |
+| `opcional` | Si falla, sigue con el entorno | Primera puesta en marcha |
+
+En producción debe ir `obligatorio`: es preferible un servicio caído y
+visible a uno que arrancó "bien" pero con Google Maps apagado. El error sale
+en `journalctl -u portal-expedientes` con el nombre del secreto y la región,
+nunca con el valor.
+
+### Formato del secreto
+
+El secreto `encryption-portal-medicos` ya está creado por Infraestructura como
+**JSON**, con estas tres claves exactas (así lo confirmaron; el nombre de cada
+una es el de la variable en mayúsculas):
+
+```json
+{
+  "GOOGLE_MAPS_API_KEY": "...",
+  "GOOGLE_MAPS_BROWSER_API_KEY": "...",
+  "GOOGLE_MAPS_MAP_ID": "..."
+}
+```
+
+Se admiten estas variables (y **solo** estas — el resto se ignora con un
+aviso en el log, porque el secreto lo administra otra área y no debe poder
+reescribir `PATH` ni nada del proceso):
+
+`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_BROWSER_API_KEY`, `GOOGLE_MAPS_MAP_ID`.
+
+El alcance es únicamente **las llaves de Google Maps**: es lo que el equipo de
+infraestructura administra en `encryption-portal-medicos`. El resto de la
+configuración sensible (`JWT_SECRET_KEY`, `DB_PASSWORD`, `SMTP_USER`,
+`SMTP_PASSWORD`) sigue en el `.env` del servidor.
+
+Si el secreto se guardó como **texto plano** (una sola llave suelta), hay que
+decir a cuál variable corresponde con `SECRETOS_AWS_CLAVE`. Sin eso se ignora
+con un aviso: es mejor que adivinar y poner la llave en el lugar equivocado.
+No es el caso de `encryption-portal-medicos`, que ya está en JSON.
+
+### Permisos de IAM
+
+La instancia (rol de EC2, o el task role si algún día se pasa a ECS) necesita
+**solo** `secretsmanager:GetSecretValue` sobre el ARN de ese secreto:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "secretsmanager:GetSecretValue",
+  "Resource": "arn:aws:secretsmanager:mx-central-1:<cuenta>:secret:encryption-portal-medicos-*"
+}
+```
+
+Nada más: ni listar secretos, ni escribirlos. La app solo lee.
+
+### Probar que quedó bien
+
+```bash
+# Debe imprimir los NOMBRES de las variables aplicadas, nunca los valores.
+sudo journalctl -u portal-expedientes -n 50 | grep "Secretos de AWS"
+# Esperado: "Secretos de AWS: aplicadas 3 variable(s): GOOGLE_MAPS_API_KEY, ..."
+```
+
+Si el servicio no arranca y el log dice `No se pudo leer el secreto`, el
+problema es de IAM o de la región, no del código.
 
 Cuidado con `SMTP_DESTINATARIO_PRUEBA`: es una válvula pensada para
 desarrollo, que manda **todos** los correos a un solo buzón. En producción

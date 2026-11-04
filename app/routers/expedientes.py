@@ -5,17 +5,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 
 from app.core.security import usuario_actual
-from app.repositories import accesos_repo, correos_enviados_repo, cortes_repo, estatus_repo, expedientes_repo
+from app.repositories import accesos_repo, correos_enviados_repo, cortes_repo, expedientes_repo
 from app.schemas.correo import (
     MAXIMO_EXPEDIENTES_POR_OPERACION,
     EnviarCorreoProveedoresInput,
     EnviarCorreoProveedoresResponse,
+    EnviarCorteInput,
     EnviarCorteResponse,
     GenerarCorteInput,
     GenerarCorteResponse,
 )
-from app.schemas.expediente import Expediente, EstatusExpediente, ExpedienteFiltro
-from app.services import email_service, estatus_service, excel_service
+from app.schemas.expediente import Expediente, ExpedienteFiltro
+from app.services import cuota_correos_service, email_service, envio_correo_service, excel_service
 
 router = APIRouter(
     prefix="/expedientes",
@@ -53,61 +54,20 @@ def listar_expedientes(
 def enviar_correo_proveedores(data: EnviarCorreoProveedoresInput, usuario: dict = Depends(usuario_actual)):
     """
     Botón "Enviar correo a proveedores". Es una acción operativa de Cabina --
-    Administrador ya no la usa (ver _requerir_administrador de /corte: ahora
-    Administrador solo genera el corte/evidencia, no avisa a proveedores).
-    Valida que venga al menos un expediente seleccionado (ya lo exige el
-    esquema con min_length=1, esto es una segunda validación explícita por
-    claridad) y arma el correo con los datos de cada expediente seleccionado.
+    Administrador ya no la usa (ahora solo genera el corte/evidencia) y
+    Proveedor tampoco.
 
     La selección debe quedar "pareja": todos en "Abierto" (notificación
     nueva) o todos en "En Espera de Respuesta" (recordatorio) -- nunca
     mezclados, y ningún otro estado. Si no cumple, se cancela el envío
     completo (no se manda nada, ni a los que sí cumplían).
+
+    A quién le llega, el freno de reenvío y el tope diario: ver
+    app/services/envio_correo_service.py.
     """
-    if usuario.get("perfil") == accesos_repo.PERFIL_ADMINISTRADOR:
-        raise HTTPException(403, "El perfil Administrador no tiene acceso a esta acción.")
-    if not data.expedientes:
-        raise HTTPException(400, "Selecciona al menos un expediente antes de enviar el correo.")
-
-    registros = []
-    for cl_expediente in data.expedientes:
-        encontrados = expedientes_repo.listar_expedientes(ExpedienteFiltro(cl_expediente=cl_expediente))
-        if encontrados:
-            registros.append(encontrados[0])
-
-    if not registros:
-        raise HTTPException(404, "No se encontró información de los expedientes seleccionados.")
-
-    try:
-        es_recordatorio = estatus_service.validar_seleccion_para_correo(registros)
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-    resultado = email_service.enviar_correo_proveedores(
-        [r.model_dump() for r in registros],
-        usuario_nombre=usuario.get("nombre") or usuario["usuario"],
-        es_recordatorio=es_recordatorio,
-    )
-
-    identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
-    correos_enviados_repo.registrar_envio(
-        tipo="recordatorio" if es_recordatorio else "nuevo",
-        destinatario=resultado.destinatarios[0] if resultado.destinatarios else "",
-        expedientes=[r.expediente for r in registros],
-        rfc_envio=identificador,
-        simulado=resultado.simulado,
-    )
-
-    # Regla de negocio: mandar el correo pasa el expediente a "En Espera de
-    # Respuesta" en automático (nadie lo selecciona a mano). Se guarda quién
-    # lo mandó -- el corte lo muestra como "RFC Coordinador".
-    for r in registros:
-        estatus_repo.actualizar_estatus(r.expediente, EstatusExpediente.EN_ESPERA_RESPUESTA, identificador)
-
-    return EnviarCorreoProveedoresResponse(
-        enviados=resultado.enviados,
-        expedientes=[r.expediente for r in registros],
-    )
+    if len(data.expedientes) > MAXIMO_EXPEDIENTES_POR_OPERACION:
+        raise HTTPException(400, f"No se pueden procesar más de {MAXIMO_EXPEDIENTES_POR_OPERACION} expedientes a la vez.")
+    return envio_correo_service.enviar_a_proveedores(data.expedientes, usuario, data.confirmar_limite)
 
 
 def _requerir_administrador(usuario: dict) -> None:
@@ -205,27 +165,44 @@ def descargar_corte(corte_id: int, usuario: dict = Depends(usuario_actual)):
 
 
 @router.post("/corte/{corte_id}/enviar", response_model=EnviarCorteResponse)
-def enviar_corte(corte_id: int, usuario: dict = Depends(usuario_actual)):
+def enviar_corte(corte_id: int, data: EnviarCorteInput, usuario: dict = Depends(usuario_actual)):
     """
-    "Confirmar y enviar": manda por correo (modo simulado mientras no haya
-    SMTP real, ver email_service.py) el MISMO archivo que ya se generó/pudo
-    descargarse en /corte -- así lo que se ve/descarga es exactamente lo
-    que se envía.
+    "Enviar": manda por correo (modo simulado mientras no haya SMTP real, ver
+    email_service.py) el MISMO archivo que ya se generó/pudo descargarse en
+    /corte -- así lo que se ve/descarga es exactamente lo que se envía.
+
+    El corte es para Cabina, no para proveedores: va a UNA sola dirección,
+    la que escribe el Administrador. Cuenta contra el tope diario de correos;
+    si ya no hay lugar, no se envía (el Excel se puede seguir descargando).
     """
     _requerir_administrador(usuario)
     corte = cortes_repo.obtener_corte(corte_id)
     if not corte:
         raise HTTPException(404, "No se encontró ese corte.")
 
+    reserva = cuota_correos_service.reservar("corte", cuota_correos_service.unidades_para(1))
+    if reserva is None:
+        limite = cuota_correos_service.estado().limite
+        raise HTTPException(
+            409,
+            f"Se alcanzó el límite de {limite} correos por día: el corte no se envió. "
+            "Puedes descargar el Excel y compartirlo por otro medio.",
+        )
+
     usuario_nombre = usuario.get("nombre") or usuario.get("usuario") or "desconocido"
-    resultado = email_service.enviar_corte_proveedores(
-        cantidad=len(corte["expedientes"]),
-        tipo_expediente=corte["tipo_expediente"],
-        archivo_nombre=corte["nombre_archivo"],
-        archivo_bytes=corte["contenido"],
-        usuario_nombre=usuario_nombre,
-        fecha_generado=corte["fecha_generado"],
-    )
+    try:
+        resultado = email_service.enviar_corte_proveedores(
+            cantidad=len(corte["expedientes"]),
+            tipo_expediente=corte["tipo_expediente"],
+            archivo_nombre=corte["nombre_archivo"],
+            archivo_bytes=corte["contenido"],
+            usuario_nombre=usuario_nombre,
+            destinatario=data.destinatario,
+            fecha_generado=corte["fecha_generado"],
+        )
+    except email_service.ErrorEnvioCorreo:
+        cuota_correos_service.liberar(reserva)
+        raise HTTPException(503, "No se pudo enviar el corte: el servidor de correo no respondió. Intenta de nuevo en unos minutos.")
     cortes_repo.marcar_enviado(corte_id, resultado.destinatarios[0])
 
     return EnviarCorteResponse(

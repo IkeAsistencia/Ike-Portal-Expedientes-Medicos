@@ -3,11 +3,22 @@
    de "Enviar correo a proveedores": este no avisa al proveedor ni cambia
    estatus, es la evidencia/corte que Admin puede descargar/previsualizar
    antes de decidir enviarlo. Todos los seleccionados deben compartir el
-   mismo estatus (el backend también lo valida, ver routers/expedientes.py). */
+   mismo estatus (el backend también lo valida, ver routers/expedientes.py).
+
+   El corte es para Cabina, no para proveedores: se envía a UNA sola
+   dirección que el Administrador escribe en "Enviar a". Enviarlo es
+   opcional (descargar el Excel también basta) y cuenta contra el tope
+   diario de correos. */
 import { api, apiArchivo } from "../core/api.js";
 import { escapeHtml, formatDate } from "../core/formato.js";
 import { toast } from "../core/toast.js";
+import { confirmar as confirmarAviso } from "../componentes/confirmar.js";
+import { actualizarCuotaCorreos, cuotaCorreosHtml } from "../componentes/cuota-correos.js";
 import { crearModal } from "../componentes/modal.js";
+
+// Mismo patrón que el servidor (revisar_correo en
+// app/services/validacion_rfc_cedula_service.py), para avisar antes de enviar.
+const PATRON_CORREO = /^[A-Za-z0-9._%+\-]+@[A-Za-z0-9\-]+(\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}$/;
 
 let modal = null;
 let corteActual = null; // { corte_id, alConfirmar }
@@ -26,10 +37,19 @@ function obtenerModal() {
           <thead><tr><th>Expediente</th><th>Cuenta</th><th>Paciente</th><th>Fecha Apertura</th></tr></thead>
           <tbody id="corte-modal-tbody"></tbody>
         </table>
+      </div>
+      <div class="corte-envio">
+        <div class="field">
+          <label for="corte-modal-destinatario">Enviar a (opcional)</label>
+          <input type="email" id="corte-modal-destinatario" maxlength="120" autocomplete="email"
+                 placeholder="correo@ikeasistencia.com">
+          <span class="corte-envio-ayuda">Una sola dirección. Si no lo vas a enviar, basta con descargar el Excel.</span>
+        </div>
+        ${cuotaCorreosHtml("corte-cuota-correos")}
       </div>`,
     pie: `
       <button class="btn btn-secondary" id="corte-modal-descargar">Descargar Excel</button>
-      <button class="btn btn-primary" id="corte-modal-confirmar">Confirmar y enviar</button>`,
+      <button class="btn btn-primary" id="corte-modal-confirmar">Enviar</button>`,
     alCerrar: () => { corteActual = null; },
   });
   $("corte-modal-descargar").addEventListener("click", descargar);
@@ -82,6 +102,8 @@ export async function abrirModalCorte({ tipoExpediente, seleccionados, fuente, b
         <td>${escapeHtml(r.nombre_paciente)}</td>
         <td>${formatDate(r.fecha_apertura_servicio)}</td>
       </tr>`).join("");
+    $("corte-modal-destinatario").value = "";
+    actualizarCuotaCorreos();
     m.abrir();
   } catch (err) {
     toast(err.message, "error");
@@ -116,10 +138,42 @@ async function descargar() {
 
 async function confirmar() {
   if (!corteActual) return;
+  const campo = $("corte-modal-destinatario");
+  const destinatario = campo.value.trim();
+  if (!destinatario) {
+    toast("Escribe en \"Enviar a\" la dirección de correo a la que se mandará el corte.", "error");
+    campo.focus();
+    return;
+  }
+  if (!PATRON_CORREO.test(destinatario)) {
+    toast("La dirección de \"Enviar a\" no tiene un formato válido (escribe una sola).", "error");
+    campo.focus();
+    return;
+  }
+
   const btn = $("corte-modal-confirmar");
   btn.disabled = true;
   try {
-    const data = await api("/expedientes/corte/" + corteActual.corte_id + "/enviar", { method: "POST" });
+    const cuota = await actualizarCuotaCorreos();
+    if (cuota && cuota.nivel === "agotado") {
+      toast(
+        `Se alcanzó el límite de ${cuota.limite} correos por día: el corte no se puede enviar hoy. Puedes descargar el Excel.`,
+        "error", 8000
+      );
+      return;
+    }
+    if (cuota && cuota.nivel === "aviso") {
+      const seguir = await confirmarAviso({
+        titulo: "Límite de correos por día",
+        mensaje: `Estás a punto de alcanzar el límite de correos por día: van ${cuota.usados} de ${cuota.limite}. ¿Quieres enviar el corte?`,
+        textoConfirmar: "Enviar",
+      });
+      if (!seguir) return;
+    }
+    const data = await api("/expedientes/corte/" + corteActual.corte_id + "/enviar", {
+      method: "POST",
+      body: { destinatario },
+    });
     toast(
       data.simulado
         ? `Corte simulado para ${data.destinatario} (${data.enviados} expediente(s)) -- falta configurar SMTP real.`
@@ -129,9 +183,10 @@ async function confirmar() {
     corteActual.alConfirmar();
     modal.cerrar();
   } catch (err) {
-    toast(err.message, "error");
+    toast(err.message, "error", 8000);
   } finally {
     btn.disabled = false;
+    actualizarCuotaCorreos();
   }
 }
 

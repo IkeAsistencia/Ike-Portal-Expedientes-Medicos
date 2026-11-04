@@ -25,16 +25,12 @@ from app.graphql.types import EnviarCorreoResultado, LoginResult, OperacionOk
 from app.repositories import (
     accesos_repo,
     auth_repo,
-    correos_enviados_repo,
     cuentas_config_repo,
-    estatus_repo,
-    expedientes_repo,
 )
 from app.routers.auth import MAXIMO_INTENTOS_LOGIN, VENTANA_INTENTOS_LOGIN_SEGUNDOS
 from app.schemas.auth import LoginResponse
-from app.schemas.correo import EnviarCorreoProveedoresResponse
-from app.schemas.expediente import EstatusExpediente, ExpedienteFiltro
-from app.services import email_service, estatus_service, seguimiento_service
+from app.schemas.correo import MAXIMO_EXPEDIENTES_POR_OPERACION
+from app.services import envio_correo_service, estatus_service, seguimiento_service
 
 
 def _elevar_error_graphql(e: HTTPException) -> Exception:
@@ -106,47 +102,19 @@ class Mutation:
         usuario = info.context.requerir_usuario()
         if not datos.expedientes:
             raise Exception("Selecciona al menos un expediente antes de enviar el correo.")
+        if len(datos.expedientes) > MAXIMO_EXPEDIENTES_POR_OPERACION:
+            raise Exception(f"No se pueden procesar más de {MAXIMO_EXPEDIENTES_POR_OPERACION} expedientes a la vez.")
 
-        registros = []
-        for cl_expediente in datos.expedientes:
-            encontrados = expedientes_repo.listar_expedientes(ExpedienteFiltro(cl_expediente=cl_expediente))
-            if encontrados:
-                registros.append(encontrados[0])
-
-        if not registros:
-            raise Exception("No se encontró información de los expedientes seleccionados.")
-
-        # Paridad con el REST (ver routers/expedientes.py): la validación de
-        # la selección vive en un solo lugar compartido, para que REST y
-        # GraphQL nunca queden con reglas distintas.
+        # Paridad con el REST (ver routers/expedientes.py): permisos, freno de
+        # reenvío, tope diario y destinatarios viven en un solo servicio, para
+        # que REST y GraphQL nunca queden con reglas distintas.
         try:
-            es_recordatorio = estatus_service.validar_seleccion_para_correo(registros)
-        except ValueError as e:
-            raise Exception(str(e))
-
-        resultado = email_service.enviar_correo_proveedores(
-            [r.model_dump() for r in registros],
-            usuario_nombre=usuario.get("nombre") or usuario["usuario"],
-            es_recordatorio=es_recordatorio,
-        )
-
-        identificador = usuario.get("rfc") or usuario.get("usuario") or "desconocido"
-        correos_enviados_repo.registrar_envio(
-            tipo="recordatorio" if es_recordatorio else "nuevo",
-            destinatario=resultado.destinatarios[0] if resultado.destinatarios else "",
-            expedientes=[r.expediente for r in registros],
-            rfc_envio=identificador,
-            simulado=resultado.simulado,
-        )
-
-        # Paridad con el REST (ver routers/expedientes.py): mandar el correo
-        # pasa el expediente a "En Espera de Respuesta" en automático.
-        for r in registros:
-            estatus_repo.actualizar_estatus(r.expediente, EstatusExpediente.EN_ESPERA_RESPUESTA, identificador)
-
-        return EnviarCorreoResultado.from_pydantic(
-            EnviarCorreoProveedoresResponse(enviados=resultado.enviados, expedientes=[r.expediente for r in registros])
-        )
+            resultado = envio_correo_service.enviar_a_proveedores(
+                datos.expedientes, usuario, confirmar_limite=datos.confirmar_limite
+            )
+        except HTTPException as e:
+            raise _elevar_error_graphql(e)
+        return EnviarCorreoResultado.from_pydantic(resultado)
 
     @strawberry.mutation(description="Configuración Cuentas: agregar. Requiere sesión de Administrador.")
     def agregar_cuenta(self, info: strawberry.Info, datos: CuentaConfigInput) -> OperacionOk:
