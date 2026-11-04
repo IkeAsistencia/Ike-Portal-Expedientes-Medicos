@@ -209,6 +209,9 @@ tbody tr:hover{background:#FAFAFA;}
 .badge.perfil-3{background:var(--teal-bg);color:var(--teal);}
 .badge.activo{background:var(--green-bg);color:var(--green);}
 .badge.inactivo{background:var(--red-bg);color:var(--red);}
+/* "×" dentro de una insignia de perfil (Usuarios y Accesos): quita ese perfil. */
+.badge-quitar{background:none;border:0;color:inherit;cursor:pointer;font:inherit;line-height:1;padding:0 0 0 6px;opacity:.65;}
+.badge-quitar:hover,.badge-quitar:focus-visible{opacity:1;}
 
 /* Semáforo del Expediente (columna "⏱" de la tabla) -- distinto del badge
    de Estado. Un punto de color; el significado completo va en

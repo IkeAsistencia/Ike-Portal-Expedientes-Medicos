@@ -86,6 +86,22 @@ class CredencialesInvalidas(Exception):
     pass
 
 
+class ErrorPerfil(Exception):
+    """Base de los errores al agregar/quitar un perfil (el router los traduce a HTTP)."""
+
+
+class AccesoNoEncontrado(ErrorPerfil):
+    pass
+
+
+class PerfilInvalido(ErrorPerfil):
+    pass
+
+
+class PerfilYaAsignado(ErrorPerfil):
+    pass
+
+
 def _normalizar_rfc(rfc: str) -> str:
     return rfc.strip().upper()
 
@@ -106,13 +122,25 @@ def _verificar_password(password: str, password_hash: str) -> bool:
     return hmac.compare_digest(calculado, password_hash)
 
 
+def _perfiles_de(conn, rfc: str) -> list[int]:
+    return [r["perfil"] for r in conn.execute(
+        "SELECT perfil FROM usuarios_perfiles WHERE rfc = ? ORDER BY perfil", (rfc,)
+    )]
+
+
 def buscar_acceso(rfc: str) -> dict | None:
+    """El acceso de ese RFC, con `perfiles` (todos los que tiene) además del `perfil` principal."""
+    rfc = _normalizar_rfc(rfc)
     with get_local_connection() as conn:
         row = conn.execute(
             "SELECT rfc, nombre, perfil, password_hash, activo, entidad, correo FROM usuarios_acceso WHERE rfc = ?",
-            (_normalizar_rfc(rfc),),
+            (rfc,),
         ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        acceso = dict(row)
+        acceso["perfiles"] = _perfiles_de(conn, rfc) or [acceso["perfil"]]
+        return acceso
 
 
 def nombre_o_rfc(rfc: str) -> str:
@@ -187,7 +215,106 @@ def alta_acceso(rfc: str, nombre: str, perfil: int, entidad: str | None = None, 
             "VALUES (?, ?, ?, (SELECT password_hash FROM usuarios_acceso WHERE rfc = ?), ?, ?, ?)",
             (_normalizar_rfc(rfc), nombre, perfil, _normalizar_rfc(rfc), ahora_local(), entidad_final, correo_final),
         )
+        # Dar de alta fija el perfil (si el RFC ya existía, lo reemplaza); para
+        # sumarle otro a la misma persona está agregar_perfil.
+        conn.execute("DELETE FROM usuarios_perfiles WHERE rfc = ?", (_normalizar_rfc(rfc),))
+        conn.execute("INSERT INTO usuarios_perfiles (rfc, perfil) VALUES (?, ?)", (_normalizar_rfc(rfc), perfil))
         conn.commit()
+
+
+def agregar_perfil(rfc: str, perfil: int, entidad: str | None = None, correo: str | None = None) -> None:
+    """
+    Le suma un perfil a una persona que ya tiene acceso (ej. a un Administrador,
+    el de Cabina). La contraseña y el RFC siguen siendo los mismos: al entrar,
+    la persona elige con qué perfil. Para Proveedor, `entidad` y `correo` son
+    obligatorios y se guardan en su acceso (son de la persona, no del perfil).
+    """
+    rfc = _normalizar_rfc(rfc)
+    acceso = buscar_acceso(rfc)
+    if not acceso:
+        raise AccesoNoEncontrado("No se encontró ese RFC.")
+    if perfil not in NOMBRES_PERFIL:
+        raise PerfilInvalido(f"Perfil inválido: {perfil}. Válidos: {list(NOMBRES_PERFIL)}")
+    if perfil in acceso["perfiles"]:
+        raise PerfilYaAsignado(f"Ese RFC ya tiene el perfil {NOMBRES_PERFIL[perfil]}.")
+    if perfil == PERFIL_PROVEEDOR and (not entidad or not correo):
+        raise PerfilInvalido("Para el perfil Proveedor hace falta la entidad y el correo.")
+
+    with get_local_connection() as conn:
+        conn.execute("INSERT INTO usuarios_perfiles (rfc, perfil) VALUES (?, ?)", (rfc, perfil))
+        if perfil == PERFIL_PROVEEDOR:
+            conn.execute("UPDATE usuarios_acceso SET entidad = ?, correo = ? WHERE rfc = ?", (entidad, correo, rfc))
+        conn.commit()
+
+
+def quitar_perfil(rfc: str, perfil: int) -> None:
+    """
+    Le quita uno de sus perfiles a una persona. No deja a nadie sin perfil (para
+    eso está inactivar) ni sin Administrador activo en el portal.
+    """
+    rfc = _normalizar_rfc(rfc)
+    acceso = buscar_acceso(rfc)
+    if not acceso:
+        raise AccesoNoEncontrado("No se encontró ese RFC.")
+    if perfil not in acceso["perfiles"]:
+        raise PerfilInvalido("Ese RFC no tiene ese perfil.")
+    restantes = [p for p in acceso["perfiles"] if p != perfil]
+    if not restantes:
+        raise PerfilInvalido("No se le puede quitar su único perfil. Si ya no debe entrar, inactiva el acceso.")
+
+    with get_local_connection() as conn:
+        if perfil == PERFIL_ADMINISTRADOR and acceso["activo"]:
+            otros = conn.execute(
+                "SELECT 1 FROM usuarios_perfiles p JOIN usuarios_acceso u ON u.rfc = p.rfc "
+                "WHERE p.perfil = ? AND u.activo = 1 AND p.rfc != ? LIMIT 1",
+                (PERFIL_ADMINISTRADOR, rfc),
+            ).fetchone()
+            if not otros:
+                raise PerfilInvalido("Es el único Administrador activo: el portal no puede quedarse sin uno.")
+        conn.execute("DELETE FROM usuarios_perfiles WHERE rfc = ? AND perfil = ?", (rfc, perfil))
+        if acceso["perfil"] == perfil:
+            conn.execute("UPDATE usuarios_acceso SET perfil = ? WHERE rfc = ?", (restantes[0], rfc))
+        if perfil == PERFIL_PROVEEDOR:
+            conn.execute("UPDATE usuarios_acceso SET entidad = ?, correo = ? WHERE rfc = ?", (SIN_APLICA, SIN_APLICA, rfc))
+        conn.commit()
+
+
+def portal_sin_accesos() -> bool:
+    """True mientras la tabla de accesos está vacía: el portal aún no se activa."""
+    with get_local_connection() as conn:
+        return conn.execute("SELECT 1 FROM usuarios_acceso LIMIT 1").fetchone() is None
+
+
+def activar_portal(rfc: str, nombre: str, password: str) -> dict | None:
+    """
+    Activación inicial: crea al primer Administrador, con su contraseña, SOLO
+    si la tabla de accesos está vacía. Regresa el acceso creado, o None si el
+    portal ya estaba activado (no se escribe nada).
+
+    Revisar y escribir van en una sola transacción con candado de escritura
+    (BEGIN IMMEDIATE): si dos personas mandan el formulario al mismo tiempo,
+    solo la primera crea el usuario y la otra encuentra la tabla ya con datos.
+    """
+    rfc = _normalizar_rfc(rfc)
+    password_hash = _crear_hash_nuevo(password)
+    with get_local_connection() as conn:
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            if conn.execute("SELECT 1 FROM usuarios_acceso LIMIT 1").fetchone() is not None:
+                conn.execute("ROLLBACK")
+                return None
+            conn.execute(
+                "INSERT INTO usuarios_acceso (rfc, nombre, perfil, password_hash, fecha_alta, entidad, correo) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (rfc, nombre, PERFIL_ADMINISTRADOR, password_hash, ahora_local(), SIN_APLICA, SIN_APLICA),
+            )
+            conn.execute("INSERT INTO usuarios_perfiles (rfc, perfil) VALUES (?, ?)", (rfc, PERFIL_ADMINISTRADOR))
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+    return {"rfc": rfc, "nombre": nombre, "perfil": PERFIL_ADMINISTRADOR}
 
 
 def actualizar_entidad(rfc: str, entidad: str) -> bool:
@@ -198,7 +325,8 @@ def actualizar_entidad(rfc: str, entidad: str) -> bool:
     """
     with get_local_connection() as conn:
         cur = conn.execute(
-            "UPDATE usuarios_acceso SET entidad = ? WHERE rfc = ? AND perfil = ?",
+            "UPDATE usuarios_acceso SET entidad = ? WHERE rfc = ? "
+            "AND rfc IN (SELECT rfc FROM usuarios_perfiles WHERE perfil = ?)",
             (entidad, _normalizar_rfc(rfc), PERFIL_PROVEEDOR),
         )
         conn.commit()
@@ -212,11 +340,15 @@ def listar_accesos() -> list[dict]:
             "SELECT rfc, nombre, perfil, password_hash, fecha_alta, activo, entidad, correo FROM usuarios_acceso "
             "ORDER BY activo DESC, fecha_alta DESC"
         ).fetchall()
+        perfiles: dict[str, list[int]] = {}
+        for p in conn.execute("SELECT rfc, perfil FROM usuarios_perfiles ORDER BY perfil"):
+            perfiles.setdefault(p["rfc"], []).append(p["perfil"])
         return [
             {
                 "rfc": r["rfc"],
                 "nombre": r["nombre"],
                 "perfil": r["perfil"],
+                "perfiles": perfiles.get(r["rfc"]) or [r["perfil"]],
                 "tiene_password": bool(r["password_hash"]),
                 "fecha_alta": r["fecha_alta"],
                 "activo": bool(r["activo"]),
@@ -235,7 +367,8 @@ def listar_proveedores_con_correo() -> list[dict]:
     with get_local_connection() as conn:
         rows = conn.execute(
             "SELECT nombre, entidad, correo FROM usuarios_acceso "
-            "WHERE perfil = ? AND activo = 1 AND correo IS NOT NULL AND TRIM(correo) NOT IN ('', ?)",
+            "WHERE rfc IN (SELECT rfc FROM usuarios_perfiles WHERE perfil = ?) "
+            "AND activo = 1 AND correo IS NOT NULL AND TRIM(correo) NOT IN ('', ?)",
             (PERFIL_PROVEEDOR, SIN_APLICA),
         ).fetchall()
     return [{"nombre": r["nombre"], "entidad": r["entidad"], "correo": r["correo"].strip()} for r in rows]

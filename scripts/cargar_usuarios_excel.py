@@ -13,14 +13,15 @@ cargar altas sueltas fuera de ese primer arranque.
 FORMATO ESPERADO DEL EXCEL (una fila por persona, cabecera en la fila 1):
     RFC          NOMBRE                        ROL
     MIMA991129   MIRANDA MARTINEZ ANA KAREN     CABINA
-    PASE950502G  EMMANUEL PARRA SANCHEZ         ADMINISTRADOR
+    PASE950502   EMMANUEL PARRA SANCHEZ         ADMINISTRADOR
+    PASE950502   EMMANUEL PARRA SANCHEZ         CABINA
 
 - ROL acepta (sin distinguir mayúsculas/minúsculas): CABINA, ADMINISTRADOR,
   PROVEEDOR.
-- RFC de Cabina y Proveedor: 10 caracteres (4 letras + 6 números).
-- RFC de Administrador: 11 caracteres -- los mismos 10 más el primer
-  caracter de la homoclave (ej. ABCD123456Z) -- porque el RFC de 10
-  caracteres no siempre distingue a dos administradores.
+- RFC: 10 caracteres (4 letras + 6 números) para todos los perfiles.
+- Una persona con varios perfiles va en un renglón por perfil, con el mismo
+  RFC (como PASE950502 arriba): queda un solo acceso con ambos perfiles y al
+  entrar elige con cuál.
 - Proveedor necesita además columnas ENTIDAD y CORREO (obligatorias para
   ese perfil); si el Excel no las trae, las filas de Proveedor se rechazan
   con el motivo "faltan ENTIDAD/CORREO", no se adivinan.

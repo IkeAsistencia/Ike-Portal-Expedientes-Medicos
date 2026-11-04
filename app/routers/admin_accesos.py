@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.security import usuario_actual
 from app.repositories import accesos_repo
-from app.schemas.acceso import AccesoListado, ActualizarEntidadInput, AltaAccesoInput
+from app.schemas.acceso import (
+    AccesoListado,
+    ActualizarEntidadInput,
+    AgregarPerfilInput,
+    AltaAccesoInput,
+)
 
 router = APIRouter(prefix="/admin/accesos", tags=["Administración de accesos"])
 
@@ -33,7 +38,9 @@ def listar_accesos(_: dict = Depends(requerir_administrador)):
 @router.post("")
 def dar_de_alta(data: AltaAccesoInput, _: dict = Depends(requerir_administrador)):
     if accesos_repo.buscar_acceso(data.rfc):
-        raise HTTPException(409, "Ya existe un acceso registrado con ese RFC.")
+        raise HTTPException(
+            409, "Ya existe un acceso registrado con ese RFC. Para darle otro perfil usa «Agregar perfil» en su renglón."
+        )
     accesos_repo.alta_acceso(data.rfc, data.nombre, data.perfil, data.entidad, data.correo)
     return {"ok": True}
 
@@ -47,9 +54,36 @@ def cambiar_entidad(rfc: str, data: ActualizarEntidadInput, _: dict = Depends(re
     acceso = accesos_repo.buscar_acceso(rfc)
     if not acceso:
         raise HTTPException(404, "No se encontró ese RFC.")
-    if acceso["perfil"] != accesos_repo.PERFIL_PROVEEDOR:
+    if accesos_repo.PERFIL_PROVEEDOR not in acceso["perfiles"]:
         raise HTTPException(400, "Solo se puede cambiar la entidad a un usuario con perfil Proveedor.")
     accesos_repo.actualizar_entidad(rfc, data.entidad)
+    return {"ok": True}
+
+
+def _traducir_error_perfil(err: accesos_repo.ErrorPerfil) -> HTTPException:
+    codigo = {accesos_repo.AccesoNoEncontrado: 404, accesos_repo.PerfilYaAsignado: 409}.get(type(err), 400)
+    return HTTPException(codigo, str(err))
+
+
+@router.post("/{rfc}/perfiles")
+def agregar_perfil(rfc: str, data: AgregarPerfilInput, _: dict = Depends(requerir_administrador)):
+    """
+    Le suma un perfil a una persona que ya tiene acceso: misma contraseña y mismo
+    RFC, y al entrar elige con cuál.
+    """
+    try:
+        accesos_repo.agregar_perfil(rfc, data.perfil, data.entidad, data.correo)
+    except accesos_repo.ErrorPerfil as err:
+        raise _traducir_error_perfil(err)
+    return {"ok": True}
+
+
+@router.delete("/{rfc}/perfiles/{perfil}")
+def quitar_perfil(rfc: str, perfil: int, _: dict = Depends(requerir_administrador)):
+    try:
+        accesos_repo.quitar_perfil(rfc, perfil)
+    except accesos_repo.ErrorPerfil as err:
+        raise _traducir_error_perfil(err)
     return {"ok": True}
 
 

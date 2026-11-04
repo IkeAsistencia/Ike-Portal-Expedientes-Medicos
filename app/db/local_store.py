@@ -94,6 +94,16 @@ CREATE TABLE IF NOT EXISTS usuarios_acceso (
     correo        TEXT
 );
 
+-- Perfiles de cada RFC: una persona puede tener más de uno (ej. Administrador y Cabina) y
+-- elige con cuál entrar en el login. usuarios_acceso.perfil queda como el perfil principal
+-- (siempre es uno de los de esta tabla); la contraseña, la entidad y el correo siguen siendo
+-- de la persona, no del perfil.
+CREATE TABLE IF NOT EXISTS usuarios_perfiles (
+    rfc    TEXT NOT NULL,
+    perfil INTEGER NOT NULL,
+    PRIMARY KEY (rfc, perfil)
+);
+
 -- Copia local de cada comentario que se registra en el sistema central: los del Proveedor
 -- (vía "Actualizar Bit?cora") y los del Coordinador de Cabina (vía "Regresar a
 -- Proveedor"). "origen" distingue de quién es cada uno para mostrarlos en
@@ -368,6 +378,9 @@ def _migrar_columnas_faltantes(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE usuarios_acceso ADD COLUMN entidad TEXT")
     if "correo" not in columnas:
         conn.execute("ALTER TABLE usuarios_acceso ADD COLUMN correo TEXT")
+    # Los accesos de antes de usuarios_perfiles tenían un solo perfil: pasa a ser el primero
+    # de su lista. Es idempotente (el perfil principal siempre está en la lista).
+    conn.execute("INSERT OR IGNORE INTO usuarios_perfiles (rfc, perfil) SELECT rfc, perfil FROM usuarios_acceso")
 
     columnas_estatus = {row["name"] for row in conn.execute("PRAGMA table_info(estatus_expediente)")}
     if "rfc_cambio" not in columnas_estatus:

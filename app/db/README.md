@@ -36,6 +36,7 @@ acceso a todas las tablas de aquí es por SQLite parametrizado
 | Tabla | Para qué sirve |
 |---|---|
 | `usuarios_acceso` | Acceso por RFC, independiente de SISE. `perfil`: 1=Administrador, 2=Cabina, 3=Proveedor. `password_hash` queda `NULL` hasta que la persona crea su contraseña la primera vez. `activo` es baja lógica (1/0) — el registro nunca se borra. PK `rfc`. |
+| `usuarios_perfiles` | Perfiles de cada RFC. Una persona puede tener más de uno (ej. Administrador y Cabina), con la misma contraseña; en el login elige con cuál entra y la sesión lleva solo ese. `usuarios_acceso.perfil` queda como el perfil principal y siempre es uno de los de esta tabla. PK (`rfc`, `perfil`). |
 | `cuentas_configuradas` | Grid de la pantalla "Configuración Cuentas" (qué cuentas puede ver cada perfil no-Administrador). PK `cl_cuenta`. |
 | `cuentas_etiqueta` | Color y prefijo por cuenta, módulo "Colores de Cuentas" (solo Administrador). PK `cl_cuenta`. |
 
@@ -99,7 +100,7 @@ donde es texto libre sin límite conocido, se marca "Libre".
 |---|---|---|---|---|
 | `rfc` | TEXT | RFC, 13 caracteres (PK) | Sí | Identifica a la persona que inicia sesión, independiente de SISE. |
 | `nombre` | TEXT | Libre | Sí | Nombre para mostrar en la sesión y en bitácoras. |
-| `perfil` | INTEGER | 1, 2 ó 3 | Sí | Rol de acceso: 1=Administrador, 2=Cabina, 3=Proveedor — controla qué puede ver/hacer cada quien. |
+| `perfil` | INTEGER | 1, 2 ó 3 | Sí | Perfil **principal**: 1=Administrador, 2=Cabina, 3=Proveedor. Si la persona tiene varios, todos están en `usuarios_perfiles`; el que manda en cada sesión es el que elige al entrar. |
 | `password_hash` | TEXT | Hash PBKDF2-SHA256 (libre) | No | Contraseña ya hasheada; queda `NULL` hasta que la persona la crea la primera vez. |
 | `fecha_alta` | TEXT | `YYYY-MM-DD HH:MM:SS` | Sí (`DEFAULT datetime('now','localtime')`) | Cuándo se dio de alta el acceso. |
 | `entidad` | TEXT | Libre | No | Entidad federativa asociada a la persona (agregada por migración). |

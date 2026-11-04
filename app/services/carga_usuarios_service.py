@@ -10,7 +10,7 @@ Formato esperado: ver el encabezado de scripts/cargar_usuarios_excel.py.
 import openpyxl
 
 from app.repositories import accesos_repo
-from app.schemas.acceso import PATRON_RFC, PATRON_RFC_ADMINISTRADOR
+from app.schemas.acceso import PATRON_RFC
 
 ROLES = {
     "CABINA": accesos_repo.PERFIL_CABINA,
@@ -62,10 +62,7 @@ def validar_fila(fila: dict) -> str | None:
         return "falta el nombre"
 
     perfil = ROLES[fila["rol"]]
-    if perfil == accesos_repo.PERFIL_ADMINISTRADOR:
-        if not PATRON_RFC_ADMINISTRADOR.match(fila["rfc"]):
-            return "RFC de Administrador inválido: debe tener 11 caracteres (4 letras + 6 números + homoclave)"
-    elif not PATRON_RFC.match(fila["rfc"]):
+    if not PATRON_RFC.match(fila["rfc"]):
         return "RFC inválido: debe tener 10 caracteres (4 letras + 6 números)"
 
     if perfil == accesos_repo.PERFIL_PROVEEDOR and (not fila["entidad"] or not fila["correo"]):
@@ -85,7 +82,18 @@ def sembrar_desde_excel(ruta_archivo: str, aplicar: bool = True) -> dict:
         (rechazadas if motivo else listas).append((fila, motivo))
 
     if aplicar:
+        # El mismo RFC en varios renglones = una persona con varios perfiles:
+        # el primero da el alta y los demás le suman su perfil.
+        dados_de_alta = set()
         for fila, _ in listas:
-            accesos_repo.alta_acceso(fila["rfc"], fila["nombre"], ROLES[fila["rol"]], fila["entidad"], fila["correo"])
+            perfil = ROLES[fila["rol"]]
+            if fila["rfc"] not in dados_de_alta:
+                accesos_repo.alta_acceso(fila["rfc"], fila["nombre"], perfil, fila["entidad"], fila["correo"])
+                dados_de_alta.add(fila["rfc"])
+                continue
+            try:
+                accesos_repo.agregar_perfil(fila["rfc"], perfil, fila["entidad"], fila["correo"])
+            except accesos_repo.PerfilYaAsignado:
+                pass  # renglón repetido tal cual
 
     return {"total": len(filas), "listas": listas, "rechazadas": rechazadas}
