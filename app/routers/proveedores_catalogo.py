@@ -1,3 +1,11 @@
+"""
+Carga masiva del padrón de proveedores vía Excel (plantilla, resumen
+de lo cargado y carga incremental): exclusivo del perfil Administrador.
+Las especialidades nuevas que trae el Excel se dan de alta solas (ver
+app/repositories/especialidades_repo.py) y se reportan de vuelta para
+que quien subió el archivo pueda detectar errores de captura.
+"""
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import Response
 

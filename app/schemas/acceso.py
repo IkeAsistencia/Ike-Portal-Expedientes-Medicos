@@ -1,3 +1,12 @@
+"""
+Esquemas del portal nuevo (accesos por RFC): login, activación inicial,
+alta y administración de accesos/perfiles (ver app/routers/acceso.py y
+app/routers/admin_accesos.py). Valida el formato del RFC (10 caracteres,
+4 letras + 6 números), la fuerza de la contraseña y, para el perfil
+Proveedor, que traiga entidad y un correo con formato válido en el
+dominio de la empresa.
+"""
+
 import re
 from typing import Optional
 

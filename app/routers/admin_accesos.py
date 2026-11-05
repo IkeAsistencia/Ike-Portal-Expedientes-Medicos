@@ -1,3 +1,11 @@
+"""
+Pantalla "Administración de accesos": alta/baja de RFC, perfiles y
+entidad de los Proveedores, y reseteo de contraseña. Exclusivo del
+perfil Administrador (ver `requerir_administrador` más abajo, usado
+también por otros routers como cuentas_etiquetas.py y seguimiento.py
+para su propio control de acceso).
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.core.security import usuario_actual

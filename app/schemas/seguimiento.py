@@ -1,3 +1,10 @@
+"""
+Esquemas de la pantalla de seguimiento de un expediente: bodies de
+'Actualizar Bitácora' y cambio de estatus, la bitácora local (comentarios,
+comprobantes, fallos de inserción al sistema central) y el reflejo del
+historial de dbo.sp_S2_Seguimiento. Ver app/routers/seguimiento.py.
+"""
+
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field

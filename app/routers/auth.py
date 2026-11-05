@@ -1,3 +1,14 @@
+"""
+Autenticación del portal: login por RFC + contraseña (flujo actual,
+con activación inicial del primer Administrador y creación de
+contraseña en el primer uso), el login legado por usuario/contraseña
+de SISE (apagado por default, ver LOGIN_LEGADO_HABILITADO en
+app/config.py) y la renovación de token mientras la sesión sigue
+activa. Sin perfil requerido: son las rutas públicas antes de iniciar
+sesión. La emisión/validación del JWT vive en app/core/security.py y
+el límite de intentos en app/core/rate_limit.py.
+"""
+
 import logging
 import socket
 from typing import Optional, Union

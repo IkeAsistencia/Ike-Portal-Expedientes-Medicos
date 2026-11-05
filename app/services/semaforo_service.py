@@ -1,3 +1,12 @@
+"""
+Calcula el semáforo del Expediente (verde/amarillo/naranja/rojo) usado en
+la pantalla Expedientes, según "Puntos a modificar.docx" (Cabina Médica,
+octubre 2026): mientras está "Abierto" por horas desde la apertura (según
+el grupo de subservicio), y en "En Espera de Respuesta" por minutos desde
+que se mandó a proveedor. El color no se guarda en base -- se recalcula en
+cada consulta ("semáforo dinámico"). Ver también app/schemas/expediente.py.
+"""
+
 from datetime import datetime
 from enum import Enum
 

@@ -1,3 +1,9 @@
+"""
+Pantalla "Configuración > Cuentas": el grid de cuentas que se agregan
+manualmente al catálogo de Expedientes (ver app/repositories/catalogos_repo.py),
+aparte de las que ya trae SISE. Exclusivo del perfil Administrador.
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 

@@ -1,3 +1,10 @@
+"""
+Cortes de expedientes generados (archivo Excel/export con la lista de
+expedientes incluidos) y su estado de envío por correo -- tabla
+`cortes_generados` en la base SQLite local, no en SQL Server. La lista de
+expedientes se guarda serializada como JSON en una sola columna.
+"""
+
 import json
 
 from app.db.local_store import ahora_local, get_local_connection

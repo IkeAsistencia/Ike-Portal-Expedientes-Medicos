@@ -1,3 +1,14 @@
+"""
+Pantalla "Alta de médico" del Directorio de Proveedores: captura de
+solicitudes de alta (con documentos opcionales: constancia fiscal y
+cédula) y su revisión. Cualquiera de Proveedor o Administrador puede
+capturar y editar su propia solicitud/documentos -- Cabina no la usa
+(mismo criterio que directorio_proveedores.py). Aprobar/rechazar y
+corregir una solicitud ajena son exclusivos de Administrador: aprobar
+da de alta un proveedor real en el padrón, igual que la carga de Excel
+de app/routers/proveedores_catalogo.py.
+"""
+
 from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile

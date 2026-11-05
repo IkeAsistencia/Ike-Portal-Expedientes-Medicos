@@ -1,3 +1,13 @@
+"""
+Pantalla "Expedientes": listado/filtro de expedientes (cualquier
+perfil con sesión), el botón "Enviar correo a proveedores" (operativo
+de Cabina) y el corte/evidencia en Excel -- generar, descargar y enviar
+-- exclusivo del perfil Administrador (ver `_requerir_administrador`).
+El envío de correos a proveedores y sus reglas de a quién/cuándo viven
+en app/services/envio_correo_service.py; el historial de lo enviado se
+consulta en app/routers/correos_enviados.py.
+"""
+
 from datetime import date
 from typing import Optional
 

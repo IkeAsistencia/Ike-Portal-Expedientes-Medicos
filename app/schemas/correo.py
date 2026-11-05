@@ -1,3 +1,11 @@
+"""
+Esquemas del envío de correo a proveedores y del corte de expedientes
+(app/routers/expedientes.py): bodies con tope de expedientes por
+operación, confirmación cuando se acerca el límite diario de correos, y
+el historial/cuota que consulta el panel de Administrador. El correo de
+destino de un corte se valida contra el dominio permitido de la empresa.
+"""
+
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator

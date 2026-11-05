@@ -1,3 +1,10 @@
+"""
+Control de alertas por correo al proveedor (expedientes sin proveedor médico
+asignado) para no reenviarlas de más -- tabla propia `alertas_proveedor_enviadas`
+en la base SQLite local, una marca por (expediente, nivel de alerta). No toca
+SQL Server.
+"""
+
 from app.db.local_store import ahora_local, get_local_connection
 
 

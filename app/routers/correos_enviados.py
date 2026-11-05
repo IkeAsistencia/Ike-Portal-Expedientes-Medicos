@@ -1,3 +1,11 @@
+"""
+Consulta de lo que ya se envió por correo: la cuota diaria restante
+(Cabina y Administrador, no Proveedor) y el historial de "Enviar correo
+a proveedores" (exclusivo de Administrador, como evidencia de envíos).
+El envío en sí vive en app/services/envio_correo_service.py, llamado
+desde app/routers/expedientes.py.
+"""
+
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query

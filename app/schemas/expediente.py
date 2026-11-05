@@ -1,3 +1,10 @@
+"""
+Esquemas de la pantalla Expedientes: el modelo `Expediente` (una fila del
+listado, con el estatus local y el semáforo calculado), sus filtros de
+búsqueda y el enum `EstatusExpediente`, que además comparte
+app/services/semaforo_service.py para decidir si aplica semáforo.
+"""
+
 from datetime import date, datetime
 from enum import Enum
 from typing import Optional

@@ -1,3 +1,14 @@
+"""
+Pantalla "Proveedores" (Directorio de Proveedores): padrón de médicos
+(dentro de la red, red de apoyo y fuera de la red), especialidades con
+sus KPI, búsqueda fuera de la red vía Google Maps, y agenda/cita con un
+proveedor amarrada a un expediente. Para los perfiles Proveedor y
+Administrador -- Cabina no la usa (ver `_requerir_proveedor_o_administrador`).
+Agendar/buscar fuera de la red/consultar agenda es exclusivo de
+Proveedor (`_requerir_proveedor`); el Administrador solo usa de aquí
+Solicitudes, Alta de médico, Carga del catálogo y Métricas.
+"""
+
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query

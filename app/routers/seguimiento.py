@@ -1,3 +1,15 @@
+"""
+Pantalla "Seguimiento de expedientes": bitácora (propia y la del
+sistema central/SISE), comprobante de pago, marca de pago anticipado y
+cambio manual de estatus. Actualizar bitácora, subir comprobante y
+marcar pago anticipado son exclusivos de Proveedor; Cabina solo
+consulta en modo lectura; "/fallidos" (bitácora de errores de inserción
+a SQL Server) es exclusivo de Administrador. Proveedor solo puede ver
+los datos de expedientes dentro de su flujo (`_verificar_proveedor_puede_ver`),
+para evitar que adivine el número de un expediente ajeno (IDOR), ya
+que SQL Server todavía no guarda qué Proveedor tiene asignado cada uno.
+"""
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 

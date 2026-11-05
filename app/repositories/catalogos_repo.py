@@ -1,3 +1,13 @@
+"""
+Catálogos de combos/filtros (servicios, subservicios, cuentas, entidades y
+municipios) para las pantallas de Expedientes, Configuración Cuentas y Alta
+de médico. Lee de SQL Server (SISE) vía Stored Procedures, salvo
+`listar_entidades` que consulta directo la tabla de catálogo `dbo.cEntFed`
+(única excepción documentada abajo). `listar_cuentas` combina la lista fija
+del .env con las cuentas adicionales que vive en la base SQLite local
+(ver cuentas_config_repo).
+"""
+
 from app.config import get_settings
 from app.db.connection import as_tvp_rows, call_procedure, get_connection
 from app.repositories import cuentas_config_repo
