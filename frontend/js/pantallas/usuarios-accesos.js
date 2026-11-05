@@ -20,8 +20,8 @@ const PLANTILLA = `
       <div class="filters-grid">
         <div class="field">
           <label for="acc-rfc">RFC</label>
-          <input type="text" id="acc-rfc" maxlength="10" placeholder="RFC" autocomplete="off">
-          <div class="hint" id="acc-rfc-hint">10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456).</div>
+          <input type="text" id="acc-rfc" maxlength="10" placeholder="ABCD123456" autocomplete="off"
+                 aria-describedby="acc-rfc-hint">
         </div>
         <div class="field">
           <label for="acc-nombre">Nombre</label>
@@ -49,6 +49,9 @@ const PLANTILLA = `
       <div class="filters-actions">
         <button class="btn btn-primary" id="acc-dar-alta-btn">Dar de alta</button>
       </div>
+      <!-- Debajo de la cuadrícula y no dentro del campo RFC: los campos se
+           alinean por abajo y la nota subía la caja del RFC sobre las demás. -->
+      <div class="hint" id="acc-rfc-hint">RFC de 10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456).</div>
       <div class="hint">La persona creará su propia contraseña la primera vez que entre con este RFC.</div>
     </div>
   </div>
