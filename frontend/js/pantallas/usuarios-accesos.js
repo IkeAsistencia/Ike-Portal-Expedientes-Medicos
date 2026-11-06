@@ -56,6 +56,31 @@ const PLANTILLA = `
     </div>
   </div>
 
+  <div class="card tono-azul">
+    <div class="card-header"><h2>Cargar usuarios desde Excel</h2></div>
+    <div class="card-body">
+      <div class="filters-grid">
+        <div class="field">
+          <label for="acc-carga-tipo">Qué vas a cargar</label>
+          <select id="acc-carga-tipo">
+            <option value="cabina">Cabina</option>
+            <option value="proveedor">Proveedores</option>
+            <option value="segun_archivo">Según la columna ROL del archivo</option>
+          </select>
+        </div>
+        <div class="field field-wide">
+          <label for="acc-carga-archivo">Archivo Excel (.xlsx)</label>
+          <input type="file" id="acc-carga-archivo" accept=".xlsx">
+        </div>
+      </div>
+      <div class="filters-actions">
+        <button class="btn btn-primary" id="acc-carga-revisar-btn">Revisar archivo</button>
+      </div>
+      <div class="hint" id="acc-carga-ayuda"></div>
+      <div class="hint">Primero se revisa el archivo y ves qué se va a cargar; no se guarda nada hasta que confirmes. Si el RFC trae homoclave se usan sus primeros 10 caracteres. A quien ya tiene acceso no se le cambia nada (solo se le suma el perfil si le falta) y cada persona crea su contraseña al entrar.</div>
+    </div>
+  </div>
+
   <div class="card tono-verdeazul">
     <div class="card-header">
       <h2>Accesos registrados (<span id="accCount">…</span>)</h2>
@@ -483,11 +508,136 @@ async function quitarPerfil(rfc, perfil) {
   }
 }
 
+/* ---------- Carga masiva desde Excel ---------- */
+const AYUDA_CARGA = {
+  cabina: "Se toman el RFC y el nombre de cada persona; las demás columnas se ignoran. Todos entran como Cabina.",
+  proveedor: "Se toman el nombre, el correo (@ikeasistencia.com) y el RFC. Todos entran como Proveedor, de Ciudad de México.",
+  segun_archivo: "Columnas: RFC, NOMBRE y ROL (CABINA, ADMINISTRADOR o PROVEEDOR). Para Proveedor también ENTIDAD y CORREO.",
+};
+const RESULTADO_CARGA = {
+  nuevo: "Acceso nuevo",
+  perfil_agregado: "Se le suma el perfil",
+  ya_existia: "Ya lo tenía",
+  rechazada: "Rechazada",
+};
+const NOMBRE_ROL_CARGA = { CABINA: "Cabina", PROVEEDOR: "Proveedor", ADMINISTRADOR: "Administrador" };
+
+let modalCarga = null;
+let cargaPendiente = null; // { archivo, tipo } ya revisado, a la espera de confirmar
+
+function crearModalCarga() {
+  modalCarga = crearModal({
+    id: "carga-usuarios-modal-overlay",
+    titulo: "Revisar carga de usuarios",
+    ancho: "min(960px, 96vw)",
+    cuerpo: `
+      <div class="carga-resumen" id="carga-usuarios-resumen"></div>
+      <div class="table-wrap" style="max-height:340px;overflow:auto;">
+        <table class="mini-table">
+          <thead>
+            <tr><th>Resultado</th><th>RFC</th><th>Nombre</th><th>Perfil</th><th>Entidad</th><th>Correo</th><th>Detalle</th></tr>
+          </thead>
+          <tbody id="carga-usuarios-tbody"></tbody>
+        </table>
+      </div>
+      <div class="hint" id="carga-usuarios-nota"></div>`,
+    pie: `
+      <button class="btn btn-secondary" id="carga-usuarios-modal-cancelar">Cancelar</button>
+      <button class="btn btn-primary" id="carga-usuarios-modal-confirmar">Confirmar carga</button>`,
+    alCerrar: () => { cargaPendiente = null; },
+  });
+  $("carga-usuarios-modal-cancelar").addEventListener("click", () => modalCarga.cerrar());
+  $("carga-usuarios-modal-confirmar").addEventListener("click", confirmarCarga);
+}
+
+function enviarCarga({ archivo, tipo }, aplicar) {
+  const formData = new FormData();
+  formData.append("archivo", archivo);
+  formData.append("tipo", tipo);
+  formData.append("aplicar", aplicar ? "true" : "false");
+  return api("/admin/accesos/carga-excel", { method: "POST", formData });
+}
+
+function pintarVistaPreviaCarga(r) {
+  const porCargar = r.nuevos + r.perfiles_agregados;
+  $("carga-usuarios-resumen").innerHTML = [
+    [r.nuevos, "acceso(s) nuevo(s)"],
+    [r.perfiles_agregados, "a quienes se les suma un perfil"],
+    [r.ya_existian, "ya existían"],
+    [r.rechazadas, "rechazada(s)"],
+  ].map(([n, texto]) => `<span><strong>${n}</strong> ${texto}</span>`).join("");
+
+  $("carga-usuarios-tbody").innerHTML = r.filas.map(f => `
+    <tr class="${f.resultado === "rechazada" ? "carga-fila-rechazada" : ""}">
+      <td data-label="Resultado">${escapeHtml(RESULTADO_CARGA[f.resultado] || f.resultado)}</td>
+      <td data-label="RFC">${escapeHtml(f.rfc)}</td>
+      <td data-label="Nombre">${escapeHtml(f.nombre)}</td>
+      <td data-label="Perfil">${escapeHtml(NOMBRE_ROL_CARGA[f.rol] || f.rol)}</td>
+      <td data-label="Entidad">${escapeHtml(sinAplica(f.entidad))}</td>
+      <td data-label="Correo">${escapeHtml(sinAplica(f.correo))}</td>
+      <td data-label="Detalle">${f.motivo ? escapeHtml(f.motivo) + ` (hoja ${escapeHtml(f.hoja)}, renglón ${f.renglon})` : ""}</td>
+    </tr>`).join("") || `<tr><td colspan="7" class="mini-empty">El archivo no trae filas con RFC.</td></tr>`;
+
+  $("carga-usuarios-nota").textContent = r.rechazadas
+    ? "Las filas rechazadas no se cargan: corrígelas en el Excel y vuelve a subirlas."
+    : "";
+  const confirmar = $("carga-usuarios-modal-confirmar");
+  confirmar.disabled = porCargar === 0;
+  confirmar.textContent = porCargar ? `Confirmar: dar de alta ${porCargar}` : "Nada que cargar";
+}
+
+async function revisarCarga() {
+  const archivo = $("acc-carga-archivo").files[0];
+  if (!archivo) {
+    toast("Elige el archivo Excel (.xlsx) que vas a cargar.", "error");
+    return;
+  }
+  if (!archivo.name.toLowerCase().endsWith(".xlsx")) {
+    toast("El archivo debe ser un Excel (.xlsx).", "error");
+    return;
+  }
+  const btn = $("acc-carga-revisar-btn");
+  btn.disabled = true;
+  try {
+    const datos = { archivo, tipo: $("acc-carga-tipo").value };
+    pintarVistaPreviaCarga(await enviarCarga(datos, false));
+    cargaPendiente = datos;
+    modalCarga.abrir();
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function confirmarCarga() {
+  if (!cargaPendiente) return;
+  const btn = $("carga-usuarios-modal-confirmar");
+  btn.disabled = true;
+  try {
+    const r = await enviarCarga(cargaPendiente, true);
+    modalCarga.cerrar();
+    $("acc-carga-archivo").value = "";
+    const perfiles = r.perfiles_agregados ? ` y ${r.perfiles_agregados} perfil(es) sumado(s)` : "";
+    toast(`Carga lista: ${r.nuevos} acceso(s) nuevo(s)${perfiles}. Cada persona crea su contraseña al entrar.`, "success");
+    cargarGrid();
+  } catch (err) {
+    toast(err.message, "error");
+    btn.disabled = false;
+  }
+}
+
 /* ---------- Ciclo de vida de la pantalla ---------- */
 export function montar(contenedor) {
   contenedor.innerHTML = PLANTILLA;
   crearModalEntidad();
   crearModalPerfil();
+  crearModalCarga();
+
+  const mostrarAyudaCarga = () => { $("acc-carga-ayuda").textContent = AYUDA_CARGA[$("acc-carga-tipo").value]; };
+  $("acc-carga-tipo").addEventListener("change", mostrarAyudaCarga);
+  mostrarAyudaCarga();
+  $("acc-carga-revisar-btn").addEventListener("click", revisarCarga);
 
   $("acc-perfil").addEventListener("change", async (e) => {
     const perfil = parseInt(e.target.value, 10);
@@ -521,4 +671,5 @@ export function alEntrar() {
 export function reiniciar() {
   modalEntidad.cerrar();
   modalPerfil.cerrar();
+  modalCarga.cerrar();
 }

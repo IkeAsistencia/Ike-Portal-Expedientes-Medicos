@@ -213,6 +213,11 @@ tbody tr:hover{background:#FAFAFA;}
 .badge-quitar{background:none;border:0;color:inherit;cursor:pointer;font:inherit;line-height:1;padding:0 0 0 6px;opacity:.65;}
 .badge-quitar:hover,.badge-quitar:focus-visible{opacity:1;}
 
+/* Carga masiva de usuarios (Usuarios y Accesos): resumen y filas rechazadas de la vista previa. */
+.carga-resumen{display:flex;flex-wrap:wrap;gap:6px 22px;margin-bottom:12px;font-size:13px;}
+.carga-resumen strong{font-size:17px;}
+.carga-fila-rechazada td{background:var(--red-bg);}
+
 /* Semáforo del Expediente (columna "⏱" de la tabla) -- distinto del badge
    de Estado. Un punto de color; el significado completo va en
    .semaforo-leyenda, no en cada celda. */

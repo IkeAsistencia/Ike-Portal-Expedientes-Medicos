@@ -357,9 +357,25 @@ cd /opt/portal-expedientes
 sudo -u portal .venv/bin/python -c "from app.db.local_store import init_local_db; from app.repositories import accesos_repo as a; init_local_db(); a.alta_acceso('ABCD123456', 'Nombre del administrador', a.PERFIL_ADMINISTRADOR)"
 ```
 
-De ahí en adelante, el administrador da de alta a los demás desde el portal
-(o se corre `scripts/cargar_usuarios_excel.py --aplicar` para el resto del
-equipo).
+De ahí en adelante, el administrador da de alta a los demás desde el portal.
+
+**Carga masiva desde el portal (sin tocar el servidor).** Ya dentro como
+Administrador, en *Usuarios y Accesos* → **Cargar usuarios desde Excel**: se
+elige qué se carga (*Cabina*, *Proveedores* o *Según la columna ROL del
+archivo*), se sube el `.xlsx` y se pulsa **Revisar archivo**. La vista previa
+muestra qué se va a dar de alta y qué filas se rechazan (con su motivo); no se
+guarda nada hasta **Confirmar**. Se leen los archivos tal como los mandan las
+áreas: el encabezado puede no estar en el primer renglón, se leen todas las
+hojas, y el RFC se corta a sus primeros 10 caracteres (los que traen
+homoclave sirven igual). *Cabina* solo toma RFC y nombre; *Proveedores* toma
+nombre (o «Usuario»), correo y RFC, y les pone **Ciudad de México** si no
+traen entidad. A quien ya tiene acceso no se le cambia nada (solo se le suma
+el perfil que le falte), así que repetir una carga es seguro. Tope: 2 MB y
+1,000 filas por archivo. Cada carga queda en el log (`Carga masiva de
+usuarios`).
+
+Para el servidor sin navegador queda `scripts/cargar_usuarios_excel.py
+--aplicar` (mismo lector).
 
 > **Aquí no se corre `scripts/seed_usuarios_prueba.py`.** Ese script es de
 > desarrollo: crea RFC de prueba con una contraseña conocida y publicada en

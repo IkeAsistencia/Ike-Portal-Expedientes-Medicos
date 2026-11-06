@@ -79,7 +79,7 @@ def test_sembrar_desde_excel_aplica_solo_filas_validas(tmp_path, monkeypatch):
         ("MIMA991129", "Miranda Martinez Ana Karen", "CABINA"),
         ("PASE950502", "Emmanuel Parra Sanchez", "ADMINISTRADOR"),
         ("PASE950502", "Emmanuel Parra Sanchez", "CABINA"),  # mismo RFC: se le suma el perfil
-        ("ADMI000001Z", "Admin RFC largo", "ADMINISTRADOR"),  # rechazada: 11 caracteres
+        ("ADM1000001Z", "Admin RFC mal formado", "ADMINISTRADOR"),  # rechazada: un número entre las 4 letras
     ])
     init_local_db()
     resultado = sembrar_desde_excel(ruta, aplicar=True)
@@ -89,7 +89,7 @@ def test_sembrar_desde_excel_aplica_solo_filas_validas(tmp_path, monkeypatch):
     accesos = {a["rfc"]: a for a in accesos_repo.listar_accesos()}
     assert "MIMA991129" in accesos
     assert accesos["PASE950502"]["perfiles"] == [accesos_repo.PERFIL_ADMINISTRADOR, accesos_repo.PERFIL_CABINA]
-    assert "ADMI000001Z" not in accesos
+    assert "ADM1000001" not in accesos
 
 
 def test_siembra_automatica_al_primer_arranque(tmp_path, monkeypatch):

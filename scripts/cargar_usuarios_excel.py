@@ -43,8 +43,14 @@ QUÉ NO HACE:
   - No manda correo ni avisa a nadie: solo deja el acceso listo para que la
     persona entre y cree su contraseña.
   - No borra ni inactiva a nadie que no esté en el Excel.
-  - alta_acceso es idempotente (INSERT OR REPLACE): si el RFC ya existe,
-    actualiza nombre/perfil y conserva la contraseña que ya se haya creado.
+  - No cambia a quien ya tiene acceso: si el RFC ya existe solo le suma el
+    perfil que le falte (conserva su nombre y su contraseña), así que se
+    puede repetir la carga sin riesgo.
+
+DESDE EL PORTAL: la misma carga está en Usuarios y Accesos -> "Cargar
+usuarios desde Excel" (con vista previa), y lee también los formatos de las
+áreas (encabezado en cualquier renglón, varias hojas, columnas USUARIO/
+NOMBRE DEL COORDINADOR, RFC con homoclave: se usan sus 10 primeros caracteres).
 """
 
 import argparse

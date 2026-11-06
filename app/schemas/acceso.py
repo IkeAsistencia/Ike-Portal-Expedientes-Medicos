@@ -201,6 +201,33 @@ class ActualizarEntidadInput(BaseModel):
         return v
 
 
+class CargaUsuariosFila(BaseModel):
+    """Una fila del Excel de la carga masiva, con lo que se hizo (o se haría) con ella."""
+
+    hoja: str
+    renglon: int
+    rfc: str
+    nombre: str
+    rol: str
+    entidad: Optional[str] = None
+    correo: Optional[str] = None
+    # 'nuevo' | 'perfil_agregado' | 'ya_existia' | 'rechazada'
+    resultado: str
+    motivo: Optional[str] = None
+
+
+class CargaUsuariosResponse(BaseModel):
+    """Respuesta de POST /admin/accesos/carga-excel. Con aplicado=False es solo la vista previa."""
+
+    aplicado: bool
+    total: int
+    nuevos: int
+    perfiles_agregados: int
+    ya_existian: int
+    rechazadas: int
+    filas: list[CargaUsuariosFila]
+
+
 class AccesoListado(BaseModel):
     rfc: str
     nombre: str
