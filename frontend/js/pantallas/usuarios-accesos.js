@@ -1,8 +1,11 @@
 /* Pantalla: Usuarios y Accesos (solo Administrador). Incluye el modal
-   "Cambiar entidad" de un Proveedor. */
+   "Cambiar entidad" de un Proveedor y el de "Agregar perfil": una misma
+   persona puede tener varios perfiles (misma contraseña) y elige con cuál
+   entra en el login. */
 import { api } from "../core/api.js";
 import { escapeHtml } from "../core/formato.js";
 import { toast } from "../core/toast.js";
+import { esCorreoDeEmpresa, MENSAJE_DOMINIO_NO_PERMITIDO } from "../core/correo-empresa.js";
 import { NOMBRES_PERFIL, PERFIL_ADMINISTRADOR, PERFIL_PROVEEDOR } from "../core/sesion.js";
 import { cargarCatalogoEntidades, poblarSelectEntidades } from "../core/catalogos.js";
 import { ICONOS } from "../componentes/iconos.js";
@@ -17,8 +20,8 @@ const PLANTILLA = `
       <div class="filters-grid">
         <div class="field">
           <label for="acc-rfc">RFC</label>
-          <input type="text" id="acc-rfc" maxlength="11" placeholder="RFC" autocomplete="off">
-          <div class="hint" id="acc-rfc-hint">10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456).</div>
+          <input type="text" id="acc-rfc" maxlength="10" placeholder="ABCD123456" autocomplete="off"
+                 aria-describedby="acc-rfc-hint">
         </div>
         <div class="field">
           <label for="acc-nombre">Nombre</label>
@@ -40,13 +43,41 @@ const PLANTILLA = `
         </div>
         <div class="field hidden" id="acc-correo-field">
           <label for="acc-correo">Correo (obligatorio para Proveedor)</label>
-          <input type="email" id="acc-correo" placeholder="proveedor@ejemplo.com" autocomplete="off">
+          <input type="email" id="acc-correo" placeholder="proveedor@ikeasistencia.com" autocomplete="off">
         </div>
       </div>
       <div class="filters-actions">
         <button class="btn btn-primary" id="acc-dar-alta-btn">Dar de alta</button>
       </div>
+      <!-- Debajo de la cuadrícula y no dentro del campo RFC: los campos se
+           alinean por abajo y la nota subía la caja del RFC sobre las demás. -->
+      <div class="hint" id="acc-rfc-hint">RFC de 10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456).</div>
       <div class="hint">La persona creará su propia contraseña la primera vez que entre con este RFC.</div>
+    </div>
+  </div>
+
+  <div class="card tono-azul">
+    <div class="card-header"><h2>Cargar usuarios desde Excel</h2></div>
+    <div class="card-body">
+      <div class="filters-grid">
+        <div class="field">
+          <label for="acc-carga-tipo">Qué vas a cargar</label>
+          <select id="acc-carga-tipo">
+            <option value="cabina">Cabina</option>
+            <option value="proveedor">Proveedores</option>
+            <option value="segun_archivo">Según la columna ROL del archivo</option>
+          </select>
+        </div>
+        <div class="field field-wide">
+          <label for="acc-carga-archivo">Archivo Excel (.xlsx)</label>
+          <input type="file" id="acc-carga-archivo" accept=".xlsx">
+        </div>
+      </div>
+      <div class="filters-actions">
+        <button class="btn btn-primary" id="acc-carga-revisar-btn">Revisar archivo</button>
+      </div>
+      <div class="hint" id="acc-carga-ayuda"></div>
+      <div class="hint">Primero se revisa el archivo y ves qué se va a cargar; no se guarda nada hasta que confirmes. Si el RFC trae homoclave se usan sus primeros 10 caracteres. A quien ya tiene acceso no se le cambia nada (solo se le suma el perfil si le falta) y cada persona crea su contraseña al entrar.</div>
     </div>
   </div>
 
@@ -64,7 +95,7 @@ const PLANTILLA = `
       <table class="mini-table">
         <thead>
           <tr>
-            <th>RFC</th><th>Nombre</th><th style="width:120px;">Perfil</th>
+            <th>RFC</th><th>Nombre</th><th style="width:150px;">Perfil</th>
             <th style="width:140px;">Entidad</th>
             <th style="width:180px;">Correo</th>
             <th style="width:90px;">Estado</th>
@@ -79,15 +110,44 @@ const PLANTILLA = `
 
 let modalEntidad = null;
 let cambiarEntidadRfc = null;
+let modalPerfil = null;
+let agregarPerfilRfc = null;
 let accesosActuales = [];
 let paginaActual = 1;
 
 const $ = (id) => document.getElementById(id);
 
 /* ---------- Grid de accesos ---------- */
+const PERFILES_ORDEN_ALTA = [2, 3, 1]; // mismo orden que el combo del alta: Cabina, Proveedor, Administrador
+
+function perfilesDe(a) {
+  return a.perfiles && a.perfiles.length ? a.perfiles : [a.perfil];
+}
+
+function perfilesQueFaltan(a) {
+  const tiene = perfilesDe(a);
+  return PERFILES_ORDEN_ALTA.filter(p => !tiene.includes(p));
+}
+
+/* Una insignia por perfil; con más de uno, cada una trae su "×" para quitarlo. */
+function celdaPerfiles(a) {
+  const perfiles = perfilesDe(a);
+  return perfiles.map(p => {
+    const nombre = escapeHtml(NOMBRES_PERFIL[String(p)] || p);
+    const quitar = perfiles.length > 1 ? `
+      <button type="button" class="badge-quitar" data-quitar-perfil="${p}" data-rfc="${escapeHtml(a.rfc)}"
+        title="Quitar el perfil ${nombre}" aria-label="Quitar el perfil ${nombre}">×</button>` : "";
+    return `<span class="badge perfil-${p}">${nombre}${quitar}</span>`;
+  }).join(" ");
+}
+
 function botonesAcciones(a) {
   const rfc = escapeHtml(a.rfc);
-  const cambiarEntidad = a.perfil === PERFIL_PROVEEDOR ? `
+  const agregarPerfil = perfilesQueFaltan(a).length ? `
+    <button class="row-action-btn accion-reset" data-accion="agregar-perfil" data-rfc="${rfc}" title="Darle otro perfil a esta persona: misma contraseña, y al entrar elige con cuál">
+      ${ICONOS.palomita} Agregar perfil
+    </button>` : "";
+  const cambiarEntidad = perfilesDe(a).includes(PERFIL_PROVEEDOR) ? `
     <button class="row-action-btn accion-reset" data-accion="cambiar-entidad" data-rfc="${rfc}" data-entidad="${escapeHtml(a.entidad || "")}" title="Cambiar la entidad asignada a este Proveedor">
       ${ICONOS.ubicacion} Cambiar entidad
     </button>` : "";
@@ -102,7 +162,7 @@ function botonesAcciones(a) {
     <button class="row-action-btn accion-reset" data-accion="reactivar" data-rfc="${rfc}" title="La persona vuelve a poder iniciar sesión">
       ${ICONOS.palomita} Reactivar
     </button>`;
-  return cambiarEntidad + resetear + activar;
+  return agregarPerfil + cambiarEntidad + resetear + activar;
 }
 
 function accesosFiltrados() {
@@ -111,7 +171,7 @@ function accesosFiltrados() {
   return accesosActuales.filter(a =>
     a.rfc.toLowerCase().includes(texto) ||
     a.nombre.toLowerCase().includes(texto) ||
-    (NOMBRES_PERFIL[String(a.perfil)] || "").toLowerCase().includes(texto)
+    perfilesDe(a).some(p => (NOMBRES_PERFIL[String(p)] || "").toLowerCase().includes(texto))
   );
 }
 
@@ -146,7 +206,7 @@ function renderGrid() {
     <tr>
       <td data-label="RFC">${escapeHtml(a.rfc)}</td>
       <td data-label="Nombre">${escapeHtml(a.nombre)}</td>
-      <td data-label="Perfil"><span class="badge perfil-${a.perfil}">${escapeHtml(NOMBRES_PERFIL[String(a.perfil)] || a.perfil)}</span></td>
+      <td data-label="Perfil">${celdaPerfiles(a)}</td>
       <td data-label="Entidad">${escapeHtml(sinAplica(a.entidad))}</td>
       <td data-label="Correo">${escapeHtml(sinAplica(a.correo))}</td>
       <td data-label="Estado"><span class="badge ${a.activo ? "activo" : "inactivo"}">${a.activo ? "Activo" : "Inactivo"}</span></td>
@@ -162,9 +222,13 @@ function renderGrid() {
     "reactivar": (btn) => reactivar(btn.dataset.rfc),
     "reset": (btn) => resetearPassword(btn.dataset.rfc),
     "cambiar-entidad": (btn) => abrirModalCambiarEntidad(btn.dataset.rfc, btn.dataset.entidad),
+    "agregar-perfil": (btn) => abrirModalAgregarPerfil(btn.dataset.rfc),
   };
   tbody.querySelectorAll(".row-action-btn[data-accion]").forEach(btn => {
     btn.addEventListener("click", () => acciones[btn.dataset.accion](btn));
+  });
+  tbody.querySelectorAll("[data-quitar-perfil]").forEach(btn => {
+    btn.addEventListener("click", () => quitarPerfil(btn.dataset.rfc, Number(btn.dataset.quitarPerfil)));
   });
 
   renderPaginador($("acc-pager"), {
@@ -202,14 +266,7 @@ async function darDeAlta() {
     toast("Ingresa el RFC y el nombre.", "error");
     return;
   }
-  // El Administrador lleva además el primer caracter de la homoclave (11 en
-  // total): de otro modo el RFC de 10 caracteres no distingue entre dos personas.
-  if (perfil === PERFIL_ADMINISTRADOR) {
-    if (!/^[A-Z]{4}\d{6}[A-Z0-9]$/.test(rfc)) {
-      toast("El RFC del Administrador debe tener 11 caracteres: 4 letras, 6 números y el primer caracter de la homoclave (ej. ABCD123456Z).", "error");
-      return;
-    }
-  } else if (!/^[A-Z]{4}\d{6}$/.test(rfc)) {
+  if (!/^[A-Z]{4}\d{6}$/.test(rfc)) {
     toast("El RFC debe tener 10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456).", "error");
     return;
   }
@@ -219,6 +276,10 @@ async function darDeAlta() {
   }
   if (perfil === PERFIL_PROVEEDOR && !correo) {
     toast("Debes asignarle un correo al perfil Proveedor.", "error");
+    return;
+  }
+  if (perfil === PERFIL_PROVEEDOR && !esCorreoDeEmpresa(correo)) {
+    toast(MENSAJE_DOMINIO_NO_PERMITIDO, "error");
     return;
   }
   const btn = $("acc-dar-alta-btn");
@@ -343,19 +404,246 @@ async function guardarEntidad() {
   }
 }
 
+/* ---------- Agregar / quitar un perfil de una persona que ya tiene acceso ---------- */
+function crearModalPerfil() {
+  modalPerfil = crearModal({
+    id: "agregar-perfil-modal-overlay",
+    titulo: "Agregar perfil",
+    ancho: "420px",
+    cuerpo: `
+      <p id="agregar-perfil-modal-rfc"></p>
+      <div class="field">
+        <label for="agregar-perfil-select">Perfil</label>
+        <select id="agregar-perfil-select"></select>
+      </div>
+      <div class="field hidden" id="agregar-perfil-entidad-field">
+        <label for="agregar-perfil-entidad">Entidad (obligatoria para Proveedor)</label>
+        <select id="agregar-perfil-entidad">
+          <option value="">Selecciona una entidad</option>
+        </select>
+      </div>
+      <div class="field hidden" id="agregar-perfil-correo-field">
+        <label for="agregar-perfil-correo">Correo (obligatorio para Proveedor)</label>
+        <input type="email" id="agregar-perfil-correo" placeholder="proveedor@ikeasistencia.com" autocomplete="off">
+      </div>
+      <div class="hint">Entra con el mismo RFC y la misma contraseña; en el login elige con qué perfil.</div>`,
+    pie: `
+      <button class="btn btn-secondary" id="agregar-perfil-modal-cancelar">Cancelar</button>
+      <button class="btn btn-primary" id="agregar-perfil-modal-guardar">Agregar</button>`,
+    alCerrar: () => { agregarPerfilRfc = null; },
+  });
+  $("agregar-perfil-modal-cancelar").addEventListener("click", () => modalPerfil.cerrar());
+  $("agregar-perfil-modal-guardar").addEventListener("click", guardarPerfil);
+  $("agregar-perfil-select").addEventListener("change", mostrarCamposProveedor);
+}
+
+async function mostrarCamposProveedor() {
+  const esProveedor = parseInt($("agregar-perfil-select").value, 10) === PERFIL_PROVEEDOR;
+  $("agregar-perfil-entidad-field").classList.toggle("hidden", !esProveedor);
+  $("agregar-perfil-correo-field").classList.toggle("hidden", !esProveedor);
+  if (esProveedor) {
+    await cargarCatalogoEntidades();
+    poblarSelectEntidades($("agregar-perfil-entidad"), "Selecciona una entidad");
+  }
+}
+
+function abrirModalAgregarPerfil(rfc) {
+  const acceso = accesosActuales.find(a => a.rfc === rfc);
+  if (!acceso) return;
+  agregarPerfilRfc = rfc;
+  $("agregar-perfil-modal-rfc").textContent = `RFC: ${rfc} — ${acceso.nombre}`;
+  $("agregar-perfil-select").innerHTML = perfilesQueFaltan(acceso)
+    .map(p => `<option value="${p}">${escapeHtml(NOMBRES_PERFIL[String(p)])}</option>`)
+    .join("");
+  $("agregar-perfil-entidad").value = "";
+  $("agregar-perfil-correo").value = "";
+  mostrarCamposProveedor();
+  modalPerfil.abrir();
+}
+
+async function guardarPerfil() {
+  if (!agregarPerfilRfc) return;
+  const perfil = parseInt($("agregar-perfil-select").value, 10);
+  const entidad = $("agregar-perfil-entidad").value;
+  const correo = $("agregar-perfil-correo").value.trim();
+  if (perfil === PERFIL_PROVEEDOR && (!entidad || !correo)) {
+    toast("Para el perfil Proveedor captura la entidad y el correo.", "error");
+    return;
+  }
+  if (perfil === PERFIL_PROVEEDOR && !esCorreoDeEmpresa(correo)) {
+    toast(MENSAJE_DOMINIO_NO_PERMITIDO, "error");
+    return;
+  }
+  const btn = $("agregar-perfil-modal-guardar");
+  btn.disabled = true;
+  try {
+    await api("/admin/accesos/" + encodeURIComponent(agregarPerfilRfc) + "/perfiles", {
+      method: "POST",
+      body: { perfil, entidad: entidad || undefined, correo: correo || undefined },
+    });
+    toast("Perfil agregado. Al entrar, la persona elegirá con cuál.", "success");
+    modalPerfil.cerrar();
+    cargarGrid();
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function quitarPerfil(rfc, perfil) {
+  const nombre = NOMBRES_PERFIL[String(perfil)] || perfil;
+  if (!(await confirmar({
+    titulo: "Quitar perfil",
+    mensaje: `¿Quitarle el perfil ${nombre} a ${rfc}? Seguirá entrando con sus otros perfiles.`,
+    textoConfirmar: "Quitar",
+    peligro: true,
+  }))) return;
+  try {
+    await api("/admin/accesos/" + encodeURIComponent(rfc) + "/perfiles/" + perfil, { method: "DELETE" });
+    toast(`Perfil ${nombre} quitado.`, "success");
+    cargarGrid();
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
+/* ---------- Carga masiva desde Excel ---------- */
+const AYUDA_CARGA = {
+  cabina: "Se toman el RFC y el nombre de cada persona; las demás columnas se ignoran. Todos entran como Cabina.",
+  proveedor: "Se toman el nombre, el correo (@ikeasistencia.com) y el RFC. Todos entran como Proveedor, de Ciudad de México.",
+  segun_archivo: "Columnas: RFC, NOMBRE y ROL (CABINA, ADMINISTRADOR o PROVEEDOR). Para Proveedor también ENTIDAD y CORREO.",
+};
+const RESULTADO_CARGA = {
+  nuevo: "Acceso nuevo",
+  perfil_agregado: "Se le suma el perfil",
+  ya_existia: "Ya lo tenía",
+  rechazada: "Rechazada",
+};
+const NOMBRE_ROL_CARGA = { CABINA: "Cabina", PROVEEDOR: "Proveedor", ADMINISTRADOR: "Administrador" };
+
+let modalCarga = null;
+let cargaPendiente = null; // { archivo, tipo } ya revisado, a la espera de confirmar
+
+function crearModalCarga() {
+  modalCarga = crearModal({
+    id: "carga-usuarios-modal-overlay",
+    titulo: "Revisar carga de usuarios",
+    ancho: "min(960px, 96vw)",
+    cuerpo: `
+      <div class="carga-resumen" id="carga-usuarios-resumen"></div>
+      <div class="table-wrap" style="max-height:340px;overflow:auto;">
+        <table class="mini-table">
+          <thead>
+            <tr><th>Resultado</th><th>RFC</th><th>Nombre</th><th>Perfil</th><th>Entidad</th><th>Correo</th><th>Detalle</th></tr>
+          </thead>
+          <tbody id="carga-usuarios-tbody"></tbody>
+        </table>
+      </div>
+      <div class="hint" id="carga-usuarios-nota"></div>`,
+    pie: `
+      <button class="btn btn-secondary" id="carga-usuarios-modal-cancelar">Cancelar</button>
+      <button class="btn btn-primary" id="carga-usuarios-modal-confirmar">Confirmar carga</button>`,
+    alCerrar: () => { cargaPendiente = null; },
+  });
+  $("carga-usuarios-modal-cancelar").addEventListener("click", () => modalCarga.cerrar());
+  $("carga-usuarios-modal-confirmar").addEventListener("click", confirmarCarga);
+}
+
+function enviarCarga({ archivo, tipo }, aplicar) {
+  const formData = new FormData();
+  formData.append("archivo", archivo);
+  formData.append("tipo", tipo);
+  formData.append("aplicar", aplicar ? "true" : "false");
+  return api("/admin/accesos/carga-excel", { method: "POST", formData });
+}
+
+function pintarVistaPreviaCarga(r) {
+  const porCargar = r.nuevos + r.perfiles_agregados;
+  $("carga-usuarios-resumen").innerHTML = [
+    [r.nuevos, "acceso(s) nuevo(s)"],
+    [r.perfiles_agregados, "a quienes se les suma un perfil"],
+    [r.ya_existian, "ya existían"],
+    [r.rechazadas, "rechazada(s)"],
+  ].map(([n, texto]) => `<span><strong>${n}</strong> ${texto}</span>`).join("");
+
+  $("carga-usuarios-tbody").innerHTML = r.filas.map(f => `
+    <tr class="${f.resultado === "rechazada" ? "carga-fila-rechazada" : ""}">
+      <td data-label="Resultado">${escapeHtml(RESULTADO_CARGA[f.resultado] || f.resultado)}</td>
+      <td data-label="RFC">${escapeHtml(f.rfc)}</td>
+      <td data-label="Nombre">${escapeHtml(f.nombre)}</td>
+      <td data-label="Perfil">${escapeHtml(NOMBRE_ROL_CARGA[f.rol] || f.rol)}</td>
+      <td data-label="Entidad">${escapeHtml(sinAplica(f.entidad))}</td>
+      <td data-label="Correo">${escapeHtml(sinAplica(f.correo))}</td>
+      <td data-label="Detalle">${f.motivo ? escapeHtml(f.motivo) + ` (hoja ${escapeHtml(f.hoja)}, renglón ${f.renglon})` : ""}</td>
+    </tr>`).join("") || `<tr><td colspan="7" class="mini-empty">El archivo no trae filas con RFC.</td></tr>`;
+
+  $("carga-usuarios-nota").textContent = r.rechazadas
+    ? "Las filas rechazadas no se cargan: corrígelas en el Excel y vuelve a subirlas."
+    : "";
+  const confirmar = $("carga-usuarios-modal-confirmar");
+  confirmar.disabled = porCargar === 0;
+  confirmar.textContent = porCargar ? `Confirmar: dar de alta ${porCargar}` : "Nada que cargar";
+}
+
+async function revisarCarga() {
+  const archivo = $("acc-carga-archivo").files[0];
+  if (!archivo) {
+    toast("Elige el archivo Excel (.xlsx) que vas a cargar.", "error");
+    return;
+  }
+  if (!archivo.name.toLowerCase().endsWith(".xlsx")) {
+    toast("El archivo debe ser un Excel (.xlsx).", "error");
+    return;
+  }
+  const btn = $("acc-carga-revisar-btn");
+  btn.disabled = true;
+  try {
+    const datos = { archivo, tipo: $("acc-carga-tipo").value };
+    pintarVistaPreviaCarga(await enviarCarga(datos, false));
+    cargaPendiente = datos;
+    modalCarga.abrir();
+  } catch (err) {
+    toast(err.message, "error");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function confirmarCarga() {
+  if (!cargaPendiente) return;
+  const btn = $("carga-usuarios-modal-confirmar");
+  btn.disabled = true;
+  try {
+    const r = await enviarCarga(cargaPendiente, true);
+    modalCarga.cerrar();
+    $("acc-carga-archivo").value = "";
+    const perfiles = r.perfiles_agregados ? ` y ${r.perfiles_agregados} perfil(es) sumado(s)` : "";
+    toast(`Carga lista: ${r.nuevos} acceso(s) nuevo(s)${perfiles}. Cada persona crea su contraseña al entrar.`, "success");
+    cargarGrid();
+  } catch (err) {
+    toast(err.message, "error");
+    btn.disabled = false;
+  }
+}
+
 /* ---------- Ciclo de vida de la pantalla ---------- */
 export function montar(contenedor) {
   contenedor.innerHTML = PLANTILLA;
   crearModalEntidad();
+  crearModalPerfil();
+  crearModalCarga();
+
+  const mostrarAyudaCarga = () => { $("acc-carga-ayuda").textContent = AYUDA_CARGA[$("acc-carga-tipo").value]; };
+  $("acc-carga-tipo").addEventListener("change", mostrarAyudaCarga);
+  mostrarAyudaCarga();
+  $("acc-carga-revisar-btn").addEventListener("click", revisarCarga);
 
   $("acc-perfil").addEventListener("change", async (e) => {
     const perfil = parseInt(e.target.value, 10);
     const esProveedor = perfil === PERFIL_PROVEEDOR;
     $("acc-entidad-field").classList.toggle("hidden", !esProveedor);
     $("acc-correo-field").classList.toggle("hidden", !esProveedor);
-    $("acc-rfc-hint").textContent = perfil === PERFIL_ADMINISTRADOR
-      ? "11 caracteres: 4 letras, 6 números y el primer caracter de la homoclave (ej. ABCD123456Z)."
-      : "10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456).";
     if (esProveedor) {
       await cargarCatalogoEntidades();
       poblarSelectEntidades($("acc-entidad"), "Selecciona una entidad");
@@ -382,4 +670,6 @@ export function alEntrar() {
 
 export function reiniciar() {
   modalEntidad.cerrar();
+  modalPerfil.cerrar();
+  modalCarga.cerrar();
 }

@@ -1,3 +1,10 @@
+"""
+Esquemas del login legado (usuario/contraseña contra el SP central), usado
+por POST /auth/login. Se mantiene aparte de app/schemas/acceso.py porque
+responde a reglas distintas (largo de contraseña limitado por el SP, sin
+RFC ni perfiles).
+"""
+
 from pydantic import BaseModel, Field, SecretStr
 
 

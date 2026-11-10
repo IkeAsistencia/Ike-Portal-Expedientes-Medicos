@@ -1,3 +1,11 @@
+"""
+Comprobantes de pago subidos por Proveedor (archivo + metadatos) en la tabla
+`comprobantes_pago` de la base SQLite local -- el contenido binario se guarda
+ahí mismo, no en SQL Server. Incluye la validación de "magic numbers" para
+confirmar que el contenido real del archivo corresponde al tipo MIME
+declarado por el cliente.
+"""
+
 from app.db.local_store import ahora_local, get_local_connection
 
 TAMANO_MAXIMO_BYTES = 5 * 1024 * 1024  # 5 MB

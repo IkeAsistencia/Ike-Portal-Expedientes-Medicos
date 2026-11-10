@@ -1,3 +1,11 @@
+"""
+Estatus de expediente manejado por el propio portal (ABIERTO, En Espera de
+Respuesta, Seguimiento Proveedor, etc.), guardado en la tabla
+`estatus_expediente` de la base SQLite local -- este dato no existe en SQL
+Server/SISE, por instrucción explícita del usuario. Solo se conserva el
+ÚLTIMO cambio (UPDATE), no un historial completo.
+"""
+
 from app.db.local_store import ahora_local, get_local_connection
 from app.schemas.expediente import EstatusExpediente
 

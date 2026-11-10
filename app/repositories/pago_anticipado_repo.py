@@ -1,3 +1,10 @@
+"""
+Marca de "pago anticipado" por expediente, puesta por Proveedor desde la
+pantalla de Seguimiento -- tabla `expediente_pago_anticipado` en la base
+SQLite local (no existe en SQL Server). Una vez que Proveedor manda su
+primer comentario queda bloqueada (ver `bloquear`) y ya no se puede cambiar.
+"""
+
 from app.db.local_store import ahora_local, get_local_connection
 
 

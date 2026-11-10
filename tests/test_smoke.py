@@ -631,7 +631,7 @@ def test_enviar_correo_proveedores_deja_historial(client):
 
     # 1001 es de Campeche: sin un proveedor ahí, no hay a quién mandarle.
     accesos_repo_module.alta_acceso(
-        "PROVCAM001", "Proveedor Campeche", accesos_repo_module.PERFIL_PROVEEDOR, "Campeche", "campeche@example.com"
+        "PROVCAM001", "Proveedor Campeche", accesos_repo_module.PERFIL_PROVEEDOR, "Campeche", "campeche@ikeasistencia.com"
     )
     headers = _auth_headers(client)
     r = client.post(
@@ -644,7 +644,7 @@ def test_enviar_correo_proveedores_deja_historial(client):
     assert historial[0]["tipo"] == "nuevo"
     assert historial[0]["expedientes"] == [1001]
     assert historial[0]["rfc_envio"]
-    assert historial[0]["destinatario"] == "campeche@example.com"
+    assert historial[0]["destinatario"] == "campeche@ikeasistencia.com"
 
 
 def test_correos_enviados_solo_administrador(client):
@@ -804,13 +804,13 @@ def test_corte_enviar_marca_simulado_y_no_repite_archivo(client):
     corte_id = r.json()["corte_id"]
 
     r = client.post(
-        f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "cabina@example.com"}, headers=headers
+        f"/expedientes/corte/{corte_id}/enviar", json={"destinatario": "cabina@ikeasistencia.com"}, headers=headers
     )
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["enviados"] == 1
     assert data["simulado"] is True  # no hay SMTP configurado en las pruebas
-    assert data["destinatario"] == "cabina@example.com"
+    assert data["destinatario"] == "cabina@ikeasistencia.com"
 
 
 def test_corte_descargar_inexistente_404(client):
@@ -972,7 +972,7 @@ def test_alta_proveedor_con_entidad_y_correo_ok(client):
         "/admin/accesos",
         json={
             "rfc": "PROV000003", "nombre": "Proveedor Válido", "perfil": 3,
-            "entidad": "Jalisco", "correo": "proveedor@example.com",
+            "entidad": "Jalisco", "correo": "proveedor@ikeasistencia.com",
         },
         headers=headers,
     )
@@ -981,7 +981,7 @@ def test_alta_proveedor_con_entidad_y_correo_ok(client):
     accesos = client.get("/admin/accesos", headers=headers).json()
     registro = next(a for a in accesos if a["rfc"] == "PROV000003")
     assert registro["entidad"] == "Jalisco"
-    assert registro["correo"] == "proveedor@example.com"
+    assert registro["correo"] == "proveedor@ikeasistencia.com"
 
 
 def test_alta_no_proveedor_guarda_na_en_entidad_y_correo(client):
@@ -999,28 +999,27 @@ def test_alta_no_proveedor_guarda_na_en_entidad_y_correo(client):
     assert registro["correo"] == "NA"
 
 
-def test_alta_administrador_exige_rfc_de_11_caracteres(client):
+def test_alta_administrador_rechaza_rfc_de_11_caracteres(client):
     headers = _auth_headers_admin(client)
     r = client.post(
         "/admin/accesos",
-        json={"rfc": "ADMI000001", "nombre": "Admin Corto", "perfil": 1},
+        json={"rfc": "ADMI000001Z", "nombre": "Admin Largo", "perfil": 1},
         headers=headers,
     )
     assert r.status_code == 422
-    assert "11 caracteres" in r.text
 
 
-def test_alta_administrador_con_homoclave_ok(client):
+def test_alta_administrador_con_rfc_de_10_ok(client):
     headers = _auth_headers_admin(client)
     r = client.post(
         "/admin/accesos",
-        json={"rfc": "ADMI000001Z", "nombre": "Admin Completo", "perfil": 1},
+        json={"rfc": "ADMI000001", "nombre": "Admin Completo", "perfil": 1},
         headers=headers,
     )
     assert r.status_code == 200, r.text
 
     accesos = client.get("/admin/accesos", headers=headers).json()
-    registro = next(a for a in accesos if a["rfc"] == "ADMI000001Z")
+    registro = next(a for a in accesos if a["rfc"] == "ADMI000001")
     assert registro["entidad"] == "NA"
     assert registro["correo"] == "NA"
 
@@ -1031,7 +1030,7 @@ def test_cambiar_entidad_de_proveedor_ok(client):
         "/admin/accesos",
         json={
             "rfc": "PROV000004", "nombre": "Proveedor Cambio", "perfil": 3,
-            "entidad": "Jalisco", "correo": "cambio@example.com",
+            "entidad": "Jalisco", "correo": "cambio@ikeasistencia.com",
         },
         headers=headers,
     )
@@ -1049,7 +1048,7 @@ def test_cambiar_entidad_entidad_invalida(client):
         "/admin/accesos",
         json={
             "rfc": "PROV000005", "nombre": "Proveedor Cambio 2", "perfil": 3,
-            "entidad": "Jalisco", "correo": "cambio2@example.com",
+            "entidad": "Jalisco", "correo": "cambio2@ikeasistencia.com",
         },
         headers=headers,
     )

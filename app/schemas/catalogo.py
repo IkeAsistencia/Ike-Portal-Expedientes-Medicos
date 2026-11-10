@@ -1,3 +1,9 @@
+"""
+Esquemas de catálogos genéricos usados para llenar combos y typeaheads del
+frontend (subservicios, cuentas, entidades federativas), consultados vía
+app/routers/catalogos.py.
+"""
+
 from pydantic import BaseModel
 
 

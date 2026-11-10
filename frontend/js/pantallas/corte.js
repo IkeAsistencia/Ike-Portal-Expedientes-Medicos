@@ -10,6 +10,7 @@
    opcional (descargar el Excel también basta) y cuenta contra el tope
    diario de correos. */
 import { api, apiArchivo } from "../core/api.js";
+import { esCorreoDeEmpresa, MENSAJE_DOMINIO_NO_PERMITIDO } from "../core/correo-empresa.js";
 import { escapeHtml, formatDate } from "../core/formato.js";
 import { toast } from "../core/toast.js";
 import { confirmar as confirmarAviso } from "../componentes/confirmar.js";
@@ -43,7 +44,7 @@ function obtenerModal() {
           <label for="corte-modal-destinatario">Enviar a (opcional)</label>
           <input type="email" id="corte-modal-destinatario" maxlength="120" autocomplete="email"
                  placeholder="correo@ikeasistencia.com">
-          <span class="corte-envio-ayuda">Una sola dirección. Si no lo vas a enviar, basta con descargar el Excel.</span>
+          <span class="corte-envio-ayuda">Una sola dirección @ikeasistencia.com. Si no lo vas a enviar, basta con descargar el Excel.</span>
         </div>
         ${cuotaCorreosHtml("corte-cuota-correos")}
       </div>`,
@@ -147,6 +148,11 @@ async function confirmar() {
   }
   if (!PATRON_CORREO.test(destinatario)) {
     toast("La dirección de \"Enviar a\" no tiene un formato válido (escribe una sola).", "error");
+    campo.focus();
+    return;
+  }
+  if (!esCorreoDeEmpresa(destinatario)) {
+    toast(MENSAJE_DOMINIO_NO_PERMITIDO, "error");
     campo.focus();
     return;
   }

@@ -1,3 +1,12 @@
+"""
+Bitácora de seguimiento de expedientes: registra comentarios en SQL Server
+(tabla `dbo.Seguimiento` del sistema central/SISE, vía Stored Procedures) y
+mantiene copias/bitácoras propias en la base SQLite local -- una copia de
+cada comentario (`comentarios_seguimiento`, para mostrarlo en el portal) y
+un registro de los intentos que fallaron al insertarse en SQL Server
+(`seguimiento_fallidos`, para revisión manual; ver ErrorRegistroSeguimiento).
+"""
+
 import pyodbc
 
 from app.db.connection import call_procedure, call_procedure_write

@@ -1,3 +1,10 @@
+"""
+Pantalla "Colores de cuentas": asigna color y prefijo a cada cuenta del
+catálogo de Expedientes, para distinguirlas visualmente en los
+listados. Exclusivo del perfil Administrador (reutiliza
+`requerir_administrador` de app/routers/admin_accesos.py).
+"""
+
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.repositories import catalogos_repo, cuentas_etiqueta_repo

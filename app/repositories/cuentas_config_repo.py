@@ -1,3 +1,10 @@
+"""
+Cuentas adicionales que el Administrador agrega a mano desde la pantalla
+"Configuración Cuentas" (tabla `cuentas_configuradas`, base SQLite local) --
+se suman a la lista fija CUENTAS_PERMITIDAS del .env; ver uso en
+catalogos_repo.listar_cuentas(). No toca SQL Server.
+"""
+
 from app.db.local_store import get_local_connection
 
 

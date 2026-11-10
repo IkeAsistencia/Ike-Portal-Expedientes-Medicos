@@ -325,22 +325,57 @@ Si alguna fila sale rechazada, el log dice cuál RFC y por qué (formato de
 RFC inválido, rol desconocido, o Proveedor sin entidad/correo); el resto de
 filas válidas sí se dan de alta.
 
-**El RFC del Administrador lleva 11 caracteres**, no 10: los 4 letras + 6
-números habituales más el primer caracter de la homoclave (ej.
-`ABCD123456Z`), porque el RFC de 10 caracteres no siempre distingue a dos
-administradores. Cabina y Proveedor siguen con 10.
+**El RFC lleva 10 caracteres** (4 letras + 6 números) para todos los
+perfiles. Si una persona tiene varios perfiles, en el Excel va un renglón por
+perfil con el mismo RFC, y queda un solo acceso con todos ellos.
 
-Si todavía no hay ese Excel, se puede dar de alta al primer administrador a
-mano, como antes:
+**Si no hay Excel (o no llegó al servidor), no hace falta nada: el portal se
+activa solo desde el navegador.** Mientras la tabla de accesos esté vacía, la
+pantalla de login muestra la *Activación inicial* en vez del RFC: pide RFC,
+nombre y contraseña, y quien la llena queda como el primer Administrador y
+entra. En cuanto existe un acceso (por esa activación, por el Excel o a mano)
+la opción desaparece y `POST /auth/activacion` responde 404; todo sigue el
+flujo de siempre y el Administrador da de alta al resto desde el portal.
+
+> **Quien despliega debe activar el portal de inmediato.** Mientras la tabla
+> esté vacía, cualquiera que llegue a la dirección puede quedarse con el
+> rol de Administrador. Lo mismo pasa si se pierde el disco de `LOCAL_DB_PATH`
+> (los accesos se borran y la activación se reabre). La activación queda
+> registrada en el log (`Activación inicial del portal`).
+
+**Una persona con más de un perfil** (por ejemplo Administrador y Cabina) se
+maneja con un solo RFC y una sola contraseña: en *Usuarios y Accesos*, botón
+**Agregar perfil**. Al iniciar sesión el portal le pregunta *Entrar como* y la
+sesión lleva solo el perfil elegido; para cambiar de perfil hay que cerrar
+sesión y volver a entrar.
+
+Para activarlo sin el navegador, se puede dar de alta al primer administrador
+a mano, como antes:
 
 ```bash
 cd /opt/portal-expedientes
-sudo -u portal .venv/bin/python -c "from app.db.local_store import init_local_db; from app.repositories import accesos_repo as a; init_local_db(); a.alta_acceso('RFCDELADMIN11', 'Nombre del administrador', a.PERFIL_ADMINISTRADOR)"
+sudo -u portal .venv/bin/python -c "from app.db.local_store import init_local_db; from app.repositories import accesos_repo as a; init_local_db(); a.alta_acceso('ABCD123456', 'Nombre del administrador', a.PERFIL_ADMINISTRADOR)"
 ```
 
-De ahí en adelante, el administrador da de alta a los demás desde el portal
-(o se corre `scripts/cargar_usuarios_excel.py --aplicar` para el resto del
-equipo).
+De ahí en adelante, el administrador da de alta a los demás desde el portal.
+
+**Carga masiva desde el portal (sin tocar el servidor).** Ya dentro como
+Administrador, en *Usuarios y Accesos* → **Cargar usuarios desde Excel**: se
+elige qué se carga (*Cabina*, *Proveedores* o *Según la columna ROL del
+archivo*), se sube el `.xlsx` y se pulsa **Revisar archivo**. La vista previa
+muestra qué se va a dar de alta y qué filas se rechazan (con su motivo); no se
+guarda nada hasta **Confirmar**. Se leen los archivos tal como los mandan las
+áreas: el encabezado puede no estar en el primer renglón, se leen todas las
+hojas, y el RFC se corta a sus primeros 10 caracteres (los que traen
+homoclave sirven igual). *Cabina* solo toma RFC y nombre; *Proveedores* toma
+nombre (o «Usuario»), correo y RFC, y les pone **Ciudad de México** si no
+traen entidad. A quien ya tiene acceso no se le cambia nada (solo se le suma
+el perfil que le falte), así que repetir una carga es seguro. Tope: 2 MB y
+1,000 filas por archivo. Cada carga queda en el log (`Carga masiva de
+usuarios`).
+
+Para el servidor sin navegador queda `scripts/cargar_usuarios_excel.py
+--aplicar` (mismo lector).
 
 > **Aquí no se corre `scripts/seed_usuarios_prueba.py`.** Ese script es de
 > desarrollo: crea RFC de prueba con una contraseña conocida y publicada en

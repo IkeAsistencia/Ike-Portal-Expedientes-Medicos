@@ -1,3 +1,11 @@
+"""
+Listado principal de expedientes de la pantalla Expedientes (y el usado por
+el cron de alertas), vía Stored Procedures en SQL Server (SISE). Cada fila
+se enriquece con datos que SOLO viven en la base SQLite local: el estatus
+propio del portal (estatus_repo) y, a partir de ahí, el color/tiempo del
+semáforo (semaforo_service) y la etiqueta de cuenta (cuentas_etiqueta_repo).
+"""
+
 import calendar
 from datetime import date
 

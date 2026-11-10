@@ -1,3 +1,11 @@
+"""
+Catálogos de solo lectura (servicios, subservicios, cuentas, entidades,
+municipios) usados por los combos/filtros del frontend, en particular
+los de Expedientes y del Alta de médico del Directorio de Proveedores.
+Requiere sesión iniciada (cualquier perfil), sin restricción adicional
+por perfil.
+"""
+
 from fastapi import APIRouter, Depends, Query
 
 from app.core.security import usuario_actual

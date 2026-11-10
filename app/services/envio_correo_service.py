@@ -20,16 +20,21 @@ Reglas (acordadas 2026-10-29):
     los atienda desde su portal.
 """
 
+import logging
 import unicodedata
 from datetime import datetime, timedelta
 
 from fastapi import HTTPException
 
 from app.config import get_settings
+from app.core.correo_empresa import DOMINIO_EMPRESA, es_correo_de_empresa
+from app.core.log_seguro import sanear_para_log
 from app.repositories import accesos_repo, correos_enviados_repo, estatus_repo, expedientes_repo
 from app.schemas.correo import EnviarCorreoProveedoresResponse
 from app.schemas.expediente import EstatusExpediente, ExpedienteFiltro
 from app.services import cuota_correos_service, email_service, estatus_service
+
+logger = logging.getLogger("envio_correo_service")
 
 MOTIVO_LIMITE = "limite"
 MOTIVO_SIN_PROVEEDORES = "sin_proveedores"
@@ -118,6 +123,14 @@ def _destinatarios(registros: list) -> tuple[list[str], list[str]]:
     correos: dict[str, str] = {}  # minúsculas -> como se capturó (sin repetir)
     cubiertas = set()
     for proveedor in accesos_repo.listar_proveedores_con_correo():
+        if not es_correo_de_empresa(proveedor["correo"]):
+            # Guardado antes del candado de dominio (app/core/correo_empresa.py):
+            # cuenta como proveedor sin correo.
+            logger.warning(
+                "Se omitió el correo del proveedor %s: no es del dominio @%s.",
+                sanear_para_log(proveedor.get("rfc")), DOMINIO_EMPRESA,
+            )
+            continue
         entidad = normalizar_entidad(proveedor["entidad"])
         if entidad and entidad in entidades:
             cubiertas.add(entidad)

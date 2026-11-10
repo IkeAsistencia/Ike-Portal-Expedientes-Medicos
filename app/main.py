@@ -1,3 +1,14 @@
+"""
+Punto de entrada FastAPI del Portal Promédico (`uvicorn app.main:app`).
+
+Orden del arranque (ver `lifespan`): secretos de AWS -> validar JWT_SECRET_KEY
+-> inicializar la base local SQLite -> sembrar usuarios iniciales (si aplica)
+-> calentar el pool de SQL Server. Se registran los routers REST y el router
+GraphQL (`/graphql`), y al final se monta el frontend estático
+(`frontend/index.html` + css/ + js/) en "/" -- por eso va después de todos
+los demás `include_router`/`app.get`, para no tapar ninguna ruta de la API.
+"""
+
 import mimetypes
 from contextlib import asynccontextmanager
 from pathlib import Path

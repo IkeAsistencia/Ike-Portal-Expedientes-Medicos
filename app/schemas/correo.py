@@ -1,7 +1,16 @@
+"""
+Esquemas del envío de correo a proveedores y del corte de expedientes
+(app/routers/expedientes.py): bodies con tope de expedientes por
+operación, confirmación cuando se acerca el límite diario de correos, y
+el historial/cuota que consulta el panel de Administrador. El correo de
+destino de un corte se valida contra el dominio permitido de la empresa.
+"""
+
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.core.correo_empresa import MENSAJE_DOMINIO_NO_PERMITIDO, es_correo_de_empresa
 from app.services.validacion_rfc_cedula_service import DatoInvalido, revisar_correo
 
 # Tope de expedientes por operación. Tanto el corte como el envío de correo
@@ -66,9 +75,12 @@ class EnviarCorteInput(BaseModel):
     @classmethod
     def _validar_destinatario(cls, v: str) -> str:
         try:
-            return revisar_correo(v)
+            correo = revisar_correo(v)
         except DatoInvalido as e:
             raise ValueError(str(e)) from e
+        if not es_correo_de_empresa(correo):
+            raise ValueError(MENSAJE_DOMINIO_NO_PERMITIDO)
+        return correo
 
 
 class EnviarCorteResponse(BaseModel):

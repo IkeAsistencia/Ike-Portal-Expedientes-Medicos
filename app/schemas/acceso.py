@@ -1,11 +1,20 @@
+"""
+Esquemas del portal nuevo (accesos por RFC): login, activación inicial,
+alta y administración de accesos/perfiles (ver app/routers/acceso.py y
+app/routers/admin_accesos.py). Valida el formato del RFC (10 caracteres,
+4 letras + 6 números), la fuerza de la contraseña y, para el perfil
+Proveedor, que traiga entidad y un correo con formato válido en el
+dominio de la empresa.
+"""
+
 import re
 from typing import Optional
 
 from pydantic import BaseModel, Field, SecretStr, field_validator, model_validator
 
+from app.core.correo_empresa import MENSAJE_DOMINIO_NO_PERMITIDO, es_correo_de_empresa
 from app.repositories.accesos_repo import (
     ENTIDADES_MEXICO,
-    PERFIL_ADMINISTRADOR,
     PERFIL_PROVEEDOR,
     SIN_APLICA,
 )
@@ -15,17 +24,11 @@ MENSAJE_REGLA_PASSWORD = (
     "una minúscula, un número y un carácter especial (ej. !@#$%&*)."
 )
 
-# Cabina y Proveedor: RFC de 10 caracteres (4 letras + 6 números). Administrador:
-# se le pide además el primer caracter de la homoclave (11 en total), porque hay
-# más de una persona cuyo RFC de 10 caracteres coincide y así se distinguen.
+# RFC de acceso: 10 caracteres (4 letras + 6 números) para TODOS los perfiles.
+# Una persona tiene un solo RFC aunque tenga varios perfiles (ver usuarios_perfiles).
 PATRON_RFC = re.compile(r"^[A-Za-z]{4}\d{6}$")
-PATRON_RFC_ADMINISTRADOR = re.compile(r"^[A-Za-z]{4}\d{6}[A-Za-z0-9]$")
 MENSAJE_REGLA_RFC = "El RFC debe tener 10 caracteres: 4 letras seguidas de 6 números (ej. ABCD123456)."
-MENSAJE_REGLA_RFC_ADMINISTRADOR = (
-    "El RFC del Administrador debe tener 11 caracteres: 4 letras, 6 números y el "
-    "primer caracter de la homoclave (ej. ABCD123456Z)."
-)
-LARGO_MAXIMO_RFC = 11
+LARGO_MAXIMO_RFC = 10
 
 
 def _cumple_regla_password(password: str) -> bool:
@@ -63,9 +66,52 @@ class CrearPasswordInput(BaseModel):
         return v
 
 
+class ActivarPortalInput(CrearPasswordInput):
+    """Body de POST /auth/activacion: crea al primer Administrador (ver accesos_repo.activar_portal)."""
+
+    nombre: str = Field(..., min_length=1, max_length=120)
+
+    @field_validator("rfc")
+    @classmethod
+    def _validar_rfc(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not PATRON_RFC.match(v):
+            raise ValueError(MENSAJE_REGLA_RFC)
+        return v
+
+    @field_validator("nombre")
+    @classmethod
+    def _validar_nombre(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Captura tu nombre.")
+        return v
+
+
+class ActivacionEstadoResponse(BaseModel):
+    requerida: bool
+
+
 class RfcLoginInput(BaseModel):
     rfc: str = Field(..., min_length=1, max_length=LARGO_MAXIMO_RFC)
     password: SecretStr = Field(..., min_length=1, max_length=40)
+    # Solo cuando el RFC tiene más de un perfil: con cuál quiere entrar.
+    perfil: Optional[int] = Field(default=None, ge=1, le=3)
+
+
+class PerfilDisponible(BaseModel):
+    perfil: int
+    nombre: str
+
+
+class PerfilesDisponiblesResponse(BaseModel):
+    """
+    Respuesta del login cuando el RFC tiene más de un perfil: todavía NO hay
+    sesión; el login muestra "Entrar como" y repite la petición con `perfil`.
+    """
+
+    requiere_perfil: bool = True
+    perfiles: list[PerfilDisponible]
 
 
 class AccesoLoginResponse(BaseModel):
@@ -92,19 +138,11 @@ class AltaAccesoInput(BaseModel):
 
     @field_validator("rfc")
     @classmethod
-    def _normalizar_rfc(cls, v: str) -> str:
-        return v.strip().upper()
-
-    @model_validator(mode="after")
-    def _validar_rfc_segun_perfil(self):
-        # El Administrador lleva el primer caracter de la homoclave (11) porque
-        # de otro modo el RFC de 10 caracteres no distingue entre dos personas.
-        if self.perfil == PERFIL_ADMINISTRADOR:
-            if not PATRON_RFC_ADMINISTRADOR.match(self.rfc):
-                raise ValueError(MENSAJE_REGLA_RFC_ADMINISTRADOR)
-        elif not PATRON_RFC.match(self.rfc):
+    def _validar_rfc(cls, v: str) -> str:
+        v = v.strip().upper()
+        if not PATRON_RFC.match(v):
             raise ValueError(MENSAJE_REGLA_RFC)
-        return self
+        return v
 
     @model_validator(mode="after")
     def _validar_entidad_y_correo(self):
@@ -117,11 +155,36 @@ class AltaAccesoInput(BaseModel):
                 raise ValueError("Debes asignarle un correo al perfil Proveedor.")
             if not _correo_valido(self.correo.strip()):
                 raise ValueError("El correo no tiene un formato válido.")
+            if not es_correo_de_empresa(self.correo):
+                raise ValueError(MENSAJE_DOMINIO_NO_PERMITIDO)
             self.correo = self.correo.strip()
         else:
             # Cabina/Administrador no usan entidad ni correo -- "NA" en vez de vacío.
             self.entidad = SIN_APLICA
             self.correo = SIN_APLICA
+        return self
+
+
+class AgregarPerfilInput(BaseModel):
+    """Body de POST /admin/accesos/{rfc}/perfiles: suma un perfil a una persona que ya tiene acceso."""
+
+    perfil: int = Field(..., ge=1, le=3)
+    entidad: Optional[str] = None  # obligatoria solo si perfil == Proveedor
+    correo: Optional[str] = None  # obligatorio solo si perfil == Proveedor
+
+    @model_validator(mode="after")
+    def _validar_proveedor(self):
+        if self.perfil == PERFIL_PROVEEDOR:
+            if not self.entidad or self.entidad not in ENTIDADES_MEXICO:
+                raise ValueError("Debes asignarle una entidad válida al perfil Proveedor.")
+            if not self.correo or not _correo_valido(self.correo.strip()):
+                raise ValueError("Debes asignarle un correo válido al perfil Proveedor.")
+            if not es_correo_de_empresa(self.correo):
+                raise ValueError(MENSAJE_DOMINIO_NO_PERMITIDO)
+            self.correo = self.correo.strip()
+        else:
+            self.entidad = None
+            self.correo = None
         return self
 
 
@@ -138,10 +201,38 @@ class ActualizarEntidadInput(BaseModel):
         return v
 
 
+class CargaUsuariosFila(BaseModel):
+    """Una fila del Excel de la carga masiva, con lo que se hizo (o se haría) con ella."""
+
+    hoja: str
+    renglon: int
+    rfc: str
+    nombre: str
+    rol: str
+    entidad: Optional[str] = None
+    correo: Optional[str] = None
+    # 'nuevo' | 'perfil_agregado' | 'ya_existia' | 'rechazada'
+    resultado: str
+    motivo: Optional[str] = None
+
+
+class CargaUsuariosResponse(BaseModel):
+    """Respuesta de POST /admin/accesos/carga-excel. Con aplicado=False es solo la vista previa."""
+
+    aplicado: bool
+    total: int
+    nuevos: int
+    perfiles_agregados: int
+    ya_existian: int
+    rechazadas: int
+    filas: list[CargaUsuariosFila]
+
+
 class AccesoListado(BaseModel):
     rfc: str
     nombre: str
-    perfil: int
+    perfil: int  # el principal; todos los que tiene van en `perfiles`
+    perfiles: list[int] = []
     tiene_password: bool
     fecha_alta: str
     activo: bool

@@ -41,20 +41,23 @@ def test_leer_filas_exige_columnas_obligatorias(tmp_path):
         leer_filas(ruta)
 
 
-def test_validar_fila_administrador_exige_11_caracteres():
+def test_validar_fila_rfc_de_10_caracteres_para_todos():
     fila = {"rfc": "PASE950502", "nombre": "Emmanuel", "rol": "ADMINISTRADOR", "entidad": None, "correo": None}
-    assert validar_fila(fila) is not None  # 10 caracteres, le falta la homoclave
-
-    fila["rfc"] = "PASE950502G"
     assert validar_fila(fila) is None
+
+    fila["rfc"] = "PASE950502G"  # 11 caracteres: ya no se acepta
+    assert validar_fila(fila) is not None
 
 
 def test_validar_fila_proveedor_exige_entidad_y_correo():
     fila = {"rfc": "PROV000001", "nombre": "X", "rol": "PROVEEDOR", "entidad": None, "correo": None}
     assert validar_fila(fila) is not None
 
-    fila["entidad"], fila["correo"] = "Jalisco", "x@example.com"
+    fila["entidad"], fila["correo"] = "Jalisco", "x@ikeasistencia.com"
     assert validar_fila(fila) is None
+
+    fila["correo"] = "x@gmail.com"  # solo correos de la empresa
+    assert "ikeasistencia.com" in validar_fila(fila)
 
 
 def test_sembrar_desde_excel_aplica_solo_filas_validas(tmp_path, monkeypatch):
@@ -74,24 +77,25 @@ def test_sembrar_desde_excel_aplica_solo_filas_validas(tmp_path, monkeypatch):
 
     ruta = _excel(tmp_path, [
         ("MIMA991129", "Miranda Martinez Ana Karen", "CABINA"),
-        ("PASE950502G", "Emmanuel Parra Sanchez", "ADMINISTRADOR"),
-        ("ADMI000001", "Admin RFC corto", "ADMINISTRADOR"),  # rechazada: faltan 11 caracteres
+        ("PASE950502", "Emmanuel Parra Sanchez", "ADMINISTRADOR"),
+        ("PASE950502", "Emmanuel Parra Sanchez", "CABINA"),  # mismo RFC: se le suma el perfil
+        ("ADM1000001Z", "Admin RFC mal formado", "ADMINISTRADOR"),  # rechazada: un número entre las 4 letras
     ])
     init_local_db()
     resultado = sembrar_desde_excel(ruta, aplicar=True)
 
-    assert len(resultado["listas"]) == 2
+    assert len(resultado["listas"]) == 3
     assert len(resultado["rechazadas"]) == 1
-    accesos = {a["rfc"] for a in accesos_repo.listar_accesos()}
+    accesos = {a["rfc"]: a for a in accesos_repo.listar_accesos()}
     assert "MIMA991129" in accesos
-    assert "PASE950502G" in accesos
-    assert "ADMI000001" not in accesos
+    assert accesos["PASE950502"]["perfiles"] == [accesos_repo.PERFIL_ADMINISTRADOR, accesos_repo.PERFIL_CABINA]
+    assert "ADM1000001" not in accesos
 
 
 def test_siembra_automatica_al_primer_arranque(tmp_path, monkeypatch):
     ruta = _excel(tmp_path, [
         ("MIMA991129", "Miranda Martinez Ana Karen", "CABINA"),
-        ("PASE950502G", "Emmanuel Parra Sanchez", "ADMINISTRADOR"),
+        ("PASE950502", "Emmanuel Parra Sanchez", "ADMINISTRADOR"),
     ])
 
     monkeypatch.setenv("DB_AUTH_MODE", "sql")
@@ -114,8 +118,8 @@ def test_siembra_automatica_al_primer_arranque(tmp_path, monkeypatch):
     with TestClient(app):
         accesos = {a["rfc"]: a for a in accesos_repo.listar_accesos()}
         assert accesos["MIMA991129"]["perfil"] == accesos_repo.PERFIL_CABINA
-        assert accesos["PASE950502G"]["perfil"] == accesos_repo.PERFIL_ADMINISTRADOR
-        assert accesos["PASE950502G"]["tiene_password"] is False
+        assert accesos["PASE950502"]["perfil"] == accesos_repo.PERFIL_ADMINISTRADOR
+        assert accesos["PASE950502"]["tiene_password"] is False
 
         # Un segundo "arranque" no debe volver a sembrar (la tabla ya no está
         # vacía): dar de alta a mano a un tercero y confirmar que sigue ahí
