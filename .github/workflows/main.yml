@@ -80,6 +80,7 @@ jobs:
           key: ${{ secrets.SSHKEYPROD }}
           source: "package/*"
           target: "/var/www/Ike-Portal-Expedientes-Medicos"
+          strip_components: 1
           rm: false
           overwrite: true
 
@@ -93,14 +94,15 @@ jobs:
           script: |
             cd /var/www/Ike-Portal-Expedientes-Medicos
             
-            # Limpiar la carpeta temporal 'package' si se copió como subdirectorio
-            rm -rf package
+            # Limpiar archivos de caché de Python viejos
+            find . -type f -name "*.pyc" -delete
+            find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
             
             # Activar entorno virtual y actualizar dependencias de Python
             source venv/bin/activate
             pip install -r requirements.txt
             
-            # Reiniciar tu servicio de Systemd para reflejar el código nuevo
+            # Reiniciar el servicio de Systemd para reflejar el código nuevo
             sudo systemctl restart portalmedicos
 
       - name: Cerrar puerto 22
