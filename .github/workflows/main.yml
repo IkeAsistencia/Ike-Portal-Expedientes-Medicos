@@ -91,7 +91,7 @@ jobs:
           port: ${{ secrets.PORTPROD }}
           key: ${{ secrets.SSHKEYPROD }}
           script: |
-            cd /home/ubuntu/Ike-Portal-Expedientes-Medicos
+            cd /var/www/Ike-Portal-Expedientes-Medicos
             
             # Limpiar la carpeta temporal 'package' si se copió como subdirectorio
             rm -rf package
