@@ -8,6 +8,7 @@ en app/services/envio_correo_service.py; el historial de lo enviado se
 consulta en app/routers/correos_enviados.py.
 """
 
+import json
 from datetime import date
 from typing import Optional
 
@@ -35,8 +36,27 @@ router = APIRouter(
 )
 
 
+# El contador "Correos de hoy: X de 100" viaja en este encabezado de la
+# respuesta de la lista de expedientes y del envío de correos (el portal lo
+# lee en frontend/js/core/api.js). Así el contador se mantiene al día con lo
+# que envían los demás sin una petición aparte a /correos-enviados/cuota:
+# esas consultas automáticas sumaban al límite de peticiones por IP del WAF.
+ENCABEZADO_CUOTA_CORREOS = "X-Correos-Hoy"
+
+
+def _adjuntar_cuota_correos(response: Response, usuario: dict) -> None:
+    # Proveedor no envía correos ni ve el contador (igual que /correos-enviados/cuota).
+    if usuario.get("perfil") == accesos_repo.PERFIL_PROVEEDOR:
+        return
+    try:
+        response.headers[ENCABEZADO_CUOTA_CORREOS] = json.dumps(cuota_correos_service.estado().como_dict())
+    except Exception:  # el contador nunca debe tumbar la lista ni el envío
+        pass
+
+
 @router.get("", response_model=list[Expediente])
 def listar_expedientes(
+    response: Response,
     cl_expediente: Optional[int] = None,
     fecha_inicio: Optional[date] = None,
     fecha_fin: Optional[date] = None,
@@ -45,6 +65,7 @@ def listar_expedientes(
     cuentas: Optional[list[int]] = Query(
         default=None, description="Una o varias claves de cuenta (?cuentas=1&cuentas=2)"
     ),
+    usuario: dict = Depends(usuario_actual),
 ):
     filtro = ExpedienteFiltro(
         cl_expediente=cl_expediente,
@@ -55,13 +76,17 @@ def listar_expedientes(
         cuentas=cuentas,
     )
     try:
-        return expedientes_repo.listar_expedientes(filtro)
+        expedientes = expedientes_repo.listar_expedientes(filtro)
     except ValueError as e:
         raise HTTPException(400, str(e))
+    _adjuntar_cuota_correos(response, usuario)
+    return expedientes
 
 
 @router.post("/enviar-correo-proveedores", response_model=EnviarCorreoProveedoresResponse)
-def enviar_correo_proveedores(data: EnviarCorreoProveedoresInput, usuario: dict = Depends(usuario_actual)):
+def enviar_correo_proveedores(
+    data: EnviarCorreoProveedoresInput, response: Response, usuario: dict = Depends(usuario_actual)
+):
     """
     Botón "Enviar correo a proveedores". Es una acción operativa de Cabina --
     Administrador ya no la usa (ahora solo genera el corte/evidencia) y
@@ -77,7 +102,9 @@ def enviar_correo_proveedores(data: EnviarCorreoProveedoresInput, usuario: dict 
     """
     if len(data.expedientes) > MAXIMO_EXPEDIENTES_POR_OPERACION:
         raise HTTPException(400, f"No se pueden procesar más de {MAXIMO_EXPEDIENTES_POR_OPERACION} expedientes a la vez.")
-    return envio_correo_service.enviar_a_proveedores(data.expedientes, usuario, data.confirmar_limite)
+    resultado = envio_correo_service.enviar_a_proveedores(data.expedientes, usuario, data.confirmar_limite)
+    _adjuntar_cuota_correos(response, usuario)
+    return resultado
 
 
 def _requerir_administrador(usuario: dict) -> None:

@@ -15,7 +15,7 @@ import {
 } from "../core/reglas-expedientes.js";
 import { ICONOS } from "../componentes/iconos.js";
 import { kpiHtml } from "../componentes/kpi.js";
-import { actualizarCuotaCorreos, cuotaCorreosHtml } from "../componentes/cuota-correos.js";
+import { cuotaCorreosHtml } from "../componentes/cuota-correos.js";
 import { enviarCorreoAProveedores } from "../componentes/enviar-correo-proveedores.js";
 import { limitarADigitos } from "../componentes/campo-numerico.js";
 import { crearMultiselectCuentas } from "../componentes/multiselect-cuentas.js";
@@ -50,6 +50,8 @@ const PLANTILLA = `
     <div class="card-header">
       <h2>Resultados de la búsqueda</h2>
       <div class="acciones-correo">
+        <span class="expedientes-actualizado" id="expedientes-actualizado" role="status"></span>
+        <button class="btn btn-secondary" id="btn-actualizar-expedientes" title="Volver a traer los expedientes sin esperar al refresco automático">Actualizar</button>
         ${cuotaCorreosHtml("cuota-correos-expedientes")}
         <button class="btn btn-secondary" id="btn-generar-corte">Generar corte</button>
         <button class="btn btn-primary" id="btn-enviar-correo-proveedores">Enviar correo a proveedores</button>
@@ -98,7 +100,13 @@ const PLANTILLA = `
     <div class="pager" id="expedientes-pager"></div>
   </div>`;
 
-const INTERVALO_POLLING_MS = 20000; // 20s: se sienta "en vivo" sin saturar al servidor
+// Refresco automático cada 5 minutos (antes 20 s). Con ~40 personas detrás de
+// la misma IP de la oficina, el refresco cada 20 s sumaba cientos de
+// peticiones y el WAF de AWS bloqueaba la IP. Para no esperar está el botón
+// "Actualizar". Con la pestaña oculta no se refresca; al volver, sí.
+const INTERVALO_REFRESCO_MS = 5 * 60 * 1000;
+const ESPERA_MAXIMA_TRAS_FALLA_MS = 20 * 60 * 1000;   // si falla: 10, 20 min...
+const MINIMO_AL_VOLVER_MS = 60 * 1000;                 // al volver a la pestaña, como mucho 1 por minuto
 
 let expedientesActuales = [];
 const seleccionados = new Set();
@@ -119,7 +127,12 @@ const COLORES_SEMAFORO = ["verde", "amarillo", "naranja", "rojo"];
 // plano (ver iniciarPolling) repita EXACTAMENTE esa búsqueda sin importar
 // qué esté a medio escribir en los campos del filtro en ese momento.
 let ultimaBusquedaParams = null;
+let pollingActivo = false;
 let pollingId = null;
+let relojActualizadoId = null;
+let ultimoRefresco = 0;        // cuándo se trajo bien la lista por última vez
+let ultimoIntento = 0;         // cuándo se pidió por última vez (bien o mal)
+let fallasRefresco = 0;
 
 // Qué expedientes estaban visibles en pantalla la última vez que se revisó,
 // y con qué estatus (ver notificarExpedientesNuevos) -- null = todavía no
@@ -519,6 +532,7 @@ function renderAlertaRespuestasPendientes({ sonar, expandir = false }) {
 }
 
 async function ejecutarBusqueda(params, { silencioso }) {
+  ultimoIntento = Date.now();
   try {
     const data = await api("/expedientes", { params });
     data.sort((a, b) => a.fecha_apertura_servicio.localeCompare(b.fecha_apertura_servicio));
@@ -560,13 +574,21 @@ async function ejecutarBusqueda(params, { silencioso }) {
     renderSemaforoResumen(params.cl_expediente ? filtrados : filasSinFiltroSemaforo(data));
     renderKPIs();
     actualizarNotificacionAtendidos();
+    ultimoRefresco = Date.now();
+    fallasRefresco = 0;
+    pintarActualizado();
+    programarRefresco();
+    return true;
   } catch (err) {
+    fallasRefresco += 1;
+    programarRefresco();
     if (silencioso) {
       console.warn("No se pudo refrescar Expedientes en segundo plano:", err.message);
-      return;
+      return false;
     }
     filaMensaje($("tabla-expedientes-body"), escapeHtml(err.message));
     toast(err.message, "error");
+    return false;
   }
 }
 
@@ -574,21 +596,79 @@ async function ejecutarBusqueda(params, { silencioso }) {
    que Cabina le mande (y a Cabina/Admin se les actualice lo que ya ven)
    mientras tengan el portal abierto, sin que nadie tenga que refrescar. */
 export function iniciarPolling() {
-  if (pollingId) return; // ya está corriendo
-  pollingId = setInterval(() => {
-    // Otro usuario de Cabina pudo haber enviado correos: el contador se
-    // mantiene al día igual que la tabla.
-    if (!esPerfilProveedor()) actualizarCuotaCorreos();
-    if (!ultimaBusquedaParams) return; // todavía no se ha hecho ninguna búsqueda
-    ejecutarBusqueda(ultimaBusquedaParams, { silencioso: true });
-  }, INTERVALO_POLLING_MS);
+  if (pollingActivo) return; // ya está corriendo
+  pollingActivo = true;
+  document.addEventListener("visibilitychange", alCambiarVisibilidad);
+  relojActualizadoId = setInterval(pintarActualizado, 30 * 1000);   // solo texto, sin pedir nada
+  programarRefresco();
+}
+
+/* Agenda el siguiente refresco: 5 minutos después del último que salió bien
+   (una búsqueda manual también cuenta), o más espaciado si viene fallando. */
+function programarRefresco() {
+  clearTimeout(pollingId);
+  pollingId = null;
+  if (!pollingActivo || document.hidden || !ultimaBusquedaParams) return;
+  if (!ultimoRefresco && fallasRefresco === 0) return;   // la primera carga sigue en curso: ella agenda al terminar
+  const espera = fallasRefresco > 0
+    ? Math.min(INTERVALO_REFRESCO_MS * 2 ** fallasRefresco, ESPERA_MAXIMA_TRAS_FALLA_MS)
+    : Math.max(1000, ultimoRefresco + INTERVALO_REFRESCO_MS - Date.now());
+  pollingId = setTimeout(refrescarEnSegundoPlano, espera);
+}
+
+function refrescarEnSegundoPlano() {
+  pollingId = null;
+  if (!pollingActivo || document.hidden || !ultimaBusquedaParams) return;
+  ejecutarBusqueda(ultimaBusquedaParams, { silencioso: true });   // al terminar agenda el siguiente
+}
+
+/* Pestaña oculta o ventana minimizada: no se pide nada. Al volver, se
+   actualiza de inmediato (si no se acaba de intentar hace menos de 1 minuto). */
+function alCambiarVisibilidad() {
+  if (document.hidden) {
+    clearTimeout(pollingId);
+    pollingId = null;
+    return;
+  }
+  if (ultimaBusquedaParams && Date.now() - ultimoIntento >= MINIMO_AL_VOLVER_MS) refrescarEnSegundoPlano();
+  else programarRefresco();
+  pintarActualizado();
+}
+
+function pintarActualizado() {
+  const el = $("expedientes-actualizado");
+  if (!el) return;
+  if (!ultimoRefresco) { el.textContent = ""; return; }
+  const minutos = Math.floor((Date.now() - ultimoRefresco) / 60000);
+  el.textContent = minutos < 1 ? "Actualizado hace un momento" : `Actualizado hace ${minutos} min`;
+}
+
+/* Botón "Actualizar": trae la lista con la última búsqueda, sin perder la
+   página, la selección ni los filtros rápidos. */
+async function actualizarAhora() {
+  if (!ultimaBusquedaParams) { loadExpedientes(); return; }
+  const btn = $("btn-actualizar-expedientes");
+  btn.disabled = true;
+  try {
+    const ok = await ejecutarBusqueda(ultimaBusquedaParams, { silencioso: true });
+    if (!ok) toast("No se pudo actualizar la lista. Intenta de nuevo en un momento.", "error");
+  } finally {
+    btn.disabled = false;
+  }
 }
 
 function detenerPolling() {
-  if (!pollingId) return;
-  clearInterval(pollingId);
+  pollingActivo = false;
+  clearTimeout(pollingId);
   pollingId = null;
+  clearInterval(relojActualizadoId);
+  relojActualizadoId = null;
+  document.removeEventListener("visibilitychange", alCambiarVisibilidad);
   ultimaBusquedaParams = null;
+  ultimoRefresco = 0;
+  ultimoIntento = 0;
+  fallasRefresco = 0;
+  pintarActualizado();
 }
 
 /* ---------- Acciones ---------- */
@@ -678,6 +758,7 @@ export function montar(contenedor) {
   });
 
   $("btn-enviar-correo-proveedores").addEventListener("click", enviarCorreoProveedores);
+  $("btn-actualizar-expedientes").addEventListener("click", actualizarAhora);
   $("btn-generar-corte").addEventListener("click", () => abrirModalCorte({
     tipoExpediente: "normal",
     seleccionados,
@@ -734,7 +815,8 @@ export function aplicarPermisos() {
 
 export function alEntrar() {
   $("f-expediente").focus();
-  if (!esPerfilProveedor()) actualizarCuotaCorreos();
+  // El contador de correos llega solo con cada respuesta de la lista (ver
+  // componentes/cuota-correos.js): no hace falta pedirlo al entrar.
   if (expedientesActuales.length > 0) {
     // Refresca la tabla con lo que ya tengamos en memoria (por si algo cambió,
     // como un estatus, mientras estabas en otra pantalla) sin pedirle nada al servidor.

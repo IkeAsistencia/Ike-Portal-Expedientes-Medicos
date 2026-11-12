@@ -34,8 +34,8 @@ export async function enviarCorreoAProveedores(expedientes) {
     return data;
   } catch (err) {
     toast(err.message, "error", 8000);
-    return null;
-  } finally {
+    // Si el envío sí salió, la respuesta ya trajo el contador; si falló, se pide aparte.
     actualizarCuotaCorreos();
+    return null;
   }
 }

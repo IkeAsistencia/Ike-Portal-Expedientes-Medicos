@@ -2,7 +2,12 @@
    ver app/services/cuota_correos_service.py). Lo ven Cabina (junto a "Enviar
    correo a proveedores") y Administrador (junto a "Generar corte" y al
    enviar el corte). Todos los contadores de la página se pintan juntos: basta
-   con poner cuotaCorreosHtml() donde se quiera mostrar. */
+   con poner cuotaCorreosHtml() donde se quiera mostrar.
+
+   Ya no se consulta solo cada cierto tiempo: el servidor manda el dato junto
+   con la lista de expedientes y con cada envío de correos (encabezado
+   X-Correos-Hoy, ver core/api.js), así que se actualiza "de paso". Solo se
+   pide aparte antes de acciones que dependen de él (generar/enviar corte). */
 import { api } from "../core/api.js";
 
 export function cuotaCorreosHtml(id) {
@@ -16,6 +21,8 @@ export function pintarCuotaCorreos(cuota) {
     el.classList.toggle("agotado", cuota.nivel === "agotado");
   });
 }
+
+window.addEventListener("cuota-correos", (e) => pintarCuotaCorreos(e.detail));
 
 /* Pide el contador al servidor y lo pinta. Regresa el dato (o null si no se
    pudo): quien llama decide si sigue sin él. */

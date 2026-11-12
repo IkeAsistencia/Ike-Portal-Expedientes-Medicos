@@ -25,16 +25,21 @@ from app.config import get_settings
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
-# El portal avisa 1 minuto antes de cerrar por inactividad y renueva a lo más
-# una vez por minuto mientras hay actividad: este margen evita que el token
-# venza en el servidor justo mientras el aviso sigue en pantalla.
+# El portal renueva el token a lo más una vez cada RENOVAR_CADA_MINUTOS
+# mientras hay actividad (ver frontend/js/core/inactividad.js; se espació así
+# para no saturar el límite de peticiones por IP del WAF de AWS). Entre una
+# renovación y otra la persona pudo seguir trabajando hasta 15 minutos más, y
+# desde ahí todavía le tocan sus 30 de inactividad: el token tiene que cubrir
+# ambos. El margen evita que venza justo mientras el aviso sigue en pantalla.
+# El cierre a los 30 minutos sin actividad lo sigue haciendo la pantalla.
+RENOVAR_CADA_MINUTOS = 15
 MARGEN_INACTIVIDAD_MINUTOS = 2
 
 
 def _vencimiento(inicio: datetime) -> datetime:
     settings = get_settings()
     por_inactividad = datetime.now(timezone.utc) + timedelta(
-        minutes=settings.sesion_inactividad_minutos + MARGEN_INACTIVIDAD_MINUTOS
+        minutes=settings.sesion_inactividad_minutos + RENOVAR_CADA_MINUTOS + MARGEN_INACTIVIDAD_MINUTOS
     )
     maximo = inicio + timedelta(minutes=settings.jwt_expire_minutes)
     return min(por_inactividad, maximo)
