@@ -18,6 +18,19 @@ function construirUrl(path, params) {
   return url;
 }
 
+/* Algunas respuestas (lista de expedientes, envío de correos) traen el
+   contador "Correos de hoy" en este encabezado; se reparte con un evento que
+   escucha componentes/cuota-correos.js. Así no hace falta consultarlo aparte. */
+const ENCABEZADO_CUOTA_CORREOS = "X-Correos-Hoy";
+
+function avisarCuotaCorreos(res) {
+  const valor = res.headers.get(ENCABEZADO_CUOTA_CORREOS);
+  if (!valor) return;
+  try {
+    window.dispatchEvent(new CustomEvent("cuota-correos", { detail: JSON.parse(valor) }));
+  } catch (e) { /* contador ilegible: se ignora, no afecta la respuesta */ }
+}
+
 function headersAuth() {
   const token = getToken();
   return token ? { Authorization: "Bearer " + token } : {};
@@ -41,6 +54,8 @@ export async function api(path, opts = {}) {
   } catch (networkErr) {
     throw new Error("No se pudo conectar con el servidor. Verifica que esté corriendo.");
   }
+
+  avisarCuotaCorreos(res);
 
   let data = null;
   try { data = await res.json(); } catch (e) { /* respuesta sin body */ }

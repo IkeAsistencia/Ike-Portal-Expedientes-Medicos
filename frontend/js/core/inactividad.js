@@ -5,9 +5,13 @@
      ejemplo el de Expedientes) NO cuentan: si contaran, la sesión nunca se
      cerraría.
    - Mientras hay actividad, el token se renueva con el servidor (POST
-     /auth/renovar, como mucho una vez por minuto). Sin actividad nadie lo
-     renueva y vence solo en el servidor: el cierre no depende solo de esta
-     pantalla (ver app/core/security.py).
+     /auth/renovar, como mucho una vez cada 15 minutos). Sin actividad nadie
+     lo renueva y vence solo en el servidor: el cierre no depende solo de esta
+     pantalla (ver app/core/security.py, que da al token 30 + 15 + 2 minutos).
+   - Si una renovación falla (red caída, bloqueo del WAF de AWS), NO se
+     reintenta con cada movimiento del mouse: se espera 1, 2, 4 y luego cada
+     5 minutos. Antes se reintentaba al instante y eso generaba ráfagas de
+     cientos de peticiones que hacían que AWS bloqueara la IP de la oficina.
    - Un minuto antes de cerrar aparece un aviso con cuenta regresiva y el
      botón "Seguir conectado". Moverse o teclear con el aviso abierto no lo
      quita: hay que confirmarlo (así no se renueva por un roce del mouse).
@@ -20,7 +24,15 @@ import { crearModal } from "../componentes/modal.js";
 const MINUTO = 60 * 1000;
 const INACTIVIDAD_MS = 30 * MINUTO;
 const AVISO_ANTES_MS = 1 * MINUTO;
-const RENOVAR_CADA_MS = 1 * MINUTO;
+const RENOVAR_CADA_MS = 15 * MINUTO;            // ver RENOVAR_CADA_MINUTOS en app/core/security.py
+const ESPERAS_TRAS_FALLA_MS = [1, 2, 4, 5].map(m => m * MINUTO);   // la última se repite
+// Jitter fijo por sesión (±1 min): sin esto, si mucha gente abre el portal
+// casi al mismo tiempo (ej. al volver de una caída), todas sus renovaciones
+// quedarían cada 15 min EXACTOS y coincidirían en la misma ráfaga. Se calcula
+// una sola vez al cargar la página, así que para esa sesión es constante.
+// El margen del servidor es de 2 min (ver MARGEN_INACTIVIDAD_MINUTOS en
+// app/core/security.py), por eso el jitter no pasa de ±1 min.
+const JITTER_RENOVAR_MS = (Math.random() * 2 - 1) * MINUTO;
 // Sin "scroll": también lo dispara el portal solo (scrollIntoView al refrescar).
 // El desplazamiento real de la persona ya entra por wheel, keydown y touchstart.
 const EVENTOS = ["mousedown", "keydown", "wheel", "touchstart", "mousemove"];
@@ -29,6 +41,8 @@ let activo = false;
 let ultimaActividad = 0;
 let ultimaRenovacion = 0;
 let renovando = false;
+let fallasSeguidas = 0;
+let siguienteIntentoTrasFalla = 0;
 let temporizador = null;
 let aviso = null;
 let alExpirar = () => {};
@@ -36,20 +50,30 @@ let alExpirar = () => {};
 function registrarActividad() {
   if (!activo || aviso) return;   // con el aviso abierto solo cuenta "Seguir conectado"
   ultimaActividad = Date.now();
-  if (Date.now() - ultimaRenovacion >= RENOVAR_CADA_MS) renovar();
+  if (tocaRenovar()) renovar();
+}
+
+function tocaRenovar() {
+  const ahora = Date.now();
+  if (fallasSeguidas > 0) return ahora >= siguienteIntentoTrasFalla;
+  return ahora - ultimaRenovacion >= RENOVAR_CADA_MS + JITTER_RENOVAR_MS;
 }
 
 async function renovar() {
   if (renovando) return;
   renovando = true;
-  ultimaRenovacion = Date.now();
   try {
     const r = await api("/auth/renovar", { method: "POST" });
     if (activo) actualizarToken(r.access_token);
+    ultimaRenovacion = Date.now();
+    fallasSeguidas = 0;
   } catch (err) {
-    // Un 401 ya cierra la sesión por su cuenta (core/api.js avisa "sesion-expirada");
-    // un error de red se reintenta con la siguiente actividad.
-    ultimaRenovacion = 0;
+    // Un 401 ya cierra la sesión por su cuenta (core/api.js avisa "sesion-expirada").
+    // Cualquier otro error se reintenta con la siguiente actividad, pero
+    // hasta que pase la espera: el token todavía aguanta de sobra.
+    fallasSeguidas += 1;
+    const espera = ESPERAS_TRAS_FALLA_MS[Math.min(fallasSeguidas, ESPERAS_TRAS_FALLA_MS.length) - 1];
+    siguienteIntentoTrasFalla = Date.now() + espera;
   } finally {
     renovando = false;
   }
@@ -115,6 +139,7 @@ export function iniciarControlDeInactividad({ alExpirar: callback }) {
   activo = true;
   ultimaActividad = Date.now();
   ultimaRenovacion = Date.now();   // el token recién emitido ya trae la ventana completa
+  fallasSeguidas = 0;
   EVENTOS.forEach(ev => window.addEventListener(ev, registrarActividad, { passive: true, capture: true }));
   document.addEventListener("visibilitychange", revisar);
   temporizador = setInterval(revisar, 1000);

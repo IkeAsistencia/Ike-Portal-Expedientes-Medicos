@@ -65,7 +65,7 @@ def _ahora():
 def test_el_token_dura_la_ventana_de_inactividad_y_no_ocho_horas(client):
     datos = _leer(_login(client))
     minutos = (datos["exp"] - _ahora().timestamp()) / 60
-    assert 31 <= minutos <= 32.1, minutos   # 30 de inactividad + 2 de margen
+    assert 46 <= minutos <= 47.1, minutos   # 30 de inactividad + 15 entre renovaciones + 2 de margen
     assert abs(datos["ini"] - _ahora().timestamp()) < 60
 
 

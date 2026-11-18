@@ -171,7 +171,7 @@ y [precios](https://developers.google.com/maps/billing-and-pricing/pricing).
 | | |
 |---|---|
 | Python | **3.13** (mínimo soportado: 3.11) |
-| Driver ODBC | `unixODBC` y `msodbcsql18`, del repositorio de Microsoft para la distribución |
+| Driver ODBC | `unixODBC` y `msodbcsql17`, del repositorio de Microsoft para la distribución |
 | Git | Para clonar y actualizar el código |
 | Zona horaria | **`America/Mexico_City`** |
 
@@ -229,7 +229,7 @@ despliega con un solo comando (sección 6).
 
 ### Paso 1 — Sistema operativo
 
-Instalar Python 3.13, `git`, `unixODBC` y `msodbcsql18` desde el
+Instalar Python 3.13, `git`, `unixODBC` y `msodbcsql17` desde el
 repositorio de Microsoft para la distribución. Fijar la zona horaria:
 
 ```bash
@@ -414,7 +414,7 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 | `DB_SERVER` | Servidor e instancia de SISE, con el puerto (`servidor,1533`) | No conecta |
 | `DB_NAME` | Base productiva | No conecta |
 | `DB_USER`, `DB_PASSWORD` | Usuario de aplicación, solo con `EXECUTE` | No conecta |
-| `DB_DRIVER` | `ODBC Driver 18 for SQL Server` | No conecta |
+| `DB_DRIVER` | `ODBC Driver 17 for SQL Server` | No conecta |
 | `DB_TRUST_SERVER_CERTIFICATE` | `false` si el certificado es válido | Con `true` el canal se cifra pero no se valida contra quién |
 | `LOCAL_DB_PATH` | Ruta del SQLite en el volumen persistente | Si apunta a disco efímero, **se pierden accesos y seguimiento** |
 | `SEED_USUARIOS_RUTA` | Ruta al Excel de RFC/Nombre/Rol (sección 5, paso 7). Vacío si no aplica | Sin ella hay que dar de alta a cada quien a mano |

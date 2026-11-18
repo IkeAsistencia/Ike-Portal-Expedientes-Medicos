@@ -8,6 +8,7 @@ correos quedan simulados (o se intercepta la función que los manda).
 """
 
 import datetime
+import json
 
 import pytest
 from fastapi.testclient import TestClient
@@ -348,6 +349,35 @@ def test_cuota_la_ven_cabina_y_administrador_pero_no_proveedor(client):
     assert client.get("/correos-enviados/cuota", headers=_admin(client)).status_code == 200
     proveedor = _sesion(client, "RFCPROTEST", accesos_repo.PERFIL_PROVEEDOR, "Campeche", "p@ikeasistencia.com")
     assert client.get("/correos-enviados/cuota", headers=proveedor).status_code == 403
+
+
+
+# ---------- El contador viaja con la lista y con el envío (sin consultas aparte) ----------
+
+def _cuota_en_encabezado(r) -> dict | None:
+    valor = r.headers.get("X-Correos-Hoy")
+    return json.loads(valor) if valor else None
+
+
+def test_la_lista_de_expedientes_trae_el_contador_para_cabina_y_admin(client):
+    for headers in (_cabina(client), _admin(client)):
+        r = client.get("/expedientes", headers=headers)
+        assert r.status_code == 200
+        assert _cuota_en_encabezado(r)["usados"] == 0
+
+
+def test_la_lista_de_expedientes_no_trae_el_contador_para_proveedor(client):
+    proveedor = _sesion(client, "RFCPROTEST", accesos_repo.PERFIL_PROVEEDOR, "Campeche", "p@ikeasistencia.com")
+    r = client.get("/expedientes", headers=proveedor)
+    assert r.status_code == 200
+    assert _cuota_en_encabezado(r) is None
+
+
+def test_el_envio_regresa_el_contador_ya_actualizado(client):
+    _proveedor("PROVCAM001", "Campeche", "c1@ikeasistencia.com")
+    r = _enviar(client, _cabina(client), [3001])
+    assert r.json()["correo_enviado"] is True
+    assert _cuota_en_encabezado(r)["usados"] == 1
 
 
 # ---------- Freno de reenvío ----------

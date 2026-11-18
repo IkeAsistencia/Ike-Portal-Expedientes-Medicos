@@ -61,3 +61,21 @@ def obtener_detalle(cl_expediente: int) -> dict | None:
             (cl_expediente,),
         ).fetchone()
         return dict(row) if row else None
+
+
+def obtener_detalles(cl_expedientes: list[int]) -> dict[int, dict]:
+    """
+    Igual que obtener_detalle, pero para muchos expedientes en una sola
+    conexión/consulta (usado por listar_expedientes: evita abrir una
+    conexión SQLite por cada fila que regresa el SP).
+    """
+    if not cl_expedientes:
+        return {}
+    marcadores = ", ".join("?" for _ in cl_expedientes)
+    with get_local_connection() as conn:
+        filas = conn.execute(
+            f"SELECT cl_expediente, estatus, fecha_cambio, rfc_cambio "
+            f"FROM estatus_expediente WHERE cl_expediente IN ({marcadores})",
+            tuple(cl_expedientes),
+        ).fetchall()
+    return {fila["cl_expediente"]: dict(fila) for fila in filas}
