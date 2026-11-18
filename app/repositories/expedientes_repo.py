@@ -17,8 +17,8 @@ from app.services import semaforo_service
 MESES_MAXIMOS_RANGO = 3
 
 
-def _obtener_estatus_y_fecha_cambio(cl_expediente: int) -> tuple[str, str | None]:
-    detalle = estatus_repo.obtener_detalle(cl_expediente)
+def _obtener_estatus_y_fecha_cambio(cl_expediente: int, detalles: dict[int, dict]) -> tuple[str, str | None]:
+    detalle = detalles.get(cl_expediente)
     if not detalle:
         return EstatusExpediente.ABIERTO.value, None
     return detalle["estatus"], detalle["fecha_cambio"]
@@ -108,10 +108,14 @@ def listar_expedientes(filtro: ExpedienteFiltro) -> list[Expediente]:
     )
 
     etiquetas = cuentas_etiqueta_repo.BuscadorDeEtiquetas()  # una sola lectura por consulta
+    # Una sola consulta para el estatus de TODOS los expedientes de esta
+    # página, en vez de abrir una conexión SQLite por cada fila del SP
+    # (antes: N round-trips; ahora: 1, sin importar cuántas filas regrese).
+    detalles = estatus_repo.obtener_detalles([row["Expediente"] for row in rows])
     resultado: list[Expediente] = []
     for row in rows:
         etiqueta = etiquetas.buscar(row.get("ClCuenta"), row["Cuenta"])
-        estatus, fecha_cambio_estatus = _obtener_estatus_y_fecha_cambio(row["Expediente"])
+        estatus, fecha_cambio_estatus = _obtener_estatus_y_fecha_cambio(row["Expediente"], detalles)
         color_semaforo = semaforo_service.calcular_color(
             cl_sub_servicio=row["ClSubServicio"],
             estatus=estatus,

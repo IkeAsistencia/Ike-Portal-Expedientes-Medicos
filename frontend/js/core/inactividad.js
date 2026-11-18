@@ -26,6 +26,13 @@ const INACTIVIDAD_MS = 30 * MINUTO;
 const AVISO_ANTES_MS = 1 * MINUTO;
 const RENOVAR_CADA_MS = 15 * MINUTO;            // ver RENOVAR_CADA_MINUTOS en app/core/security.py
 const ESPERAS_TRAS_FALLA_MS = [1, 2, 4, 5].map(m => m * MINUTO);   // la última se repite
+// Jitter fijo por sesión (±1 min): sin esto, si mucha gente abre el portal
+// casi al mismo tiempo (ej. al volver de una caída), todas sus renovaciones
+// quedarían cada 15 min EXACTOS y coincidirían en la misma ráfaga. Se calcula
+// una sola vez al cargar la página, así que para esa sesión es constante.
+// El margen del servidor es de 2 min (ver MARGEN_INACTIVIDAD_MINUTOS en
+// app/core/security.py), por eso el jitter no pasa de ±1 min.
+const JITTER_RENOVAR_MS = (Math.random() * 2 - 1) * MINUTO;
 // Sin "scroll": también lo dispara el portal solo (scrollIntoView al refrescar).
 // El desplazamiento real de la persona ya entra por wheel, keydown y touchstart.
 const EVENTOS = ["mousedown", "keydown", "wheel", "touchstart", "mousemove"];
@@ -49,7 +56,7 @@ function registrarActividad() {
 function tocaRenovar() {
   const ahora = Date.now();
   if (fallasSeguidas > 0) return ahora >= siguienteIntentoTrasFalla;
-  return ahora - ultimaRenovacion >= RENOVAR_CADA_MS;
+  return ahora - ultimaRenovacion >= RENOVAR_CADA_MS + JITTER_RENOVAR_MS;
 }
 
 async function renovar() {

@@ -107,6 +107,10 @@ const PLANTILLA = `
 const INTERVALO_REFRESCO_MS = 5 * 60 * 1000;
 const ESPERA_MAXIMA_TRAS_FALLA_MS = 20 * 60 * 1000;   // si falla: 10, 20 min...
 const MINIMO_AL_VOLVER_MS = 60 * 1000;                 // al volver a la pestaña, como mucho 1 por minuto
+// Jitter fijo por sesión (±1 min), igual razón que JITTER_RENOVAR_MS en
+// core/inactividad.js: evita que todas las pantallas abiertas pidan
+// /expedientes en el mismo segundo solo por haber entrado casi a la vez.
+const JITTER_REFRESCO_MS = (Math.random() * 2 - 1) * 60 * 1000;
 
 let expedientesActuales = [];
 const seleccionados = new Set();
@@ -612,7 +616,7 @@ function programarRefresco() {
   if (!ultimoRefresco && fallasRefresco === 0) return;   // la primera carga sigue en curso: ella agenda al terminar
   const espera = fallasRefresco > 0
     ? Math.min(INTERVALO_REFRESCO_MS * 2 ** fallasRefresco, ESPERA_MAXIMA_TRAS_FALLA_MS)
-    : Math.max(1000, ultimoRefresco + INTERVALO_REFRESCO_MS - Date.now());
+    : Math.max(1000, ultimoRefresco + INTERVALO_REFRESCO_MS + JITTER_REFRESCO_MS - Date.now());
   pollingId = setTimeout(refrescarEnSegundoPlano, espera);
 }
 
