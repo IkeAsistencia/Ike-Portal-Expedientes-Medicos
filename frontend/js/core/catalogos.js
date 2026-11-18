@@ -57,7 +57,7 @@ export async function cargarSubserviciosEnSelect(select, clServicio) {
 export async function cargarCatalogoEntidades() {
   if (entidades.length) return entidades;
   try {
-    entidades = await api("/admin/accesos/entidades");
+    entidades = await api("/accesos/entidades");
   } catch (err) {
     toast("No se pudo cargar el catálogo de entidades: " + err.message, "error");
   }

@@ -391,14 +391,14 @@ python -m scripts.md_a_word WEB-SCRAPING-DOCTORALIA.md
 | GET / POST | `/seguimiento/pago-anticipado/{exp}` | Casilla de pago anticipado | Base local |
 | POST / GET | `/seguimiento/comprobante` · `/seguimiento/comprobante/{exp}` · `.../archivo` | Comprobante de pago | Base local |
 | GET / POST / DELETE | `/configuracion/cuentas` · `/configuracion/cuentas/limpiar` | Configuración Cuentas (Administrador) | Base local |
-| GET / POST | `/admin/accesos` · `/admin/accesos/entidades` · `/admin/accesos/{rfc}/inactivar` · `/reactivar` · `/resetear-password` · `/entidad` | Usuarios y Accesos (Administrador) | Base local |
+| GET / POST | `/accesos` · `/accesos/entidades` · `/accesos/{rfc}/inactivar` · `/reactivar` · `/resetear-password` · `/entidad` | Usuarios y Accesos (Administrador) | Base local |
 | GET | `/correos-enviados` · `/correos-enviados/cuota` | Historial de Correos y tope diario (Administrador) | Base local |
 | GET | `/directorio-proveedores` · `/directorio-proveedores/especialidades` | Directorio de Proveedores: búsqueda en el padrón y tarjetas por especialidad (Proveedor, Administrador) | Padrón local (`proveedores`) |
 | GET | `/directorio-proveedores/fuera-de-red-google-maps` · `/directorio-proveedores/configuracion-mapa` | Búsqueda "fuera de la red" y configuración del mapa (Proveedor) | Google Places / Maps JavaScript API |
 | GET / POST | `/directorio-proveedores/citas` · `/directorio-proveedores/citas/{folio}/cancelar` · `/directorio-proveedores/citas/expediente/{cl_expediente}` · `/directorio-proveedores/expedientes-para-cita` · `/directorio-proveedores/{clave}/agenda` | Agenda y citas con proveedores (Proveedor agenda; Cabina/Administrador consultan) | Base local |
 | GET / POST | `/proveedores-catalogo` · `/proveedores-catalogo/plantilla` · `/proveedores-catalogo/cargar` | Carga del padrón por Excel, hojas "Padrón" y "Red de apoyo" (Administrador) | Base local |
 | GET / POST / PUT / DELETE | `/solicitudes-alta-medico` · `/solicitudes-alta-medico/{folio}` · `/solicitudes-alta-medico/{folio}/estatus` · `/solicitudes-alta-medico/{folio}/documentos/{tipo}` | Alta de médico "Fuera de la red": captura (Proveedor, Administrador) y revisión (Administrador) | Base local |
-| GET / PUT / DELETE | `/admin/cuentas-etiquetas` · `/admin/cuentas-etiquetas/paleta` | Colores de Cuentas (Administrador) | Base local |
+| GET / PUT / DELETE | `/cuentas-etiquetas` · `/cuentas-etiquetas/paleta` | Colores de Cuentas (Administrador) | Base local |
 | GET | `/health` | Monitoreo (sin token) | — |
 
 Además, `jobs/validar_estatus_proveedor.py` corre por fuera del servidor
@@ -439,7 +439,7 @@ Expedientes:
   sin pisar nunca las que ya vinieron en la carga.
 - **Agenda y citas**: el Proveedor agenda horarios para un médico del
   padrón, con folio propio; se puede coordinar directo desde un expediente.
-- **Colores de Cuentas** (`/admin/cuentas-etiquetas`, pantalla
+- **Colores de Cuentas** (`/cuentas-etiquetas`, pantalla
   `colores-cuentas.js`): color y prefijo configurables por cuenta, solo
   Administrador — y los chips de "Tipo de proveedor" usan el mismo
   semáforo de colores (`app/services/semaforo_service.py`).

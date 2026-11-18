@@ -11,7 +11,7 @@ from app.repositories import catalogos_repo, cuentas_etiqueta_repo
 from app.routers.admin_accesos import requerir_administrador
 from app.schemas.cuenta_etiqueta import PALETA, ColorPaleta, CuentaEtiquetaInput, CuentaEtiquetaRegistro
 
-router = APIRouter(prefix="/admin/cuentas-etiquetas", tags=["Colores de cuentas"])
+router = APIRouter(prefix="/cuentas-etiquetas", tags=["Colores de cuentas"])
 
 
 @router.get("/paleta", response_model=list[ColorPaleta])

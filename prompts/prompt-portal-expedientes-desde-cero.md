@@ -253,13 +253,13 @@ Todas exigen `Authorization: Bearer <token>`, salvo login y salud.
 | `GET/POST /seguimiento/pago-anticipado/{exp}` | Casilla de pago anticipado |
 | `POST /seguimiento/comprobante`, `GET /seguimiento/comprobante/{exp}`, `GET .../archivo` | Comprobante de pago |
 | `GET/POST/DELETE /configuracion/cuentas`, `POST /configuracion/cuentas/limpiar` | Configuración de cuentas |
-| `GET/POST /admin/accesos`, `GET /admin/accesos/entidades`, `POST /admin/accesos/{rfc}/inactivar` · `/reactivar` · `/resetear-password` · `/entidad` | Accesos (Administrador) |
+| `GET/POST /accesos`, `GET /accesos/entidades`, `POST /accesos/{rfc}/inactivar` · `/reactivar` · `/resetear-password` · `/entidad` | Accesos (Administrador) |
 | `GET /correos-enviados`, `/correos-enviados/cuota` | Historial de Correos y tope diario (Administrador) |
 | `GET /directorio-proveedores`, `/directorio-proveedores/especialidades`, `/directorio-proveedores/fuera-de-red-google-maps`, `/directorio-proveedores/configuracion-mapa` | Buscar en el Directorio (padrón y fuera de la red) |
 | `GET/POST /directorio-proveedores/citas`, `/directorio-proveedores/citas/{folio}/cancelar`, `/directorio-proveedores/{clave}/agenda` | Agenda y citas con proveedores |
 | `GET/POST /proveedores-catalogo`, `/proveedores-catalogo/plantilla`, `/proveedores-catalogo/cargar` | Carga del padrón por Excel (Administrador) |
 | `GET/POST/PUT/DELETE /solicitudes-alta-medico`, `/solicitudes-alta-medico/{folio}`, `/solicitudes-alta-medico/{folio}/estatus` | Alta de médico "Fuera de la red" |
-| `GET/PUT/DELETE /admin/cuentas-etiquetas`, `/admin/cuentas-etiquetas/paleta` | Colores de Cuentas (Administrador) |
+| `GET/PUT/DELETE /cuentas-etiquetas`, `/cuentas-etiquetas/paleta` | Colores de Cuentas (Administrador) |
 | `GET /health` | Monitoreo, sin autenticación |
 
 ## 9. Seguridad

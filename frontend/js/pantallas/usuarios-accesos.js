@@ -247,7 +247,7 @@ async function cargarGrid() {
   const tbody = $("acc-tbody");
   tbody.innerHTML = `<tr><td colspan="8" class="mini-empty">Cargando…</td></tr>`;
   try {
-    accesosActuales = await api("/admin/accesos");
+    accesosActuales = await api("/accesos");
     paginaActual = 1;
     renderGrid();
   } catch (err) {
@@ -285,7 +285,7 @@ async function darDeAlta() {
   const btn = $("acc-dar-alta-btn");
   btn.disabled = true;
   try {
-    await api("/admin/accesos", {
+    await api("/accesos", {
       method: "POST",
       body: { rfc, nombre, perfil, entidad: entidad || undefined, correo: correo || undefined },
     });
@@ -322,7 +322,7 @@ function inactivar(rfc) {
       textoConfirmar: "Inactivar",
       peligro: true,
     },
-    "/admin/accesos/" + encodeURIComponent(rfc) + "/inactivar",
+    "/accesos/" + encodeURIComponent(rfc) + "/inactivar",
     "Acceso inactivado."
   );
 }
@@ -330,7 +330,7 @@ function inactivar(rfc) {
 function reactivar(rfc) {
   return accionConConfirmacion(
     { titulo: "Reactivar acceso", pregunta: `¿Reactivar el acceso de ${rfc}?`, textoConfirmar: "Reactivar" },
-    "/admin/accesos/" + encodeURIComponent(rfc) + "/reactivar",
+    "/accesos/" + encodeURIComponent(rfc) + "/reactivar",
     "Acceso reactivado.", "success"
   );
 }
@@ -343,7 +343,7 @@ function resetearPassword(rfc) {
       textoConfirmar: "Resetear",
       peligro: true,
     },
-    "/admin/accesos/" + encodeURIComponent(rfc) + "/resetear-password",
+    "/accesos/" + encodeURIComponent(rfc) + "/resetear-password",
     "Contraseña reseteada."
   );
 }
@@ -390,7 +390,7 @@ async function guardarEntidad() {
   const btn = $("cambiar-entidad-modal-guardar");
   btn.disabled = true;
   try {
-    await api("/admin/accesos/" + encodeURIComponent(cambiarEntidadRfc) + "/entidad", {
+    await api("/accesos/" + encodeURIComponent(cambiarEntidadRfc) + "/entidad", {
       method: "POST",
       body: { entidad },
     });
@@ -477,7 +477,7 @@ async function guardarPerfil() {
   const btn = $("agregar-perfil-modal-guardar");
   btn.disabled = true;
   try {
-    await api("/admin/accesos/" + encodeURIComponent(agregarPerfilRfc) + "/perfiles", {
+    await api("/accesos/" + encodeURIComponent(agregarPerfilRfc) + "/perfiles", {
       method: "POST",
       body: { perfil, entidad: entidad || undefined, correo: correo || undefined },
     });
@@ -500,7 +500,7 @@ async function quitarPerfil(rfc, perfil) {
     peligro: true,
   }))) return;
   try {
-    await api("/admin/accesos/" + encodeURIComponent(rfc) + "/perfiles/" + perfil, { method: "DELETE" });
+    await api("/accesos/" + encodeURIComponent(rfc) + "/perfiles/" + perfil, { method: "DELETE" });
     toast(`Perfil ${nombre} quitado.`, "success");
     cargarGrid();
   } catch (err) {
@@ -555,7 +555,7 @@ function enviarCarga({ archivo, tipo }, aplicar) {
   formData.append("archivo", archivo);
   formData.append("tipo", tipo);
   formData.append("aplicar", aplicar ? "true" : "false");
-  return api("/admin/accesos/carga-excel", { method: "POST", formData });
+  return api("/accesos/carga-excel", { method: "POST", formData });
 }
 
 function pintarVistaPreviaCarga(r) {

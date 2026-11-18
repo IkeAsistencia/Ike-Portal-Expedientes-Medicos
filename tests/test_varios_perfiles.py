@@ -79,7 +79,7 @@ def test_elegir_perfil_emite_la_sesion_con_ese_perfil(client):
         assert r.json()["perfil"] == elegido
         # El token lleva ese perfil: el permiso real depende de él.
         cabecera = {"Authorization": f"Bearer {r.json()['access_token']}"}
-        admin = client.get("/admin/accesos", headers=cabecera)
+        admin = client.get("/accesos", headers=cabecera)
         assert (admin.status_code == 200) is (elegido == PERFIL_ADMINISTRADOR)
 
 
@@ -159,29 +159,29 @@ def test_endpoints_de_administracion_de_perfiles(client):
     admin = {"Authorization": f"Bearer {_login(client, perfil=PERFIL_ADMINISTRADOR).json()['access_token']}"}
 
     # Un mismo RFC de 10 caracteres puede tener todos los perfiles.
-    r = client.post("/admin/accesos/MIMA991129/perfiles", json={"perfil": PERFIL_ADMINISTRADOR}, headers=admin)
+    r = client.post("/accesos/MIMA991129/perfiles", json={"perfil": PERFIL_ADMINISTRADOR}, headers=admin)
     assert r.status_code == 200, r.text
 
     r = client.post(
-        "/admin/accesos/MIMA991129/perfiles",
+        "/accesos/MIMA991129/perfiles",
         json={"perfil": PERFIL_PROVEEDOR, "entidad": "Jalisco", "correo": "m@ikeasistencia.com"},
         headers=admin,
     )
     assert r.status_code == 200, r.text
     assert client.post(
-        "/admin/accesos/MIMA991129/perfiles",
+        "/accesos/MIMA991129/perfiles",
         json={"perfil": PERFIL_PROVEEDOR, "entidad": "Jalisco", "correo": "m@ikeasistencia.com"},
         headers=admin,
     ).status_code == 409
-    assert client.post("/admin/accesos/NADA000000/perfiles", json={"perfil": PERFIL_CABINA}, headers=admin).status_code == 404
+    assert client.post("/accesos/NADA000000/perfiles", json={"perfil": PERFIL_CABINA}, headers=admin).status_code == 404
 
-    listado = {a["rfc"]: a for a in client.get("/admin/accesos", headers=admin).json()}
+    listado = {a["rfc"]: a for a in client.get("/accesos", headers=admin).json()}
     assert listado["MIMA991129"]["perfiles"] == [PERFIL_ADMINISTRADOR, PERFIL_CABINA, PERFIL_PROVEEDOR]
     assert listado[RFC]["perfiles"] == [PERFIL_ADMINISTRADOR, PERFIL_CABINA]
 
-    assert client.delete(f"/admin/accesos/MIMA991129/perfiles/{PERFIL_PROVEEDOR}", headers=admin).status_code == 200
-    assert client.delete(f"/admin/accesos/MIMA991129/perfiles/{PERFIL_ADMINISTRADOR}", headers=admin).status_code == 200
-    assert client.delete(f"/admin/accesos/MIMA991129/perfiles/{PERFIL_CABINA}", headers=admin).status_code == 400
+    assert client.delete(f"/accesos/MIMA991129/perfiles/{PERFIL_PROVEEDOR}", headers=admin).status_code == 200
+    assert client.delete(f"/accesos/MIMA991129/perfiles/{PERFIL_ADMINISTRADOR}", headers=admin).status_code == 200
+    assert client.delete(f"/accesos/MIMA991129/perfiles/{PERFIL_CABINA}", headers=admin).status_code == 400
 
 
 def test_correo_del_proveedor_solo_de_la_empresa(client):
@@ -191,7 +191,7 @@ def test_correo_del_proveedor_solo_de_la_empresa(client):
     aviso = "El correo que acabas de ingresar no pertenece al dominio de @ikeasistencia.com."
 
     r = client.post(
-        "/admin/accesos",
+        "/accesos",
         json={"rfc": "PROV000001", "nombre": "Prov", "perfil": PERFIL_PROVEEDOR, "entidad": "Jalisco",
               "correo": "prov@gmail.com"},
         headers=admin,
@@ -201,7 +201,7 @@ def test_correo_del_proveedor_solo_de_la_empresa(client):
     assert accesos_repo.buscar_acceso("PROV000001") is None
 
     r = client.post(
-        "/admin/accesos/MIMA991129/perfiles",
+        "/accesos/MIMA991129/perfiles",
         json={"perfil": PERFIL_PROVEEDOR, "entidad": "Jalisco", "correo": "m@ikeasistencia.com.mx"},
         headers=admin,
     )

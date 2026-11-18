@@ -1,5 +1,5 @@
 """
-Carga masiva de usuarios desde Excel dentro del portal (POST /admin/accesos/carga-excel
+Carga masiva de usuarios desde Excel dentro del portal (POST /accesos/carga-excel
 y app/services/carga_usuarios_service.py), con archivos armados como los que mandan las
 áreas: el de Cabina trae el encabezado en el renglón 2, una columna A vacía y dos hojas;
 el de Proveedores no trae ROL ni entidad y los RFC llevan homoclave (13 caracteres).
@@ -90,7 +90,7 @@ def excel_proveedores(filas: tuple | None = None) -> bytes:
 
 def _cargar(client, headers, contenido: bytes, tipo: str, aplicar: bool, nombre: str = "usuarios.xlsx"):
     return client.post(
-        "/admin/accesos/carga-excel",
+        "/accesos/carga-excel",
         data={"tipo": tipo, "aplicar": "true" if aplicar else "false"},
         files={"archivo": (nombre, contenido, TIPO_XLSX)},
         headers=headers,
