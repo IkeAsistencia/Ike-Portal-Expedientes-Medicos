@@ -70,6 +70,12 @@ VARIABLES_PERMITIDAS = frozenset({
     # Llave del navegador (viaja al frontend, restringida por dominio).
     "GOOGLE_MAPS_BROWSER_API_KEY",
     "GOOGLE_MAPS_MAP_ID",
+    # Ajustes de la consulta a Places. Infraestructura los dejó DENTRO del
+    # secreto, así que se aceptan: si se ignoraran, el portal seguiría usando
+    # los defaults del código (8 s y 20 resultados) en vez de los valores
+    # acordados, y el secreto parecería "no estar aplicándose".
+    "GOOGLE_MAPS_TIMEOUT_SEGUNDOS",
+    "GOOGLE_MAPS_MAXIMO_RESULTADOS",
 })
 
 
@@ -178,6 +184,15 @@ def cargar_en_entorno(modo: str, nombre: str, region: str, clave_texto_plano: Op
     """
     modo = (modo or MODO_OFF).strip().lower()
     if modo == MODO_OFF:
+        # Se registra a propósito: con el modo apagado el secreto NO se lee y
+        # las llaves salen del `.env`. Si en el servidor se olvida poner
+        # SECRETOS_AWS_MODO, el síntoma es "el mapa no carga" sin ninguna
+        # pista en el log -- este renglón es la pista.
+        logger.info(
+            "Secretos de AWS: modo 'off' (SECRETOS_AWS_MODO no está puesto o vale 'off'); "
+            "no se lee el secreto '%s' y las llaves se toman del entorno/.env.",
+            nombre,
+        )
         return []
     if modo not in MODOS_VALIDOS:
         raise ErrorSecretosAws(

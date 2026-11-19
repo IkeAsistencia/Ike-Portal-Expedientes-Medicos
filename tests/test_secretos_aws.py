@@ -174,11 +174,61 @@ def test_la_lista_blanca_no_incluye_variables_peligrosas():
 
 def test_la_lista_blanca_solo_tiene_llaves_de_google():
     """El secreto `encryption-portal-medicos` lo administra infraestructura y
-    solo lleva las llaves de Google Maps. Si alguien mete aquí JWT_SECRET_KEY
-    o DB_PASSWORD, el secreto podría pisar la configuración del servidor sin
-    que nadie lo haya acordado."""
+    solo lleva configuración de Google Maps. Si alguien mete aquí
+    JWT_SECRET_KEY o DB_PASSWORD, el secreto podría pisar la configuración del
+    servidor sin que nadie lo haya acordado."""
     assert mod.VARIABLES_PERMITIDAS == frozenset({
         "GOOGLE_MAPS_API_KEY",
         "GOOGLE_MAPS_BROWSER_API_KEY",
         "GOOGLE_MAPS_MAP_ID",
+        "GOOGLE_MAPS_TIMEOUT_SEGUNDOS",
+        "GOOGLE_MAPS_MAXIMO_RESULTADOS",
     })
+
+
+def test_aplica_el_secreto_real_de_infraestructura(monkeypatch):
+    """El secreto que dejó infraestructura trae 10 claves: 5 de Google Maps
+    (las 3 llaves + 2 ajustes) y 5 de SMTP. Debe aplicar las 5 de Google y
+    descartar las de SMTP sin romper el arranque.
+
+    Regresión: antes solo se aceptaban 3, así que TIMEOUT y MAXIMO_RESULTADOS
+    se ignoraban en silencio y el portal seguía con los defaults del código
+    (8 s y 20 resultados) en vez de los valores del secreto."""
+    _simular_secreto(monkeypatch, json.dumps({
+        "GOOGLE_MAPS_TIMEOUT_SEGUNDOS": "8",
+        "GOOGLE_MAPS_MAXIMO_RESULTADOS": "10",
+        "GOOGLE_MAPS_API_KEY": "llave-servidor",
+        "GOOGLE_MAPS_BROWSER_API_KEY": "llave-navegador",
+        "SMTP_HOST": "smtp.office365.com",
+        "SMTP_PORT": "587",
+        "SMTP_USER": "promedico@ikeasistencia.com",
+        "SMTP_PASSWORD": "no-debe-aplicarse",
+        "SMTP_REMITENTE": "promedico@ikeasistencia.com",
+        "SMTP_USAR_TLS": "true",
+    }))
+    aplicadas = mod.cargar_en_entorno(mod.MODO_OBLIGATORIO, "encryption-portal-medicos", "mx-central-1")
+
+    assert aplicadas == [
+        "GOOGLE_MAPS_API_KEY",
+        "GOOGLE_MAPS_BROWSER_API_KEY",
+        "GOOGLE_MAPS_MAXIMO_RESULTADOS",
+        "GOOGLE_MAPS_TIMEOUT_SEGUNDOS",
+    ]
+    import os
+    assert os.environ["GOOGLE_MAPS_TIMEOUT_SEGUNDOS"] == "8"
+    assert os.environ["GOOGLE_MAPS_MAXIMO_RESULTADOS"] == "10"
+    # Las de SMTP se descartan: no están en la lista blanca.
+    assert "SMTP_PASSWORD" not in os.environ or os.environ["SMTP_PASSWORD"] != "no-debe-aplicarse"
+
+
+def test_modo_off_deja_rastro_en_el_log(monkeypatch, caplog):
+    """Con el modo apagado el secreto no se lee. Si eso no se registra, en el
+    servidor el síntoma es "el mapa no carga" sin ninguna pista de por qué."""
+    def _explota(*_a, **_k):
+        raise AssertionError("con modo off no debe llamarse a AWS")
+
+    monkeypatch.setattr(mod, "_leer_de_aws", _explota)
+    with caplog.at_level(logging.INFO):
+        mod.cargar_en_entorno(mod.MODO_OFF, "encryption-portal-medicos", "mx-central-1")
+    assert "modo 'off'" in caplog.text
+    assert "encryption-portal-medicos" in caplog.text
