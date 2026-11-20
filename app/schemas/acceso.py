@@ -166,7 +166,7 @@ class AltaAccesoInput(BaseModel):
 
 
 class AgregarPerfilInput(BaseModel):
-    """Body de POST /admin/accesos/{rfc}/perfiles: suma un perfil a una persona que ya tiene acceso."""
+    """Body de POST /accesos/{rfc}/perfiles: suma un perfil a una persona que ya tiene acceso."""
 
     perfil: int = Field(..., ge=1, le=3)
     entidad: Optional[str] = None  # obligatoria solo si perfil == Proveedor
@@ -189,7 +189,7 @@ class AgregarPerfilInput(BaseModel):
 
 
 class ActualizarEntidadInput(BaseModel):
-    """Body de POST /admin/accesos/{rfc}/entidad -- cambiar la entidad de un Proveedor ya creado."""
+    """Body de POST /accesos/{rfc}/entidad -- cambiar la entidad de un Proveedor ya creado."""
 
     entidad: str = Field(..., min_length=1)
 
@@ -217,7 +217,7 @@ class CargaUsuariosFila(BaseModel):
 
 
 class CargaUsuariosResponse(BaseModel):
-    """Respuesta de POST /admin/accesos/carga-excel. Con aplicado=False es solo la vista previa."""
+    """Respuesta de POST /accesos/carga-excel. Con aplicado=False es solo la vista previa."""
 
     aplicado: bool
     total: int

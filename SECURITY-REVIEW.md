@@ -474,7 +474,7 @@ código y los datos del usuario viajan como parámetros:
 - Verificación en vivo del guard, por perfil y por vía: Administrador
   responde 200 y Cabina, Proveedor y la sesión legada sin `perfil`
   responden 403 en `/configuracion/cuentas` (GET y POST),
-  `/proveedores-catalogo` y `/admin/cuentas-etiquetas`; la mutation
+  `/proveedores-catalogo` y `/cuentas-etiquetas`; la mutation
   `agregarCuenta` de GraphQL bloquea igual a la sesión legada.
 
 ## Paquete generado

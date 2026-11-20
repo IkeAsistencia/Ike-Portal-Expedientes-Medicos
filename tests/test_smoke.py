@@ -217,7 +217,7 @@ def _auth_headers_proveedor(client):
 
 
 def _auth_headers_admin(client):
-    """Sesión RFC real de perfil Administrador, para probar /admin/accesos."""
+    """Sesión RFC real de perfil Administrador, para probar /accesos."""
     import app.repositories.accesos_repo as accesos_repo_module
 
     accesos_repo_module.alta_acceso("RFCADMTEST", "Admin de Prueba", accesos_repo_module.PERFIL_ADMINISTRADOR)
@@ -945,7 +945,7 @@ def test_corte_mantiene_envio_original_aunque_el_estatus_avance(client):
 def test_alta_proveedor_requiere_correo(client):
     headers = _auth_headers_admin(client)
     r = client.post(
-        "/admin/accesos",
+        "/accesos",
         json={"rfc": "PROV000001", "nombre": "Proveedor Sin Correo", "perfil": 3, "entidad": "Jalisco"},
         headers=headers,
     )
@@ -956,7 +956,7 @@ def test_alta_proveedor_requiere_correo(client):
 def test_alta_proveedor_correo_invalido(client):
     headers = _auth_headers_admin(client)
     r = client.post(
-        "/admin/accesos",
+        "/accesos",
         json={
             "rfc": "PROV000002", "nombre": "Proveedor Correo Mal", "perfil": 3,
             "entidad": "Jalisco", "correo": "no-es-un-correo",
@@ -969,7 +969,7 @@ def test_alta_proveedor_correo_invalido(client):
 def test_alta_proveedor_con_entidad_y_correo_ok(client):
     headers = _auth_headers_admin(client)
     r = client.post(
-        "/admin/accesos",
+        "/accesos",
         json={
             "rfc": "PROV000003", "nombre": "Proveedor Válido", "perfil": 3,
             "entidad": "Jalisco", "correo": "proveedor@ikeasistencia.com",
@@ -978,7 +978,7 @@ def test_alta_proveedor_con_entidad_y_correo_ok(client):
     )
     assert r.status_code == 200, r.text
 
-    accesos = client.get("/admin/accesos", headers=headers).json()
+    accesos = client.get("/accesos", headers=headers).json()
     registro = next(a for a in accesos if a["rfc"] == "PROV000003")
     assert registro["entidad"] == "Jalisco"
     assert registro["correo"] == "proveedor@ikeasistencia.com"
@@ -987,13 +987,13 @@ def test_alta_proveedor_con_entidad_y_correo_ok(client):
 def test_alta_no_proveedor_guarda_na_en_entidad_y_correo(client):
     headers = _auth_headers_admin(client)
     r = client.post(
-        "/admin/accesos",
+        "/accesos",
         json={"rfc": "CABI000001", "nombre": "Cabina Sin Entidad", "perfil": 2},
         headers=headers,
     )
     assert r.status_code == 200, r.text
 
-    accesos = client.get("/admin/accesos", headers=headers).json()
+    accesos = client.get("/accesos", headers=headers).json()
     registro = next(a for a in accesos if a["rfc"] == "CABI000001")
     assert registro["entidad"] == "NA"
     assert registro["correo"] == "NA"
@@ -1002,7 +1002,7 @@ def test_alta_no_proveedor_guarda_na_en_entidad_y_correo(client):
 def test_alta_administrador_rechaza_rfc_de_11_caracteres(client):
     headers = _auth_headers_admin(client)
     r = client.post(
-        "/admin/accesos",
+        "/accesos",
         json={"rfc": "ADMI000001Z", "nombre": "Admin Largo", "perfil": 1},
         headers=headers,
     )
@@ -1012,13 +1012,13 @@ def test_alta_administrador_rechaza_rfc_de_11_caracteres(client):
 def test_alta_administrador_con_rfc_de_10_ok(client):
     headers = _auth_headers_admin(client)
     r = client.post(
-        "/admin/accesos",
+        "/accesos",
         json={"rfc": "ADMI000001", "nombre": "Admin Completo", "perfil": 1},
         headers=headers,
     )
     assert r.status_code == 200, r.text
 
-    accesos = client.get("/admin/accesos", headers=headers).json()
+    accesos = client.get("/accesos", headers=headers).json()
     registro = next(a for a in accesos if a["rfc"] == "ADMI000001")
     assert registro["entidad"] == "NA"
     assert registro["correo"] == "NA"
@@ -1027,17 +1027,17 @@ def test_alta_administrador_con_rfc_de_10_ok(client):
 def test_cambiar_entidad_de_proveedor_ok(client):
     headers = _auth_headers_admin(client)
     client.post(
-        "/admin/accesos",
+        "/accesos",
         json={
             "rfc": "PROV000004", "nombre": "Proveedor Cambio", "perfil": 3,
             "entidad": "Jalisco", "correo": "cambio@ikeasistencia.com",
         },
         headers=headers,
     )
-    r = client.post("/admin/accesos/PROV000004/entidad", json={"entidad": "Yucatán"}, headers=headers)
+    r = client.post("/accesos/PROV000004/entidad", json={"entidad": "Yucatán"}, headers=headers)
     assert r.status_code == 200, r.text
 
-    accesos = client.get("/admin/accesos", headers=headers).json()
+    accesos = client.get("/accesos", headers=headers).json()
     registro = next(a for a in accesos if a["rfc"] == "PROV000004")
     assert registro["entidad"] == "Yucatán"
 
@@ -1045,31 +1045,31 @@ def test_cambiar_entidad_de_proveedor_ok(client):
 def test_cambiar_entidad_entidad_invalida(client):
     headers = _auth_headers_admin(client)
     client.post(
-        "/admin/accesos",
+        "/accesos",
         json={
             "rfc": "PROV000005", "nombre": "Proveedor Cambio 2", "perfil": 3,
             "entidad": "Jalisco", "correo": "cambio2@ikeasistencia.com",
         },
         headers=headers,
     )
-    r = client.post("/admin/accesos/PROV000005/entidad", json={"entidad": "Narnia"}, headers=headers)
+    r = client.post("/accesos/PROV000005/entidad", json={"entidad": "Narnia"}, headers=headers)
     assert r.status_code == 422
 
 
 def test_cambiar_entidad_prohibido_para_no_proveedor(client):
     headers = _auth_headers_admin(client)
     client.post(
-        "/admin/accesos",
+        "/accesos",
         json={"rfc": "CABI000002", "nombre": "Cabina Cambio", "perfil": 2},
         headers=headers,
     )
-    r = client.post("/admin/accesos/CABI000002/entidad", json={"entidad": "Jalisco"}, headers=headers)
+    r = client.post("/accesos/CABI000002/entidad", json={"entidad": "Jalisco"}, headers=headers)
     assert r.status_code == 400
 
 
 def test_cambiar_entidad_rfc_inexistente(client):
     headers = _auth_headers_admin(client)
-    r = client.post("/admin/accesos/RFCNOEXISTE999/entidad", json={"entidad": "Jalisco"}, headers=headers)
+    r = client.post("/accesos/RFCNOEXISTE999/entidad", json={"entidad": "Jalisco"}, headers=headers)
     assert r.status_code == 404
 
 
@@ -1078,7 +1078,7 @@ def test_alta_rfc_formato_invalido(client):
     headers = _auth_headers_admin(client)
     for rfc_malo in ["ABC123456", "ABCDE12345", "ABCD12345", "1234ABCDEF", "abcd123456!"]:
         r = client.post(
-            "/admin/accesos",
+            "/accesos",
             json={"rfc": rfc_malo, "nombre": "Alguien", "perfil": 2},
             headers=headers,
         )
@@ -1088,12 +1088,12 @@ def test_alta_rfc_formato_invalido(client):
 def test_alta_rfc_formato_valido_minusculas_se_normaliza(client):
     headers = _auth_headers_admin(client)
     r = client.post(
-        "/admin/accesos",
+        "/accesos",
         json={"rfc": "abcd123456", "nombre": "Alguien", "perfil": 2},
         headers=headers,
     )
     assert r.status_code == 200, r.text
-    accesos = client.get("/admin/accesos", headers=headers).json()
+    accesos = client.get("/accesos", headers=headers).json()
     assert any(a["rfc"] == "ABCD123456" for a in accesos)
 
 
@@ -1685,44 +1685,44 @@ def test_seed_usuarios_prueba_rechaza_password_debil(client):
 # ---------- Colores de Cuentas (color y prefijo por cuenta) ----------
 def test_colores_de_cuentas_solo_administrador(client):
     for headers in (_auth_headers_cabina(client), _auth_headers_proveedor(client)):
-        assert client.get("/admin/cuentas-etiquetas", headers=headers).status_code == 403
-        assert client.get("/admin/cuentas-etiquetas/paleta", headers=headers).status_code == 403
-        r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}, headers=headers)
+        assert client.get("/cuentas-etiquetas", headers=headers).status_code == 403
+        assert client.get("/cuentas-etiquetas/paleta", headers=headers).status_code == 403
+        r = client.put("/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}, headers=headers)
         assert r.status_code == 403
-        assert client.delete("/admin/cuentas-etiquetas/2819", headers=headers).status_code == 403
+        assert client.delete("/cuentas-etiquetas/2819", headers=headers).status_code == 403
 
 
 def test_colores_de_cuentas_alta_cambio_y_baja(client):
     headers = _auth_headers_admin(client)
     client.post("/configuracion/cuentas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo"}, headers=headers)
-    assert client.get("/admin/cuentas-etiquetas", headers=headers).json() == []
-    claves = [c["clave"] for c in client.get("/admin/cuentas-etiquetas/paleta", headers=headers).json()]
+    assert client.get("/cuentas-etiquetas", headers=headers).json() == []
+    claves = [c["clave"] for c in client.get("/cuentas-etiquetas/paleta", headers=headers).json()]
     assert "rosa" in claves and "morado" in claves
 
-    r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": " DEM ", "color": "Rosa"}, headers=headers)
+    r = client.put("/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": " DEM ", "color": "Rosa"}, headers=headers)
     assert r.status_code == 200 and r.json()["actualizada"] is False
-    fila = client.get("/admin/cuentas-etiquetas", headers=headers).json()[0]
+    fila = client.get("/cuentas-etiquetas", headers=headers).json()[0]
     assert (fila["cl_cuenta"], fila["prefijo"], fila["color"]) == (2819, "DEM", "rosa")
     assert fila["actualizado_por"] == "Admin de Prueba"
 
     # Se puede cambiar en cualquier momento (misma cuenta, no se duplica)
-    r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "", "color": "azul"}, headers=headers)
+    r = client.put("/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "", "color": "azul"}, headers=headers)
     assert r.json()["actualizada"] is True
-    filas = client.get("/admin/cuentas-etiquetas", headers=headers).json()
+    filas = client.get("/cuentas-etiquetas", headers=headers).json()
     assert len(filas) == 1 and filas[0]["color"] == "azul" and filas[0]["prefijo"] == ""
 
-    assert client.delete("/admin/cuentas-etiquetas/2819", headers=headers).status_code == 200
-    assert client.delete("/admin/cuentas-etiquetas/2819", headers=headers).status_code == 404
+    assert client.delete("/cuentas-etiquetas/2819", headers=headers).status_code == 200
+    assert client.delete("/cuentas-etiquetas/2819", headers=headers).status_code == 404
 
 
 def test_colores_de_cuentas_rechaza_color_y_prefijo_invalidos(client):
     headers = _auth_headers_admin(client)
     base = {"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}
-    assert client.put("/admin/cuentas-etiquetas", json={**base, "color": "#ff0000"}, headers=headers).status_code == 422
-    assert client.put("/admin/cuentas-etiquetas", json={**base, "color": "rojo-fuerte"}, headers=headers).status_code == 422
-    assert client.put("/admin/cuentas-etiquetas", json={**base, "prefijo": "<b>x</b>"}, headers=headers).status_code == 422
-    assert client.put("/admin/cuentas-etiquetas", json={**base, "prefijo": "A" * 13}, headers=headers).status_code == 422
-    assert client.get("/admin/cuentas-etiquetas", headers=headers).json() == []
+    assert client.put("/cuentas-etiquetas", json={**base, "color": "#ff0000"}, headers=headers).status_code == 422
+    assert client.put("/cuentas-etiquetas", json={**base, "color": "rojo-fuerte"}, headers=headers).status_code == 422
+    assert client.put("/cuentas-etiquetas", json={**base, "prefijo": "<b>x</b>"}, headers=headers).status_code == 422
+    assert client.put("/cuentas-etiquetas", json={**base, "prefijo": "A" * 13}, headers=headers).status_code == 422
+    assert client.get("/cuentas-etiquetas", headers=headers).json() == []
 
 
 def test_expedientes_traen_color_y_prefijo_de_su_cuenta(client):
@@ -1732,12 +1732,12 @@ def test_expedientes_traen_color_y_prefijo_de_su_cuenta(client):
     sin = client.get("/expedientes", headers=cabina).json()
     assert sin and all(e["cuenta_color"] is None and e["cuenta_prefijo"] is None for e in sin)
 
-    client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "cuenta  DEMO", "prefijo": "DEM", "color": "morado"}, headers=admin)
+    client.put("/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "cuenta  DEMO", "prefijo": "DEM", "color": "morado"}, headers=admin)
     con = client.get("/expedientes", headers=cabina).json()
     # el nombre se compara sin importar mayúsculas ni espacios de más
     assert all(e["cuenta_color"] == "morado" and e["cuenta_prefijo"] == "DEM" for e in con)
 
-    client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "", "color": "azul"}, headers=admin)
+    client.put("/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "", "color": "azul"}, headers=admin)
     sin_prefijo = client.get("/expedientes", headers=cabina).json()
     assert all(e["cuenta_color"] == "azul" and e["cuenta_prefijo"] is None for e in sin_prefijo)
 
@@ -1745,12 +1745,12 @@ def test_expedientes_traen_color_y_prefijo_de_su_cuenta(client):
 def test_colores_de_cuentas_rechaza_una_cuenta_fuera_del_catalogo(client):
     headers = _auth_headers_admin(client)
     # 999 no está en el catálogo simulado (solo existe la 2819)
-    r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 999, "nombre": "Cuenta Ajena", "prefijo": "AJ", "color": "rosa"}, headers=headers)
+    r = client.put("/cuentas-etiquetas", json={"cl_cuenta": 999, "nombre": "Cuenta Ajena", "prefijo": "AJ", "color": "rosa"}, headers=headers)
     assert r.status_code == 400
     assert "Agregar cuenta" in r.json()["detail"]
-    assert client.get("/admin/cuentas-etiquetas", headers=headers).json() == []
+    assert client.get("/cuentas-etiquetas", headers=headers).json() == []
     # una del catálogo (las que ya se jalan en Expedientes) sí, sin configurar nada antes
-    r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}, headers=headers)
+    r = client.put("/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}, headers=headers)
     assert r.status_code == 200
 
 
@@ -1758,11 +1758,11 @@ def test_colores_de_cuentas_permite_editar_una_ya_etiquetada_aunque_salga_del_ca
     import app.repositories.catalogos_repo as catalogos_repo
 
     headers = _auth_headers_admin(client)
-    client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}, headers=headers)
+    client.put("/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "rosa"}, headers=headers)
     monkeypatch.setattr(catalogos_repo, "call_procedure", lambda *a, **k: [])  # el catálogo ya no la trae
-    r = client.put("/admin/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "azul"}, headers=headers)
+    r = client.put("/cuentas-etiquetas", json={"cl_cuenta": 2819, "nombre": "Cuenta Demo", "prefijo": "DEM", "color": "azul"}, headers=headers)
     assert r.status_code == 200
-    assert client.get("/admin/cuentas-etiquetas", headers=headers).json()[0]["color"] == "azul"
+    assert client.get("/cuentas-etiquetas", headers=headers).json()[0]["color"] == "azul"
 
 
 def test_combo_de_cuentas_suma_las_adicionales_a_las_de_siempre(client, monkeypatch):

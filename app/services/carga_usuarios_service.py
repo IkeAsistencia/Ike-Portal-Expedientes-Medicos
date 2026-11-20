@@ -3,7 +3,7 @@ Lee un Excel de usuarios y da de alta esos accesos -- compartido por
 `scripts/cargar_usuarios_excel.py` (uso manual, con modo seco), por el
 arranque de la app (siembra automática del primer despliegue, ver
 `_sembrar_usuarios_iniciales` en app/main.py) y por la carga masiva de la
-pantalla Usuarios y Accesos (POST /admin/accesos/carga-excel).
+pantalla Usuarios y Accesos (POST /accesos/carga-excel).
 
 Formato esperado: ver el encabezado de scripts/cargar_usuarios_excel.py. El
 lector es tolerante con los archivos que mandan las áreas: el encabezado

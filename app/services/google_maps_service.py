@@ -155,7 +155,8 @@ def buscar_candidatos(
     if not settings.google_maps_configurado:
         raise GoogleMapsNoConfigurado(
             "La búsqueda con Google Maps no está configurada todavía: falta la llave "
-            "(GOOGLE_MAPS_API_KEY) en el archivo .env del servidor."
+            "(GOOGLE_MAPS_API_KEY). En producción se obtiene del secreto de AWS Secrets "
+            "Manager (encryption-portal-medicos); en desarrollo, del .env."
         )
 
     consulta = construir_consulta(especialidad, nombre_entidad, nombre_municipio)

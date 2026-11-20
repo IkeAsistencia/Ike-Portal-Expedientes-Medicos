@@ -27,7 +27,7 @@ from app.services import carga_usuarios_service
 
 logger = logging.getLogger("admin_accesos")
 
-router = APIRouter(prefix="/admin/accesos", tags=["Administración de accesos"])
+router = APIRouter(prefix="/accesos", tags=["Administración de accesos"])
 
 TAMANO_MAXIMO_CARGA_BYTES = 2 * 1024 * 1024  # 2 MB: un Excel de usuarios pesa unos KB
 FIRMA_XLSX = b"PK\x03\x04"  # un .xlsx es un ZIP; el Content-Type lo manda el cliente y no es confiable

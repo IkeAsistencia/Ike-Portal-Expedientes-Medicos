@@ -426,12 +426,13 @@ activarlo hay que copiarlo a `.github/workflows/` y cargar los secretos
 | `SMTP_LIMITE_DIARIO`, `SMTP_AVISO_LIMITE` | `100` y `80`, o lo que autorice quien administra la cuenta de correo | Con un tope mayor al real, el servidor de correo rechazaría los envíos de más |
 | `SMTP_CUENTA_POR_DESTINATARIO` | `true` hasta confirmar cómo cuenta el servidor | Con `false` y un servidor que cuenta por destinatario, el portal se pasaría del tope sin darse cuenta |
 | `CORREO_REENVIO_HORAS` | `8` (default) o lo que acuerde Negocio | Freno de reenvío: antes de cumplirse, no se vuelve a mandar correo a proveedores sobre el mismo expediente |
-| `GOOGLE_MAPS_API_KEY` | Llave de Google Cloud con la Places API habilitada y facturación activa (opcional, sección 3.4). Solo la usa el servidor | Sin ella se apaga la búsqueda fuera de la red |
-| `GOOGLE_MAPS_BROWSER_API_KEY` | Llave **distinta**, restringida por dominio y solo con Maps JavaScript API (sección 3.4.1) | Los resultados se muestran en lista en vez de mapa |
+| `GOOGLE_MAPS_API_KEY` | Llave de Google Cloud con la Places API habilitada y facturación activa (opcional, sección 3.4). Solo la usa el servidor. **En AWS viene del secreto** (sección 7.1) | Sin ella se apaga la búsqueda fuera de la red |
+| `GOOGLE_MAPS_BROWSER_API_KEY` | Llave **distinta**, restringida por dominio y solo con Maps JavaScript API (sección 3.4.1). **En AWS viene del secreto** (sección 7.1) | Los resultados se muestran en lista en vez de mapa |
 | `PROXIES_CONFIABLES` | `2` con CloudFront + ALB; `1` si solo hay ALB | Un número mal puesto rompe el conteo de intentos de login |
 | `CORS_ALLOWED_ORIGINS` | **Vacío** | Con valor, otros sitios podrían llamar a la API desde el navegador |
 | `GRAPHQL_IDE_HABILITADO` | **`false`** | Con `true` queda expuesto el explorador de GraphQL |
 | `LOGIN_LEGADO_HABILITADO` | **`false`** | Con `true` queda abierta la ruta de login anterior |
+| `LOG_LEVEL` | `INFO` | Con `WARNING` se pierden los mensajes de arranque (si el secreto se leyó y si el mapa quedó configurado), y un "el mapa no carga" se queda sin pista |
 
 `GOOGLE_MAPS_TIMEOUT_SEGUNDOS` y `GOOGLE_MAPS_MAXIMO_RESULTADOS` tienen un
 valor por omisión razonable; solo hay que tocarlos si el servicio
@@ -469,14 +470,21 @@ nunca con el valor.
 ### Formato del secreto
 
 El secreto `encryption-portal-medicos` ya está creado por Infraestructura como
-**JSON**, con estas tres claves exactas (así lo confirmaron; el nombre de cada
-una es el de la variable en mayúsculas):
+**JSON**. Contiene 10 claves: 5 de Google Maps y 5 de SMTP. El nombre de cada
+una es el de la variable en mayúsculas:
 
 ```json
 {
+  "GOOGLE_MAPS_TIMEOUT_SEGUNDOS": "8",
+  "GOOGLE_MAPS_MAXIMO_RESULTADOS": "10",
   "GOOGLE_MAPS_API_KEY": "...",
   "GOOGLE_MAPS_BROWSER_API_KEY": "...",
-  "GOOGLE_MAPS_MAP_ID": "..."
+  "SMTP_HOST": "smtp.office365.com",
+  "SMTP_PORT": "587",
+  "SMTP_USER": "promedico@ikeasistencia.com",
+  "SMTP_PASSWORD": "...",
+  "SMTP_REMITENTE": "promedico@ikeasistencia.com",
+  "SMTP_USAR_TLS": "true"
 }
 ```
 
@@ -484,12 +492,18 @@ Se admiten estas variables (y **solo** estas — el resto se ignora con un
 aviso en el log, porque el secreto lo administra otra área y no debe poder
 reescribir `PATH` ni nada del proceso):
 
-`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_BROWSER_API_KEY`, `GOOGLE_MAPS_MAP_ID`.
+`GOOGLE_MAPS_API_KEY`, `GOOGLE_MAPS_BROWSER_API_KEY`, `GOOGLE_MAPS_MAP_ID`,
+`GOOGLE_MAPS_TIMEOUT_SEGUNDOS`, `GOOGLE_MAPS_MAXIMO_RESULTADOS`.
 
-El alcance es únicamente **las llaves de Google Maps**: es lo que el equipo de
-infraestructura administra en `encryption-portal-medicos`. El resto de la
-configuración sensible (`JWT_SECRET_KEY`, `DB_PASSWORD`, `SMTP_USER`,
+El alcance es únicamente **la configuración de Google Maps**: es lo que el
+equipo de infraestructura administra en `encryption-portal-medicos`. El resto
+de la configuración sensible (`JWT_SECRET_KEY`, `DB_PASSWORD`, `SMTP_USER`,
 `SMTP_PASSWORD`) sigue en el `.env` del servidor.
+
+> **Las 5 claves de SMTP del secreto se ignoran a propósito.** El portal toma
+> el SMTP del `.env`; si algún día se quiere mover también a Secrets Manager,
+> hay que agregar esas variables a la lista blanca de
+> `app/core/secretos_aws.py` y quitarlas del `.env`.
 
 Si el secreto se guardó como **texto plano** (una sola llave suelta), hay que
 decir a cuál variable corresponde con `SECRETOS_AWS_CLAVE`. Sin eso se ignora
@@ -516,11 +530,30 @@ Nada más: ni listar secretos, ni escribirlos. La app solo lee.
 ```bash
 # Debe imprimir los NOMBRES de las variables aplicadas, nunca los valores.
 sudo journalctl -u portal-expedientes -n 50 | grep "Secretos de AWS"
-# Esperado: "Secretos de AWS: aplicadas 3 variable(s): GOOGLE_MAPS_API_KEY, ..."
+# Esperado: "Secretos de AWS: aplicadas 4 variable(s): GOOGLE_MAPS_API_KEY, ..."
+
+# Y el diagnóstico del mapa, que dice si quedó configurado:
+sudo journalctl -u portal-expedientes -n 50 | grep "Google Maps al arrancar"
+# Esperado: "... búsqueda=configurada, mapa=configurado, map_id=no
+#             (secretos de AWS en modo 'obligatorio')"
 ```
 
 Si el servicio no arranca y el log dice `No se pudo leer el secreto`, el
 problema es de IAM o de la región, no del código.
+
+### El síntoma "el mapa no carga"
+
+Si el log dice `modo 'off'`, el secreto **no se está leyendo**: las llaves
+salen del `.env` y, si ahí no están, el mapa queda apagado. Es el error más
+fácil de cometer, porque no produce ningún error visible — solo un mapa que
+no aparece. Revisar en este orden:
+
+1. `SECRETOS_AWS_MODO` vale `obligatorio` en el servicio systemd
+   (`deploy/portal-expedientes.service`).
+2. El log de arranque dice `aplicadas 4 variable(s)`.
+3. El log de arranque dice `mapa=configurado`.
+4. `GET /directorio-proveedores/configuracion-mapa` (con sesión de Proveedor)
+   devuelve una llave no vacía.
 
 Cuidado con `SMTP_DESTINATARIO_PRUEBA`: es una válvula pensada para
 desarrollo, que manda **todos** los correos a un solo buzón. En producción

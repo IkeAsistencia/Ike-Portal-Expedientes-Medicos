@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import logging
+import os
 
 from app.config import get_arranque_settings, get_settings, validar_jwt_secret
 from app.core.secretos_aws import cargar_en_entorno
@@ -30,6 +31,17 @@ from app.repositories import accesos_repo
 from app.services.carga_usuarios_service import ErrorCargaUsuarios, sembrar_desde_excel
 
 logger = logging.getLogger(__name__)
+
+# Sin esto, los logger.info() de la app (por ejemplo el diagnóstico de los
+# secretos de AWS y del mapa) se descartan: el logger raíz arranca en WARNING
+# y uvicorn solo configura SUS propios loggers. El síntoma era un arranque
+# silencioso en el que no se podía saber si el secreto se había leído.
+# Se respeta LOG_LEVEL si viene del entorno; por default INFO.
+logging.basicConfig(
+    level=os.getenv("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
+
 from app.routers import (
     admin_accesos,
     auth,
@@ -66,6 +78,19 @@ def _cargar_secretos_de_aws() -> None:
     # limpiar el cache, una instancia ya construida (por ejemplo al importar
     # app.graphql.schema) seguiría con los valores del .env.
     get_settings.cache_clear()
+
+    # Diagnóstico del arranque: deja en el log si el mapa quedó o no
+    # configurado. Sin esto, "el mapa no carga" no deja rastro y hay que
+    # adivinar si el problema fue el secreto, el .env o el modo apagado.
+    # Solo se registran booleanos: nunca el valor de una llave.
+    settings = get_settings()
+    logger.info(
+        "Google Maps al arrancar: búsqueda=%s, mapa=%s, map_id=%s (secretos de AWS en modo '%s')",
+        "configurada" if settings.google_maps_configurado else "SIN CONFIGURAR",
+        "configurado" if settings.google_maps_mapa_configurado else "SIN CONFIGURAR",
+        "sí" if settings.google_maps_map_id else "no",
+        arranque.secretos_aws_modo,
+    )
 
 
 def _sembrar_usuarios_iniciales() -> None:

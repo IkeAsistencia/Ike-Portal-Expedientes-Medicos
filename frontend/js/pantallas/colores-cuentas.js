@@ -162,7 +162,7 @@ async function guardar() {
   const btn = $("cc-guardar");
   btn.disabled = true;
   try {
-    const r = await api("/admin/cuentas-etiquetas", {
+    const r = await api("/cuentas-etiquetas", {
       method: "PUT",
       body: { cl_cuenta: seleccion.cl_cuenta, nombre: seleccion.nombre, prefijo: $("cc-prefijo").value.trim(), color: colorElegido },
     });
@@ -200,7 +200,7 @@ function renderFilas() {
 async function cargarGrid() {
   $("cc-tbody").innerHTML = `<tr><td colspan="6" class="mini-empty">Cargando…</td></tr>`;
   try {
-    etiquetas = await api("/admin/cuentas-etiquetas");
+    etiquetas = await api("/cuentas-etiquetas");
     renderFilas();
   } catch (err) {
     $("cc-tbody").innerHTML = `<tr><td colspan="6" class="mini-empty">${escapeHtml(err.message)}</td></tr>`;
@@ -218,7 +218,7 @@ async function quitar(clCuenta) {
   });
   if (!ok) return;
   try {
-    await api("/admin/cuentas-etiquetas/" + encodeURIComponent(clCuenta), { method: "DELETE" });
+    await api("/cuentas-etiquetas/" + encodeURIComponent(clCuenta), { method: "DELETE" });
     toast("Color quitado.", "success");
     if (seleccion && seleccion.cl_cuenta === clCuenta) limpiarFormulario();
     cargarGrid();
@@ -268,7 +268,7 @@ export function montar(contenedor) {
 
 export async function alEntrar() {
   try {
-    if (!paleta.length) paleta = await api("/admin/cuentas-etiquetas/paleta");
+    if (!paleta.length) paleta = await api("/cuentas-etiquetas/paleta");
     // Mismo catálogo que el combo de Cuenta de Expedientes.
     configuradas = (await api("/catalogos/cuentas")).map(c => ({ cl_cuenta: c.clave, nombre: c.descripcion }));
   } catch (err) {
